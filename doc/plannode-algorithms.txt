@@ -1,0 +1,55 @@
+Nested Loops Join:
+
+
+Simple Python-like pseudocode:
+
+    for tl in leftChild:
+        for tr in rightChild:
+            if pred(tl, tr):
+                yield join(tl, tr)
+
+Transforming into a Java function:
+
+    void getTuplesToJoin() {
+        if (leftTuple == null && !done)
+            leftTuple = getNextLeftTuple();
+
+        rightTuple = getNextRightTuple();
+        if (rightTuple == null) {
+            // Reached end of right relation.  Need to do two things:
+            //   * Go to next tuple in left relation.
+            //   * Restart iteration over right relation.
+
+            leftTuple = getNextLeftTuple();
+            if (leftTuple == null) {
+                // Reached end of left relation.  All done.
+                done = true;
+                return !done;
+            }
+
+            rightTuple.initialize();
+            rightTuple = getNextRightTuple();
+            if (rightTuple == null) {
+                // Right relation is empty!  All done.
+                done = true;
+                // Redundant:  return !done;
+            }
+        }
+
+        return !done;
+    }
+
+
+    void getNextTuple() {
+        if (done)
+            return null;
+
+        while (getTuplesToJoin()) {
+            if (canJoinTuples()) {
+                joinedTuple = joinTuples(leftTuple, rightTuple);
+                return joinedTuple;
+            }
+        }
+
+        return null;
+    }

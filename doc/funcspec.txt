@@ -1,0 +1,120 @@
+NanoDB Functional Specification
+-------------------------------
+
+Purpose:
+
+The purpose of this database project is to build a very simple, small database
+system that supports the basic features of database systems.  It is primarily a
+learning tool, so the nuances of many large-scale database systems will not be
+present, since they would only distract from the basic themes.
+
+The ultimate goal is to have a code-base that students can enhance as part of
+homeworks for a database-systems course.  Thus, abstraction is very important,
+so that simple, unoptimized placeholder components can be provided to achieve
+basic functionality, and then students may upgrade the components used within
+the database system as they learn about various concepts in class.
+
+Feature List:
+
+ - Basic table-management operations:  create/drop tables
+ - Basic integrity constraints:
+    - non-NULL constraints
+    - foreign-key constraints (possibly support enabling/disabling for bulk load)
+    - MAYBE:  check-constraints
+
+ - Basic data-types (in order of importance):
+    - INTEGER | INT
+    - CHAR(n)
+    - VARCHAR(n)
+    - DATE
+    - TIME
+    - DATETIME
+    - TIMESTAMP
+    - TEXT
+    - BLOB
+
+ - Views defined on one or more tables
+ - MAYBE:  Triggers
+
+ - SELECT statements
+ - INSERT statements
+ - UPDATE statements
+ - DELETE statements
+
+ - Pluggable Architecture:
+    - Most components should be hidden behind interfaces.
+    - Query precompilation + evaluation components - swappable, extensible
+    - Storage Manager component - swappable, containing:
+       - Transaction manager
+       - Buffer manager
+       - Block manager
+
+How Commands Are Represented
+----------------------------
+
+Much of the database is driven by how commands are represented, and how they
+interact with the rest of the database systems.  This is typically a notoriously
+yucky process, since databases are typically written in languages that don't
+support the object-oriented programming paradigm.
+
+In NanoDB, all commands are represented by the Command class.  Subclasses of the
+Command class represent various command-categories, and implement the details of
+various kinds of commands.  The class hierarchy is something like this:
+
+  edu.caltech.nanodb.cmds.Command
+   |
+   +- edu.caltech.nanodb.cmds.QueryCommand - INSERT, SELECT, UPDATE, DELETE
+   |
+   +- edu.caltech.nanodb.cmds.DDLCommand - data-definition commands
+   |   |
+   |   +- edu.caltech.nanodb.cmds.CreateDatabase - CREATE DATABASE
+   |   +- edu.caltech.nanodb.cmds.AlterDatabase - ALTER DATABASE
+   |   +- edu.caltech.nanodb.cmds.DropDatabase - DROP DATABASE
+   |   |
+   |   +- edu.caltech.nanodb.cmds.CreateIndex - CREATE INDEX
+   |   +- edu.caltech.nanodb.cmds.AlterIndex - ALTER INDEX
+   |   +- edu.caltech.nanodb.cmds.DropIndex - DROP INDEX
+   |   |
+   |   +- edu.caltech.nanodb.cmds.CreateSchema - CREATE SCHEMA
+   |   +- edu.caltech.nanodb.cmds.AlterSchema - ALTER SCHEMA
+   |   +- edu.caltech.nanodb.cmds.DropSchema - DROP SCHEMA
+   |   |
+   |   +- edu.caltech.nanodb.cmds.CreateTable - CREATE TABLE
+   |   +- edu.caltech.nanodb.cmds.AlterTable - ALTER TABLE
+   |   +- edu.caltech.nanodb.cmds.DropTable - DROP TABLE
+   |   |
+   |   +- edu.caltech.nanodb.cmds.CreateView - CREATE VIEW
+   |   +- edu.caltech.nanodb.cmds.AlterView - ALTER VIEW
+   |   +- edu.caltech.nanodb.cmds.DropView - DROP VIEW
+   |
+   +- edu.caltech.nanodb.cmds.TxnCommand - START TRANSACTION, ROLLBACK, ...
+   |
+   +- edu.caltech.nanodb.cmds.UtilityCommand
+       |
+       +- edu.caltech.nanodb.cmds.Explain - EXPLAIN query
+
+TableInfo Class
+---------------
+
+This class represents information about a single table in the database.  It
+contains the following details:
+
+ * File loc - the actual file in which the data is stored
+ * StorageFormat - the base storage-format of the table-data
+    - FixedSizeRecord
+    - SlottedPage
+ * SearchKey recordOrder - If the table's records are ordered, this specifies
+   the ordering.  If unordered, this field is null.
+ * String tableName, ... - table name, schema name, and database name
+ * TupleDescriptor fields - the details of each field in the table
+ * "constraints"
+ * "indexes"
+
+Process of Retrieving a Tuple
+-----------------------------
+
+1.  Table -> file
+2.  Get block from file
+3.  Find offset in block
+4.  Convert byte-sequence to tuple
+
