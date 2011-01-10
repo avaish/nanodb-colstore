@@ -31,9 +31,9 @@ public class TestSelectParser extends SqlParseTestCase {
         assert !selClause.isTrivialProject();
         assert selClause.getFromClause() == null;
         assert selClause.getWhereExpr() == null;
-        assert selClause.getGroupByExprs() == null;
+        assert selClause.getGroupByExprs().isEmpty();
         assert selClause.getHavingExpr() == null;
-        assert selClause.getOrderByExprs() == null;
+        assert selClause.getOrderByExprs().isEmpty();
 
         List<SelectValue> values = selClause.getSelectValues();
         assert values.size() == 3;
@@ -54,9 +54,9 @@ public class TestSelectParser extends SqlParseTestCase {
         assert !selClause.isTrivialProject();
         assert selClause.getFromClause() == null;
         assert selClause.getWhereExpr() == null;
-        assert selClause.getGroupByExprs() == null;
+        assert selClause.getGroupByExprs().isEmpty();
         assert selClause.getHavingExpr() == null;
-        assert selClause.getOrderByExprs() == null;
+        assert selClause.getOrderByExprs().isEmpty();
 
         List<SelectValue> values = selClause.getSelectValues();
         assert values.size() == 3;
@@ -76,9 +76,9 @@ public class TestSelectParser extends SqlParseTestCase {
         assert !selClause.isDistinct();
         assert  selClause.isTrivialProject();
         assert selClause.getWhereExpr() == null;
-        assert selClause.getGroupByExprs() == null;
+        assert selClause.getGroupByExprs().isEmpty();
         assert selClause.getHavingExpr() == null;
-        assert selClause.getOrderByExprs() == null;
+        assert selClause.getOrderByExprs().isEmpty();
 
         List<SelectValue> values = selClause.getSelectValues();
         assert values.size() == 1;
@@ -103,9 +103,9 @@ public class TestSelectParser extends SqlParseTestCase {
         assert !selClause.isDistinct();
         assert !selClause.isTrivialProject();
         assert selClause.getWhereExpr() == null;
-        assert selClause.getGroupByExprs() == null;
+        assert selClause.getGroupByExprs().isEmpty();
         assert selClause.getHavingExpr() == null;
-        assert selClause.getOrderByExprs() == null;
+        assert selClause.getOrderByExprs().isEmpty();
 
         List<SelectValue> values = selClause.getSelectValues();
         assert values.size() == 3;
@@ -129,9 +129,9 @@ public class TestSelectParser extends SqlParseTestCase {
         assert  selClause.isDistinct();
         assert  selClause.isTrivialProject();
         assert selClause.getWhereExpr() == null;
-        assert selClause.getGroupByExprs() == null;
+        assert selClause.getGroupByExprs().isEmpty();
         assert selClause.getHavingExpr() == null;
-        assert selClause.getOrderByExprs() == null;
+        assert selClause.getOrderByExprs().isEmpty();
 
         List<SelectValue> values = selClause.getSelectValues();
         assert values.size() == 1;
