@@ -1,0 +1,47 @@
+import Base;
+import Base.Type;
+import DerivedA;
+import DerivedB;
+import DerivedC;
+
+
+void runTest(node) {
+
+  if (node.type == Type.TYPE_A && node.child.type == Type.TYPE_B &&
+      node.child.b_field == 'm')
+    print("A.B works!");
+  else
+    print("A.B no match");
+
+  if (node.type == Type.TYPE_C && node.child.type == Type.TYPE_A &&
+      node.child.overlap_field == -13)
+    print("C.A works!");
+  else
+    print("C.A no match");
+
+  if (node.type == Type.TYPE_B && node.child.type == Type.TYPE_C &&
+      node.child.overlap_field.equals("Hello!"))
+    print("B.C works!");
+  else
+    print("B.C no match");
+}
+
+
+t1 = new DerivedB('h', Boolean.FALSE);
+t1.child = new DerivedC(true, "Hello!");
+
+t2 = new DerivedA("Goodbye!", 42);
+t2.child = new DerivedB('m', Boolean.TRUE);
+
+t3 = new DerivedC(false, "maybe?");
+t3.child = new DerivedA("hopefully...", -13);
+
+print("Trying B.C -");
+runTest(t1);
+
+print("\nTrying A.B -");
+runTest(t2);
+
+print("\nTrying C.A -");
+runTest(t3);
+
