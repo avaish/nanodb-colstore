@@ -381,10 +381,12 @@ public class HeapFileTableManager implements TableManager {
             }
 
             // If we got here then we reached the end of this page with no
-            // tuples.  Go on to the next data-page.
+            // tuples.  Go on to the next data-page, and start with the first
+            // tuple in that page.
 
             try {
                 dbPage = storageManager.loadDBPage(dbFile, dbPage.getPageNo() + 1);
+                nextSlot = 0;
             }
             catch (EOFException e) {
                 // Hit the end of the file with no more tuples.  We are done
@@ -403,20 +405,20 @@ public class HeapFileTableManager implements TableManager {
      * object corresponding to the tuple is returned.
      *
      * @review (donnie) This could be made a little more space-efficient.
-     *         Right now we assume that we <em>always</em> need a new slot
-     *         entry, whereas the page may contain empty slots.
-     *
-     * @todo (donnie) Right now this method always saves the DB-page to disk.
-     *       This will be way too slow for regular DB use.  Need to do this in the
-     *       buffer-manager.
-     **/
+     *         Right now when computing the required space, we assume that we
+     *         will <em>always</em> need a new slot entry, whereas the page may
+     *         contain empty slots.  (Note that we don't always create a new
+     *         slot when adding a tuple; we will reuse an empty slot.  This
+     *         inefficiency is simply in estimating the size required for the
+     *         new tuple.)
+     */
     @Override
     public Tuple addTuple(TableFileInfo tblFileInfo, Tuple tup)
         throws IOException {
 
         /*
-         * Find out how large the new tuple will be, so we can find a page to store
-         * it.
+         * Find out how large the new tuple will be, so we can find a page to
+         * store it.
          *
          * Find a page with space for the new tuple.
          *
@@ -430,6 +432,8 @@ public class HeapFileTableManager implements TableManager {
 
         logger.debug("Adding new tuple of size " + tupSize + " bytes.");
 
+        // Sanity check:  Make sure that the tuple would actually fit in a page
+        // in the first place!
         // The "+ 2" is for the case where we need a new slot entry as well.
         if (tupSize + 2 > dbFile.getPageSize()) {
             throw new IOException(
@@ -454,13 +458,15 @@ public class HeapFileTableManager implements TableManager {
                 break;
             }
 
+            int freeSpace = DataPage.getFreeSpaceInPage(dbPage);
+
             logger.debug(String.format("Page %d has %d bytes of free space.",
-                pageNo, DataPage.getFreeSpaceInPage(dbPage)));
+                pageNo, freeSpace));
 
             // If this page has enough free space to add a new tuple, break
             // out of the loop.  (The "+ 2" is for the new slot entry we will
             // also need.)
-            if (DataPage.getFreeSpaceInPage(dbPage) >= tupSize + 2) {
+            if (freeSpace >= tupSize + 2) {
                 logger.debug("Found space for new tuple in page " + pageNo + ".");
                 break;
             }
@@ -489,16 +495,18 @@ public class HeapFileTableManager implements TableManager {
         PageTuple pageTup = PageTuple.storeNewTuple(tblFileInfo, dbPage,
             slot, tupOffset, tup);
 
+        DataPage.sanityCheck(dbPage);
+
         return pageTup;
     }
 
 
     /**
-     * @todo This method will fail if a tuple is modified in a way that
-     *       requires more space than is currently available in the data page.
-     *       One solution would be to move the tuple to a different page and
-     *       then perform the update, but that would cause all kinds of
-     *       additional challenges.  So, if the page runs out of data, oh well.
+     * @review (donnie) This method will fail if a tuple is modified in a way
+     *         that requires more space than is currently available in the data
+     *         page.  One solution would be to move the tuple to a different
+     *         page and then perform the update, but that would cause all kinds
+     *         of additional issue.  So, if the page runs out of data, oh well.
      */
     @Override
     public void updateTuple(TableFileInfo tblFileInfo, Tuple tup,
@@ -518,14 +526,11 @@ public class HeapFileTableManager implements TableManager {
             int colIndex = schema.getColumnIndex(colName);
             ptup.setColumnValue(colIndex, value);
         }
+
+        DataPage.sanityCheck(ptup.getDBPage());
     }
 
 
-    /**
-     * @todo (donnie) Right now this method always saves the DB-page to disk.
-     *       This will be way too slow for regular DB use.  Need to do this
-     *       in the buffer-manager.
-     */
     @Override
     public void deleteTuple(TableFileInfo tblFileInfo, Tuple tup)
         throws IOException {
@@ -538,7 +543,8 @@ public class HeapFileTableManager implements TableManager {
 
         DBPage dbPage = ptup.getDBPage();
         DataPage.deleteTuple(dbPage, ptup.getSlot());
-        // ptup.setInvalid();
+
+        DataPage.sanityCheck(dbPage);
     }
 
 

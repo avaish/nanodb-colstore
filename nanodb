@@ -3,10 +3,12 @@
 CPATH=.
 CPATH=$CPATH:lib/log4j-1.2.13.jar
 CPATH=$CPATH:lib/antlr-3.2.jar
-CPATH=$CPATH:lib/bsh-2.0b4.jar
 CPATH=$CPATH:build/classes
 
-JAVA_OPTS=-Dlog4j.configuration=logging.conf
+# To set the page-size to use:
+# JAVA_OPTS="-Dlog4j.configuration=logging.conf -Dnanodb.pagesize=2048"
+
+JAVA_OPTS="-Dlog4j.configuration=logging.conf"
 
 java $JAVA_OPTS -cp $CPATH edu.caltech.nanodb.client.ExclusiveClient
 
