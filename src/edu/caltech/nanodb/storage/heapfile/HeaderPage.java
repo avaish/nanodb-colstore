@@ -1,8 +1,17 @@
 package edu.caltech.nanodb.storage.heapfile;
 
 
+import edu.caltech.nanodb.relations.ColumnInfo;
+import edu.caltech.nanodb.relations.Schema;
+import edu.caltech.nanodb.storage.ColumnStats;
 import edu.caltech.nanodb.storage.DBPage;
+import edu.caltech.nanodb.storage.PageReader;
+import edu.caltech.nanodb.storage.PageWriter;
+import edu.caltech.nanodb.storage.TableFileInfo;
 import edu.caltech.nanodb.storage.TableStats;
+import org.apache.log4j.Logger;
+
+import java.util.ArrayList;
 
 
 /**
@@ -14,23 +23,36 @@ import edu.caltech.nanodb.storage.TableStats;
  * @todo INCORRECT COMMENT!
  */
 public class HeaderPage {
+    /** A logging object for reporting anything interesting that happens. */
+    private static Logger logger = Logger.getLogger(HeaderPage.class);
+
 
     /**
-     * The offset in the header page where the size of the database schema is
-     * stored.
+     * The offset in the header page where the size of the table schema is
+     * stored.  This value is an unsigned short.
      */
     public static final int OFFSET_SCHEMA_SIZE = 2;
 
 
-    /** The offset in the header page where the number of columns is stored. */
-    public static final int OFFSET_NCOLS = 4;
+    /**
+     * The offset in the header page where the size of the table statistics are
+     * stored.  This value is an unsigned short.
+     */
+    public static final int OFFSET_STATS_SIZE = 4;
+
+
+    /**
+     * The offset in the header page where the number of columns is stored.
+     * This value is an unsigned byte.
+     */
+    public static final int OFFSET_NCOLS = 6;
 
     /**
      * The offset in the header page where the column descriptions start.
      * There could be as many as 255 column descriptions, so this is only the
-     * beginning of that data!
+     * beginning of that data!  This value is an unsigned short.
      */
-    public static final int OFFSET_COL_DESCS = 5;
+    public static final int OFFSET_COL_DESCS = 7;
 
 
     /**
@@ -46,9 +68,9 @@ public class HeaderPage {
 
     /**
      * This is the <em>relative</em> offset of the number of tuples in the data
-     * file, relative to the start of the table statistics.  This value is an
-     * unsigned integer (4 bytes), since it is feasible (although highly
-     * unlikely) that each tuple could be a single byte.
+     * file, relative to the start of the table statistics.  This value is a
+     * signed integer (4 bytes), since it is highly unlikely (in fact, currently
+     * impossible) that each tuple could be a single byte.
      *
      * @see #getStatsOffset
      */
@@ -71,17 +93,88 @@ public class HeaderPage {
     public static final int RELOFF_AVG_TUPLE_SIZE = 6;
 
 
-    //public static final int ENDOFF_NONFULL_LIST = -4;
+    /**
+     * This is the <em>relative</em> offset of the column statistics in the
+     * data file, relative to the start of the table statistics.  The column
+     * statistics occupy a variable number of bytes, depending both on the
+     * number of columns in the table, and also on whether the stats have
+     * actually been computed for the table.
+     *
+     * @see #getStatsOffset
+     */
+    public static final int RELOFF_COLUMN_STATS = 10;
 
-    //public static final int ENDOFF_FULL_LIST = -2;
+
+    /**
+     * A bit-mask used for storing column-stats, to record whether or not the
+     * "number of distinct values" value is present for the column.
+     */
+    private static final int COLSTAT_NULLMASK_NUM_DISTINCT_VALUES = 0x08;
+
+    /**
+     * A bit-mask used for storing column-stats, to record whether or not the
+     * "number of <tt>NULL</tt> values" value is present for the column.
+     */
+    private static final int COLSTAT_NULLMASK_NUM_NULL_VALUES = 0x04;
+
+    /**
+     * A bit-mask used for storing column-stats, to record whether or not the
+     * "minimum value" value is present for the column.
+     */
+    private static final int COLSTAT_NULLMASK_MIN_VALUE = 0x02;
+
+    /**
+     * A bit-mask used for storing column-stats, to record whether or not the
+     * "maximum value" value is present for the column.
+     */
+    private static final int COLSTAT_NULLMASK_MAX_VALUE = 0x01;
 
 
+    /**
+     * This helper method simply verifies that the data page provided to the
+     * <tt>HeaderPage</tt> class is in fact a header-page (i.e. page 0 in the
+     * data file).
+     *
+     * @param dbPage the page to check
+     *
+     * @throws IllegalArgumentException if <tt>dbPage</tt> is <tt>null</tt>, or
+     *         if it's not actually page 0 in the table file
+     */
+    private static void verifyIsHeaderPage(DBPage dbPage) {
+        if (dbPage == null)
+            throw new IllegalArgumentException("dbPage cannot be null");
+
+        if (dbPage.getPageNo() != 0) {
+            throw new IllegalArgumentException(
+                "Page 0 is the header page in this storage format; was given page " +
+                dbPage.getPageNo());
+        }
+    }
+
+
+    /**
+     * Returns the number of bytes that the table's schema occupies for storage
+     * in the header page.
+     *
+     * @param dbPage the header page of the heap table file
+     * @return the number of bytes that the table's schema occupies
+     */
     public static int getSchemaSize(DBPage dbPage) {
+        verifyIsHeaderPage(dbPage);
         return dbPage.readUnsignedShort(OFFSET_SCHEMA_SIZE);
     }
 
 
+    /**
+     * Sets the number of bytes that the table's schema occupies for storage
+     * in the header page.
+     *
+     * @param dbPage the header page of the heap table file
+     * @param numBytes the number of bytes that the table's schema occupies
+     */
     public static void setSchemaSize(DBPage dbPage, int numBytes) {
+        verifyIsHeaderPage(dbPage);
+
         if (numBytes < 0) {
             throw new IllegalArgumentException(
                 "numButes must be >= 0; got " + numBytes);
@@ -91,24 +184,91 @@ public class HeaderPage {
     }
 
 
+    /**
+     * Returns the number of bytes that the table's statistics occupy for
+     * storage in the header page.
+     *
+     * @param dbPage the header page of the heap table file
+     * @return the number of bytes that the table's statistics occupy
+     */
+    public static int getStatsSize(DBPage dbPage) {
+        verifyIsHeaderPage(dbPage);
+        return dbPage.readUnsignedShort(OFFSET_STATS_SIZE);
+    }
+
+
+    /**
+     * Sets the number of bytes that the table's statistics occupy for storage
+     * in the header page.
+     *
+     * @param dbPage the header page of the heap table file
+     * @param numBytes the number of bytes that the table's statistics occupy
+     */
+    public static void setStatsSize(DBPage dbPage, int numBytes) {
+        verifyIsHeaderPage(dbPage);
+
+        if (numBytes < 0) {
+            throw new IllegalArgumentException(
+                "numButes must be >= 0; got " + numBytes);
+        }
+
+        dbPage.writeShort(OFFSET_STATS_SIZE, numBytes);
+    }
+
+
+    /**
+     * Returns the offset in the header page that the table statistics start at.
+     * This value changes because the table schema resides before the stats, and
+     * therefore the stats don't live at a fixed location.
+     *
+     * @param dbPage the header page of the heap table file
+     * @return the offset within the header page that the table statistics
+     *         reside at
+     */
     public static int getStatsOffset(DBPage dbPage) {
+        verifyIsHeaderPage(dbPage);
+
         return OFFSET_NCOLS + getSchemaSize(dbPage);
     }
 
 
+    /**
+     * Updates the "number of data pages" statistic for this heap file.
+     *
+     * @param dbPage the header page of the heap file.
+     * @param numPages the "number of data pages" value to store.
+     */
     public static void setStatNumDataPages(DBPage dbPage, int numPages) {
+        verifyIsHeaderPage(dbPage);
+
         int offset = getStatsOffset(dbPage) + RELOFF_NUM_DATA_PAGES;
         dbPage.writeShort(offset, numPages);
     }
 
 
+    /**
+     * Returns the "number of data pages" statistic for this heap file.
+     *
+     * @param dbPage the header page of the heap file.
+     * @return the "number of data pages" value to store.
+     */
     public static int getStatNumDataPages(DBPage dbPage) {
+        verifyIsHeaderPage(dbPage);
+
         int offset = getStatsOffset(dbPage) + RELOFF_NUM_DATA_PAGES;
         return dbPage.readUnsignedShort(offset);
     }
 
 
-    public static void setStatNumTuples(DBPage dbPage, long numTuples) {
+    /**
+     * Updates the "number of tuples" statistic for this heap file.
+     *
+     * @param dbPage the header page of the heap file.
+     * @param numTuples the "number of tuples" value to store.
+     */
+    public static void setStatNumTuples(DBPage dbPage, int numTuples) {
+        verifyIsHeaderPage(dbPage);
+
         int offset = getStatsOffset(dbPage) + RELOFF_NUM_TUPLES;
         // Casting long to int here is fine, since we are writing an
         // unsigned int.
@@ -116,33 +276,161 @@ public class HeaderPage {
     }
 
 
-    public static long getStatNumTuples(DBPage dbPage) {
+    /**
+     * Returns the "number of tuples" statistic for this heap file.
+     *
+     * @param dbPage the header page of the heap file.
+     * @return the "number of tuples" value to store.
+     */
+    public static int getStatNumTuples(DBPage dbPage) {
+        verifyIsHeaderPage(dbPage);
+
         int offset = getStatsOffset(dbPage) + RELOFF_NUM_TUPLES;
-        return dbPage.readUnsignedInt(offset);
+        return dbPage.readInt(offset);
     }
 
 
+    /**
+     * Updates the "average tuple size" statistic for this heap file.
+     *
+     * @param dbPage the header page of the heap file.
+     * @param avgTupleSize the "average tuple size" value to store.
+     */
     public static void setStatAvgTupleSize(DBPage dbPage, float avgTupleSize) {
+        verifyIsHeaderPage(dbPage);
+
         int offset = getStatsOffset(dbPage) + RELOFF_AVG_TUPLE_SIZE;
         dbPage.writeFloat(offset, avgTupleSize);
     }
 
 
+    /**
+     * Returns the "average tuple size" statistic for this heap file.
+     *
+     * @param dbPage the header page of the heap file.
+     * @return the "average tuple size" value to store.
+     */
     public static float getStatAvgTupleSize(DBPage dbPage) {
+        verifyIsHeaderPage(dbPage);
+
         int offset = getStatsOffset(dbPage) + RELOFF_AVG_TUPLE_SIZE;
         return dbPage.readFloat(offset);
     }
 
 
-    public static TableStats getTableStats(DBPage dbPage) {
+    public static TableStats getTableStats(DBPage dbPage,
+                                           TableFileInfo tblFileInfo) {
+        verifyIsHeaderPage(dbPage);
+
+        logger.debug("Reading table-statistics from header page.");
+
+        PageReader reader = new PageReader(dbPage);
+        reader.setPosition(getStatsOffset(dbPage) + RELOFF_COLUMN_STATS);
+
+        Schema schema = tblFileInfo.getSchema();
+        ArrayList<ColumnStats> colStats = new ArrayList<ColumnStats>();
+        for (int i = 0; i < schema.numColumns(); i++) {
+            // The column-statistics object is initialized to all NULL values.
+            ColumnStats c = new ColumnStats();
+            ColumnInfo colInfo = schema.getColumnInfo(i);
+
+            // Read each column-stat's NULL-mask.  If the null-bit is 0 then a
+            // value is present.
+            byte nullMask = reader.readByte();
+
+            if ((nullMask & COLSTAT_NULLMASK_NUM_DISTINCT_VALUES) == 0)
+                c.setNumUniqueValues(reader.readInt());
+
+            if ((nullMask & COLSTAT_NULLMASK_NUM_NULL_VALUES) == 0)
+                c.setNumNullValues(reader.readInt());
+
+            if ((nullMask & COLSTAT_NULLMASK_MIN_VALUE) == 0)
+                c.setMinValue(reader.readObject(colInfo.getType()));
+
+            if ((nullMask & COLSTAT_NULLMASK_MAX_VALUE) == 0)
+                c.setMaxValue(reader.readObject(colInfo.getType()));
+
+            logger.debug(String.format("Read column-stat data:  " +
+                "nullmask=0x%X, unique=%d, null=%d, min=%s, max=%s",
+                nullMask, c.getNumUniqueValues(), c.getNumNullValues(),
+                c.getMinValue(), c.getMaxValue()));
+
+            colStats.add(c);
+        }
+
         return new TableStats(getStatNumDataPages(dbPage),
-            getStatNumTuples(dbPage), getStatAvgTupleSize(dbPage));
+            getStatNumTuples(dbPage), getStatAvgTupleSize(dbPage), colStats);
     }
 
 
-    public static void setTableStats(DBPage dbPage, TableStats stats) {
+    public static void setTableStats(DBPage dbPage, TableFileInfo tblFileInfo) {
+        verifyIsHeaderPage(dbPage);
+
+        logger.debug("Writing table-statistics to header page.");
+
+        Schema schema = tblFileInfo.getSchema();
+        TableStats stats = tblFileInfo.getStats();
+
         setStatNumDataPages(dbPage, stats.numDataPages);
         setStatNumTuples(dbPage, stats.numTuples);
         setStatAvgTupleSize(dbPage, stats.avgTupleSize);
+
+        PageWriter writer = new PageWriter(dbPage);
+        writer.setPosition(getStatsOffset(dbPage) + RELOFF_COLUMN_STATS);
+
+        ArrayList<ColumnStats> colStats = stats.getColumnStats();
+        for (int i = 0; i < colStats.size(); i++) {
+            ColumnStats c = colStats.get(i);
+            ColumnInfo colInfo = schema.getColumnInfo(i);
+
+            // There are three values per column-stat, and any of them can be
+            // null.  Therefore, each column-stat gets its own NULL-mask.
+            byte nullMask = 0;
+
+            int numUnique = c.getNumUniqueValues();
+            int numNull   = c.getNumNullValues();
+            Object minVal = c.getMinValue();
+            Object maxVal = c.getMaxValue();
+
+            // Build up the NULL-mask.
+
+            if (numUnique == -1)
+                nullMask |= COLSTAT_NULLMASK_NUM_DISTINCT_VALUES;
+
+            if (numNull == -1)
+                nullMask |= COLSTAT_NULLMASK_NUM_NULL_VALUES;
+
+            if (minVal == null)
+                nullMask |= COLSTAT_NULLMASK_MIN_VALUE;
+
+            if (maxVal == null)
+                nullMask |= COLSTAT_NULLMASK_MAX_VALUE;
+
+            // Store the NULL-mask, then store the non-NULL values.
+
+            logger.debug(String.format("Writing column-stat data:  " +
+                "nullmask=0x%X, unique=%d, null=%d, min=%s, max=%s",
+                nullMask, numUnique, numNull, minVal, maxVal));
+
+            writer.writeByte(nullMask);
+
+            if (numUnique != -1)
+                writer.writeInt(numUnique);
+
+            if (numNull != -1)
+                writer.writeInt(numNull);
+
+            if (minVal != null)
+                writer.writeObject(colInfo.getType(), minVal);
+
+            if (maxVal != null)
+                writer.writeObject(colInfo.getType(), maxVal);
+        }
+
+        int statsSize = writer.getPosition() - getStatsOffset(dbPage);
+        setStatsSize(dbPage, statsSize);
+
+        logger.debug("Writing statistics completed.  Total size is " +
+            statsSize + " bytes.");
     }
 }

@@ -177,4 +177,23 @@ public interface TableManager {
      *         table.
      */
     void analyzeTable(TableFileInfo tblFileInfo) throws IOException;
+
+
+    /**
+     * If the table format supports blocked traversal of the table format then
+     * this function returns an object implementing the
+     * {@link BlockedTableReader} interface.  Otherwise, this method will return
+     * <tt>null</tt>.
+     * <p>
+     * The object returned by this function should be a singleton; just as there
+     * should be only one instance of each table-manager implementation, there
+     * should only be one instance of each blocked table-reader implementation.
+     * (There just isn't any point in allowing more instances than that, since
+     * the class doesn't hold state, it just encodes how to manipulate tables.)
+     *
+     * @return a blocked table-reader for traversing the database in blocks, or
+     *         <tt>null</tt> if the table format doesn't support blocked
+     *         traversal.
+     */
+    BlockedTableReader getBlockedReader();
 }

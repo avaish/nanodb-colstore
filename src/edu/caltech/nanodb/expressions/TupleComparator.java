@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.Tuple;
 
 
@@ -17,6 +18,12 @@ import edu.caltech.nanodb.relations.Tuple;
  * expression; etc.
  */
 public class TupleComparator implements Comparator<Tuple> {
+
+    /**
+     * The schema of the tuples that will be compared by this comparator object.
+     */
+    private Schema schema;
+
 
     /** The specification of how to order the tuples being compared. */
     private ArrayList<OrderByExpression> orderSpec;
@@ -39,13 +46,20 @@ public class TupleComparator implements Comparator<Tuple> {
     /**
      * Construct a new tuple-comparator with the given ordering specification.
      *
+     * @param schema the schema of the tuples that will be compared by this
+     *        comparator object
+     *
      * @param orderSpec a series of order-by expressions used to order the
      *        tuples being compared
      */
-    public TupleComparator(List<OrderByExpression> orderSpec) {
-        if (orderSpec == null)
-            throw new NullPointerException();
+    public TupleComparator(Schema schema, List<OrderByExpression> orderSpec) {
+        if (schema == null)
+            throw new IllegalArgumentException("schema cannot be null");
 
+        if (orderSpec == null)
+            throw new IllegalArgumentException("orderSpec cannot be null");
+
+        this.schema = schema;
         this.orderSpec = new ArrayList<OrderByExpression>(orderSpec);
     }
 
@@ -56,10 +70,10 @@ public class TupleComparator implements Comparator<Tuple> {
         // Set up the environments for evaluating the order-by specifications.
 
         envTupleA.clear();
-        envTupleA.addTuple(a);
+        envTupleA.addTuple(schema, a);
 
         envTupleB.clear();
-        envTupleB.addTuple(b);
+        envTupleB.addTuple(schema, b);
 
         int compareResult = 0;
 
@@ -71,6 +85,9 @@ public class TupleComparator implements Comparator<Tuple> {
             Comparable valueA = (Comparable) expr.evaluate(envTupleA);
             Comparable valueB = (Comparable) expr.evaluate(envTupleB);
 
+            // Although it should be "unknown" when we compare two NULL values
+            // for equality, we say they are equal so that they will all appear
+            // together in the sorting results.
             if (valueA == null) {
                 if (valueB != null)
                     compareResult = -1;

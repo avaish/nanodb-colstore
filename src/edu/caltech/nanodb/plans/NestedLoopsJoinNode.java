@@ -3,6 +3,8 @@ package edu.caltech.nanodb.plans;
 
 import edu.caltech.nanodb.expressions.Expression;
 import edu.caltech.nanodb.expressions.OrderByExpression;
+import edu.caltech.nanodb.qeval.Cost;
+import edu.caltech.nanodb.qeval.SelectivityEstimator;
 import edu.caltech.nanodb.relations.JoinType;
 import edu.caltech.nanodb.relations.Tuple;
 
@@ -144,25 +146,25 @@ public class NestedLoopsJoinNode extends ThetaJoinNode {
         Cost rightCost = rightChild.estimateCost();
 
         float selectivity = 1.0f;
-        if (predicate != null)
-            selectivity = estimateSelectivity(predicate);
+        if (predicate != null) {
+            selectivity = SelectivityEstimator.estimateSelectivity(predicate,
+                null, null);
+        }
 
         // Number of tuples in the plain cartesian product is left*right.
         // Multiplying this by the selectivity of the join condition we get
-        double numTuplesD = (double)((leftCost.numTuples * rightCost.numTuples) *
-            selectivity);
-
-        numTuplesD = Math.ceil(numTuplesD);
+        float numTuples = leftCost.numTuples * rightCost.numTuples *
+            selectivity;
 
         // Since tuple schemas are concatenated, we add the tuple sizes.
         float tupleSize = leftCost.tupleSize + rightCost.tupleSize;
 
         // In a nested loops join, the right table must be fully read once for
         // each row in the left table.
-        long numPages = leftCost.numPageReads +
-            (leftCost.numTuples * rightCost.numPageReads);
+        long numBlockIOs = leftCost.numBlockIOs +
+            (long) Math.ceil(leftCost.numTuples) * rightCost.numBlockIOs;
 
-        return new Cost((long) numTuplesD, tupleSize, numPages, 0);
+        return new Cost(numTuples, tupleSize, numBlockIOs);
     }
 
 
@@ -239,24 +241,20 @@ public class NestedLoopsJoinNode extends ThetaJoinNode {
             return true;
 
         environment.clear();
-        environment.addTuple(leftTuple);
-        environment.addTuple(rightTuple);
+        environment.addTuple(leftSchema, leftTuple);
+        environment.addTuple(rightSchema, rightTuple);
 
         return predicate.evaluatePredicate(environment);
     }
 
 
-    public void markCurrentPosition()
-        throws IllegalStateException {
-
+    public void markCurrentPosition() {
         leftChild.markCurrentPosition();
         rightChild.markCurrentPosition();
     }
 
 
-    public void resetToLastMark()
-        throws IllegalStateException {
-
+    public void resetToLastMark() throws IllegalStateException {
         leftChild.resetToLastMark();
         rightChild.resetToLastMark();
 

@@ -8,6 +8,7 @@ import edu.caltech.nanodb.expressions.OrderByExpression;
 
 import edu.caltech.nanodb.relations.ColumnInfo;
 
+import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.storage.TableFileInfo;
 import edu.caltech.nanodb.storage.TableManager;
 
@@ -84,9 +85,9 @@ public abstract class IndexScanNode extends SelectNode {
     }
 
 
-    /** Returns the node's schema from the table file. */
-    public List<ColumnInfo> getColumnInfos() {
+    /** Retrieves the node's schema from the table file. */
+    protected void prepareSchema() {
         // Grab the column info from the table.
-        return tblFileInfo.getSchema().getColumnInfos();
+        schema = tblFileInfo.getSchema();
     }
 }

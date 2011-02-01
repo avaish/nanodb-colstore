@@ -4,8 +4,12 @@ package edu.caltech.nanodb.storage.heapfile;
 import java.io.EOFException;
 import java.io.IOException;
 
+import java.util.ArrayList;
 import java.util.Map;
 
+import edu.caltech.nanodb.storage.BlockedTableReader;
+import edu.caltech.nanodb.storage.ColumnStats;
+import edu.caltech.nanodb.storage.ColumnStatsCollector;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.relations.ColumnInfo;
@@ -61,6 +65,13 @@ public class HeapFileTableManager implements TableManager {
      * to the singleton instance of the storage manager at initialization.
      */
     private StorageManager storageManager;
+
+
+    /**
+     * A singleton instance of the blocked table-reader for heap files.  This
+     * is initialized the first time {@link #getBlockedReader} is called.
+     */
+    private BlockedHeapFileTableReader blockedReader;
 
 
     /**
@@ -136,9 +147,9 @@ public class HeapFileTableManager implements TableManager {
 
         // Write in empty statistics, so that the values are at least
         // initialized to something.
-        TableStats stats = new TableStats();
+        TableStats stats = new TableStats(schema.numColumns());
         tblFileInfo.setStats(stats);
-        HeaderPage.setTableStats(headerPage, stats);
+        HeaderPage.setTableStats(headerPage, tblFileInfo);
     }
 
 
@@ -225,7 +236,7 @@ public class HeapFileTableManager implements TableManager {
         }
 
         // Read in the table's statistics.
-        tblFileInfo.setStats(HeaderPage.getTableStats(headerPage));
+        tblFileInfo.setStats(HeaderPage.getTableStats(headerPage, tblFileInfo));
         logger.debug(tblFileInfo.getStats());
     }
 
@@ -271,15 +282,15 @@ public class HeapFileTableManager implements TableManager {
                 DBPage dbPage = storageManager.loadDBPage(dbFile, iPage);
                 int numSlots = DataPage.getNumSlots(dbPage);
                 for (int iSlot = 0; iSlot < numSlots; iSlot++) {
-                  // Get the offset of the tuple in the page.  If it's 0 then
-                  // the slot is empty, and we skip to the next slot.
-                  int offset = DataPage.getSlotValue(dbPage, iSlot);
-                  if (offset == DataPage.EMPTY_SLOT)
-                    continue;
+                    // Get the offset of the tuple in the page.  If it's 0 then
+                    // the slot is empty, and we skip to the next slot.
+                    int offset = DataPage.getSlotValue(dbPage, iSlot);
+                    if (offset == DataPage.EMPTY_SLOT)
+                        continue;
 
-                  // This is the first tuple in the file.  Build up the
-                  // PageTuple object and return it.
-                  return new PageTuple(tblFileInfo, dbPage, iSlot, offset);
+                    // This is the first tuple in the file.  Build up the
+                    // PageTuple object and return it.
+                    return new PageTuple(tblFileInfo, dbPage, iSlot, offset);
                 }
             }
         }
@@ -555,26 +566,22 @@ public class HeapFileTableManager implements TableManager {
         DBFile dbFile = tblFileInfo.getDBFile();
         logger.debug("Analyzing data file " + dbFile.getDataFile());
 
+        Schema schema = tblFileInfo.getSchema();
+
         int numPages = 0;
-        long numTuples = 0;
+        int numTuples = 0;
         long tupleBytes = 0;
 
-        // Scan through all pages in the table file.
-        int pageNo = 1;
-        DBPage dbPage;
-        while (true) {
-            // Try to load the current page.  Definitely don't create a new one!
-            try {
-                dbPage = storageManager.loadDBPage(dbFile, pageNo);
-            }
-            catch (EOFException eofe) {
-                // Couldn't load the current page because it doesn't exist.
-                // Break out of the loop.
-                logger.debug("Analysis has reached end of data file " +
-                    dbFile.getDataFile());
-                break;
-            }
+        ArrayList<ColumnStatsCollector> colStatsCollectors =
+            new ArrayList<ColumnStatsCollector>(schema.numColumns());
+        for (int i = 0; i < schema.numColumns(); i++)
+            colStatsCollectors.add(new ColumnStatsCollector());
 
+        BlockedTableReader blockedReader = getBlockedReader();
+
+        // Scan through all pages in the table file.
+        DBPage dbPage = blockedReader.getFirstDataPage(tblFileInfo);
+        while (dbPage != null) {
             numPages++;
 
             // Count the number of tuples in this data page.  We have to
@@ -589,25 +596,61 @@ public class HeapFileTableManager implements TableManager {
             // Compute the amount of tuple data in the page.
             tupleBytes += dbPage.getPageSize() - DataPage.getTupleDataStart(dbPage);
 
+            // Scan through the tuples in this page and update the column-stats.
+            Tuple tup = blockedReader.getFirstTupleInPage(tblFileInfo, dbPage);
+            while (tup != null) {
+                for (int iCol = 0; iCol < tup.getColumnCount(); iCol++)
+                    colStatsCollectors.get(iCol).addValue(tup.getColumnValue(iCol));
+
+                tup = blockedReader.getNextTupleInPage(tblFileInfo, dbPage, tup);
+            }
+
             // Done with this data page.  Move on to the next one.
-            pageNo++;
+            dbPage = blockedReader.getNextDataPage(tblFileInfo, dbPage);
         }
 
-        float avgTupleSize = (float) tupleBytes / (float) numTuples;
+        float avgTupleSize = 0;
+        if (numTuples > 0)
+            avgTupleSize = (float) tupleBytes / (float) numTuples;
 
-        logger.debug("Table " + tblFileInfo.getTableName() + " stats:");
-        logger.debug("  Data-page count:  " + numPages + " pages");
-        logger.debug("  Tuple count:  " + numTuples + " tuples");
-        logger.debug("  Average tuple size:  " + avgTupleSize + " bytes");
+        if (logger.isDebugEnabled()) {
+            logger.debug("Table " + tblFileInfo.getTableName() + " stats:");
+            logger.debug("  Data-page count:  " + numPages + " pages");
+            logger.debug("  Tuple count:  " + numTuples + " tuples");
+            logger.debug("  Average tuple size:  " + avgTupleSize + " bytes");
+            logger.debug("  Column stats:");
+            for (int iCol = 0; iCol < colStatsCollectors.size(); iCol++) {
+                ColumnStatsCollector collector = colStatsCollectors.get(iCol);
+                logger.debug(String.format(
+                    "    Column %d:  %d distinct values, %d NULL values, " +
+                    "min = %s, max = %s", iCol, collector.getNumUniqueValues(),
+                    collector.getNumNullValues(), collector.getMinValue(),
+                    collector.getMaxValue()));
+            }
+        }
 
         // Store the current statistics on the table-file info object,
         // and also store the stats in the table-file's header page.
 
-        TableStats stats = new TableStats(numPages, numTuples, avgTupleSize);
+        ArrayList<ColumnStats> colStats =
+            new ArrayList<ColumnStats>(colStatsCollectors.size());
+        for (ColumnStatsCollector collector : colStatsCollectors)
+            colStats.add(collector.getColumnStats());
+
+        TableStats stats =
+            new TableStats(numPages, numTuples, avgTupleSize, colStats);
         tblFileInfo.setStats(stats);
 
         DBPage headerPage = storageManager.loadDBPage(dbFile, 0);
-        HeaderPage.setTableStats(headerPage, stats);
+        HeaderPage.setTableStats(headerPage, tblFileInfo);
+    }
+
+
+    public BlockedTableReader getBlockedReader() {
+        if (blockedReader == null)
+            blockedReader = new BlockedHeapFileTableReader();
+
+        return blockedReader;
     }
 }
 

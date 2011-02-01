@@ -11,6 +11,7 @@ import edu.caltech.nanodb.expressions.Expression;
 import edu.caltech.nanodb.expressions.TupleLiteral;
 
 import edu.caltech.nanodb.relations.JoinType;
+import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.Tuple;
 import edu.caltech.nanodb.relations.ColumnInfo;
 
@@ -38,6 +39,20 @@ public abstract class ThetaJoinNode extends PlanNode {
     public Expression predicate;
 
 
+    /**
+     * The cached schema of the left subplan, used for join-predicate
+     * evaluation.
+     */
+    protected Schema leftSchema;
+
+
+    /**
+     * The cached schema of the right subplan, used for join-predicate
+     * evaluation.
+     */
+    protected Schema rightSchema;
+
+
     /** True if the schema of this node needs to be swapped. */
     protected boolean schemaSwapped = false;
 
@@ -57,28 +72,13 @@ public abstract class ThetaJoinNode extends PlanNode {
     public ThetaJoinNode(PlanNode leftChild, PlanNode rightChild,
         JoinType joinType, Expression predicate) {
 
-        super(OperationType.THETA_JOIN);
-
-        if (leftChild == null)
-            throw new IllegalArgumentException("leftChild cannot be null");
-
-        if (rightChild == null)
-            throw new IllegalArgumentException("rightChild cannot be null");
+        super(OperationType.THETA_JOIN, leftChild, rightChild);
 
         if (joinType == null)
             throw new IllegalArgumentException("joinType cannot be null");
 
-        this.leftChild = leftChild;
-        leftChild.parent = this;
-
-        this.rightChild = rightChild;
-        rightChild.parent = this;
-
         this.joinType = joinType;
-    
         this.predicate = predicate;
-
-
     }
 
 
@@ -111,60 +111,6 @@ public abstract class ThetaJoinNode extends PlanNode {
 
 
     /**
-     * Helper function that computes the selectivity of an expression that could
-     * possibly be a BooleanOperator.
-     * @design  Selectivity of regular expressions is assumed to be .10
-     *
-     * @param expr the expression whose selectivity we are computing
-     * @return the selectivity as a float
-     */
-    protected float estimateSelectivity(Expression expr) {
-        float selectivity = 1.0f;
-
-        if (expr instanceof BooleanOperator) {
-            BooleanOperator bool = (BooleanOperator)expr;
-      
-            int numTerms = bool.getNumTerms();
-
-            switch (bool.getType()) {
-            case AND_EXPR:
-                // This is an AND
-                // Multiply conjunct selectivities together.
-                for (int i = 0; i < numTerms; i++)
-                    selectivity *= estimateSelectivity(bool.getTerm(i));
-
-                break;
-
-            case OR_EXPR:
-                // This is an OR
-                // Multiply the negation of the disjunct selectivities and negate it.
-                for (int i = 0; i < numTerms; i++)
-                    selectivity *= (1.0f - estimateSelectivity(bool.getTerm(i)));
-
-                selectivity = 1.0f - selectivity;
-                break;
-
-            case NOT_EXPR:
-                // This is a NOT
-                // Return the negation of the selectivity.
-                selectivity = 1.0f - estimateSelectivity(bool.getTerm(0));
-                break;
-
-            default:
-                throw new IllegalArgumentException(
-                    "Illegal Boolean operator type:  " + bool.getType());
-            }
-        }
-        else {
-            // This is some other kind of predicate, assume 10% selectivity.
-            selectivity = 0.1f;
-        }
-
-        return selectivity;
-    }
-
-
-    /**
      * Do initialization for the join operation. Resets state variables.
      * Initialize both children.
      */
@@ -185,19 +131,19 @@ public abstract class ThetaJoinNode extends PlanNode {
      * Return the list of ColumnInfo objects that will make up the resulting
      * schema of this node. For joins, we must combine the two schemas.
      */
-    public List<ColumnInfo> getColumnInfos() {
-        List<ColumnInfo> leftInfos = leftChild.getColumnInfos();
-        List<ColumnInfo> rightInfos = rightChild.getColumnInfos();
-    
-        ArrayList<ColumnInfo> joinedInfos = new ArrayList<ColumnInfo>();
+    protected void prepareSchema() {
+        leftSchema = leftChild.getSchema();
+        rightSchema = rightChild.getSchema();
 
-        for (ColumnInfo left : leftInfos)
-            joinedInfos.add(left);
-
-        for (ColumnInfo right : rightInfos)
-            joinedInfos.add(right);
-
-        return joinedInfos;
+        schema = new Schema();
+        if (!schemaSwapped) {
+            schema.append(leftSchema);
+            schema.append(rightSchema);
+        }
+        else {
+            schema.append(rightSchema);
+            schema.append(leftSchema);
+        }
     }
 
 
@@ -205,9 +151,7 @@ public abstract class ThetaJoinNode extends PlanNode {
      * Swaps the left child and right child subtrees. Ensures that the schema of
      * the node does not change in the swap, so that this is still a valid query
      * plan.
-     * Note: This function is no longer needed.
      */
-    @Deprecated
     public void swap() {
         PlanNode left = leftChild;
         leftChild = rightChild;
@@ -219,9 +163,7 @@ public abstract class ThetaJoinNode extends PlanNode {
 
     /**
      * Returns true if the schema is swapped in this theta join node.
-     * Note: This function is no longer needed.
      */
-    @Deprecated
     public boolean isSwapped() {
         return schemaSwapped;
     }

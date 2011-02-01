@@ -27,6 +27,39 @@ import edu.caltech.nanodb.storage.TableFileInfo;
 /**
  * This class represents a hierarchy of one or more base and derived relations
  * that produce the rows considered by <tt>SELECT</tt> clauses.
+ * <p>
+ * The "join condition type" specified in the {@link #condType} field indicates
+ * the way that the join condition was specified in the original SQL expression.
+ * This value may be <tt>null</tt> if the join specified no condition, which
+ * would occur with these SQL expressions:
+ * <ul>
+ *   <li>SELECT * FROM t1, t2 WHERE t1.a = t2.a;</li>
+ *   <li>SELECT * FROM t1 JOIN t2 WHERE t1.a = t2.a;</li>
+ * </ul>
+ * <p>
+ * If <tt>condType</tt> is set to <tt>JoinConditionType.JOIN_ON_EXPR</tt> then
+ * the join condition was specified in an <tt>ON</tt> clause, such as:
+ * <ul>
+ *   <li>SELECT * FROM t1 JOIN t2 ON t1.a = t2.a;</li>
+ * </ul>
+ * The <tt>ON</tt> predicate is available via the {@link #getOnExpression}
+ * method.
+ * <p>
+ * Finally, if the <tt>condType</tt> is either
+ * <tt>JoinConditionType.JOIN_USING</tt> or
+ * <tt>JoinConditionType.NATURAL_JOIN</tt> then the join condition was
+ * implicitly specified via a SQL <tt>USING</tt> clause, or via a natural join,
+ * such as:
+ * <ul>
+ *   <li>SELECT * FROM t1 JOIN t2 USING (a);</li>
+ *   <li>SELECT * FROM t1 NATURAL JOIN t2;</li>
+ * </ul>
+ * In these cases the join predicate must be generated from examining the
+ * schemas of the participating tables.  The generated predicate is only
+ * available <em>after</em> the {@link #prepare} method has been called (which
+ * is indirectly invoked by the {@link SelectCommand} and {@link InsertCommand}
+ * classes before planning and executing a query), and is available via the
+ * {@link #getPreparedJoinExpr()} method.
  *
  * @see SelectClause
  */
@@ -368,6 +401,8 @@ public class FromClause {
      *         since that kind of from-clause doesn't have a result name.
      */
     public String getResultName() {
+        // Join expressions aren't renamed; only tables and SELECT subqueries
+        // can be given a name (in fact, SELECT subqueries require one).
         if (clauseType == ClauseType.JOIN_EXPR) {
             throw new IllegalStateException(clauseType +
                 " clauses don't have a result name");
@@ -377,6 +412,18 @@ public class FromClause {
             return aliasName;
 
         return tableName;
+    }
+
+
+    public boolean isRenamed() {
+        // Join expressions aren't renamed; only tables and SELECT subqueries
+        // can be given a name (in fact, SELECT subqueries require one).
+        if (clauseType == ClauseType.JOIN_EXPR) {
+            throw new IllegalStateException(clauseType +
+                " clauses don't have a result name");
+        }
+
+        return (aliasName != null);
     }
 
 
@@ -678,5 +725,49 @@ public class FromClause {
 
     public Expression getPreparedJoinExpr() {
         return preparedJoinExpr;
+    }
+
+
+    @Override
+    public String toString() {
+        StringBuilder buf = new StringBuilder();
+
+        buf.append("JoinClause[type=").append(clauseType);
+        switch (clauseType) {
+        case BASE_TABLE:
+            buf.append(", table=").append(tableName);
+            break;
+
+        case JOIN_EXPR:
+            buf.append(", joinType=").append(joinType);
+            buf.append(", condType=").append(condType);
+
+            if (condType != null) {
+                switch (condType) {
+                case JOIN_ON_EXPR:
+                    buf.append(", onExpr=").append(joinOnExpr);
+                    break;
+
+                case JOIN_USING:
+                    buf.append(", usingNames=").append(joinUsingNames);
+                    buf.append(", preparedJoinExpr=").append(preparedJoinExpr);
+                    break;
+
+                case NATURAL_JOIN:
+                    buf.append(", preparedJoinExpr=").append(preparedJoinExpr);
+                }
+            }
+
+            buf.append(", leftChild=").append(leftChild);
+            buf.append(", rightChild=").append(rightChild);
+
+            break;
+
+        case SELECT_SUBQUERY:
+            buf.append(", select=").append(derivedTable);
+        }
+
+        buf.append(']');
+        return buf.toString();
     }
 }

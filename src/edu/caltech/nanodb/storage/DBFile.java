@@ -186,7 +186,9 @@ public class DBFile {
         this.fileContents = fileContents;
 
         // TODO:  Verify that the file's stored page-size and type match the
-        //        values we were passed!
+        //        values we were passed!  (It's not that critical to verify,
+        //        and generally these values are passed in directly from
+        //        reading the datafile anyway.)
 
         // Check to make sure the file contains a whole number of pages.
         long fileSize = fileContents.length();
@@ -255,6 +257,22 @@ public class DBFile {
      */
     public int getPageSize() {
         return pageSize;
+    }
+
+
+    /**
+     * Reads the current file-length of this database file and computes the
+     * total number of pages based on this value.  Note that since this method
+     * involves an IO operation, it should be called infrequently since it will
+     * be slow.
+     *
+     * @return the number of pages currently in this database file.
+     *
+     * @throws IOException if an IO error occurs while reading the file's length
+     */
+    public int getNumPages() throws IOException {
+        long numPages = fileContents.length() / (long) pageSize;
+        return (int) numPages;
     }
 
 

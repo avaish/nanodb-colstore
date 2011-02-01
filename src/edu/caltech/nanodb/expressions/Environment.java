@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.SortedMap;
 
 import edu.caltech.nanodb.relations.ColumnInfo;
+import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.Tuple;
 
 
@@ -49,6 +50,9 @@ import edu.caltech.nanodb.relations.Tuple;
  */
 public class Environment {
 
+    private ArrayList<Schema> currentSchemas;
+
+
     /**
      * A mapping of string table names, to the current tuple for each of those
      * tables.  This class does not allow either table names or "current tuple"
@@ -69,6 +73,7 @@ public class Environment {
      * parent environment.
      */
     public Environment(Environment parent) {
+        currentSchemas = new ArrayList<Schema>();
         currentTuples = new ArrayList<Tuple>();
         this.parent = parent;
     }
@@ -81,14 +86,19 @@ public class Environment {
 
 
     public void clear() {
+        currentSchemas.clear();
         currentTuples.clear();
     }
 
 
-    public void addTuple(Tuple tuple) {
+    public void addTuple(Schema schema, Tuple tuple) {
+        if (schema == null)
+            throw new NullPointerException("schema cannot be null");
+
         if (tuple == null)
             throw new NullPointerException("tuple cannot be null");
 
+        currentSchemas.add(schema);
         currentTuples.add(tuple);
     }
 
@@ -119,16 +129,21 @@ public class Environment {
         Object result = null;
         boolean found = false;
 
-        for (Tuple tup : currentTuples) {
-            SortedMap<Integer, ColumnInfo> cols = tup.findColumns(colName);
+        for (int i = 0; i < currentTuples.size(); i++) {
+            Tuple tuple = currentTuples.get(i);
+            Schema schema = currentSchemas.get(i);
+
+            SortedMap<Integer, ColumnInfo> cols = schema.findColumns(colName);
             if (cols.isEmpty())
                 continue;
 
-            if (found || cols.size() > 1)
-                throw new ExpressionException("Column name " + colName + " is ambiguous");
+            if (found || cols.size() > 1) {
+                throw new ExpressionException("Column name " + colName +
+                    " is ambiguous");
+            }
 
             int index = cols.keySet().iterator().next();
-            result = tup.getColumnValue(index);
+            result = tuple.getColumnValue(index);
             found = true;
         }
 

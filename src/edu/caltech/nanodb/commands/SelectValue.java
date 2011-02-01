@@ -202,6 +202,29 @@ public class SelectValue implements Cloneable {
     }
 
 
+    /**
+     * This function returns the column-details of all results that will be
+     * produced by this select-value.  For example, if the select value is a
+     * wildcard such as <tt>*</tt> or <tt>tbl.*</tt> then the referenced column
+     * details will be retrieved from the input-schema.
+     * <p>
+     * If the select value is an expression then the result column-info is
+     * determined from the expression itself.  For example, the expression might
+     * simply be a column <tt>a</tt>, or <tt>tbl.a</tt>; in these cases the
+     * column-info is retrieved from the input schema.  Expressions can also be
+     * renamed; this renaming is applied here.  However, if a complex expression
+     * doesn't have a name then it will be assigned a unique name.
+     *
+     * @param inputSchema the schema against which the select-value will be
+     *        evaluated
+     *
+     * @param resultSchema the current result schema "so far".  This is provided
+     *        so that if the select-value is unnamed then a unique name can be
+     *        generated.
+     *
+     * @return a collection of one or more column-information objects containing
+     *         the schema for this select-value.
+     */
     public List<ColumnInfo> getColumnInfos(Schema inputSchema, Schema resultSchema) {
         ArrayList<ColumnInfo> results = new ArrayList<ColumnInfo>();
 
@@ -230,10 +253,10 @@ public class SelectValue implements Cloneable {
                     }
 
                     colInfo = new ColumnInfo(name, colInfo.getType());
-                    resultSchema.addColumnInfo(colInfo);
                     break;
                 }
             }
+            results.add(colInfo);
         }
         else if (scalarSubquery != null) {
             throw new UnsupportedOperationException(

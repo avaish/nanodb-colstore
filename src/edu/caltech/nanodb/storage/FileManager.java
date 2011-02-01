@@ -180,7 +180,7 @@ public class FileManager {
         try {
             fileContents.readFully(page.getPageData());
         }
-        catch (EOFException eofe) {
+        catch (EOFException e) {
             if (create) {
                 // Caller wants to create the page if it doesn't already exist
                 // yet.  Don't let the exception propagate.
@@ -192,10 +192,27 @@ public class FileManager {
                 // ...of course, we don't propagate the exception, but we also
                 // don't actually extend the file's size until the page is
                 // stored back to the file...
+                long newLength = (1L + (long) pageNo) * (long) dbFile.getPageSize();
+
+                // This check is just for safety.  It would be highly irregular
+                // to get an EOF exception and then have the file actually be
+                // longer than we expect.  But, if it happens, we'll scream.
+                long oldLength = fileContents.length();
+                if (oldLength < newLength) {
+                    fileContents.setLength(newLength);
+                }
+                else {
+                    String msg = "Expected DB file to be less than " +
+                        newLength + " bytes long, but it's " + oldLength +
+                        " bytes long!";
+
+                    logger.error(msg);
+                    throw new IOException(msg);
+                }
             }
             else {
                 // Caller expected the page to exist!  Let the exception propagate.
-                throw eofe;
+                throw e;
             }
         }
 

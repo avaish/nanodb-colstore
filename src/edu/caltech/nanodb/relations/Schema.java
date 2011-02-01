@@ -92,7 +92,9 @@ public class Schema implements Iterable<ColumnInfo> {
 
 
     /**
+     * Construct a copy of the specified schema object.
      *
+     * @param s the schema object to copy
      */
     public Schema(Schema s) {
         this();

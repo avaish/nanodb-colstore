@@ -13,6 +13,7 @@ import edu.caltech.nanodb.expressions.Expression;
 import edu.caltech.nanodb.qeval.Planner;
 import edu.caltech.nanodb.qeval.TupleProcessor;
 
+import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.SchemaNameException;
 import edu.caltech.nanodb.relations.Tuple;
 
@@ -33,29 +34,34 @@ public class UpdateCommand extends QueryCommand {
      */
     private static class TupleUpdater implements TupleProcessor {
         /** The table manager to use to modify tuples. */
-        TableManager tableMgr;
+        private TableManager tableMgr;
 
         /** The table whose tuples will be modified. */
-        TableFileInfo tblFileInfo;
+        private TableFileInfo tblFileInfo;
 
         /**
          * This is the list of values to change in the <tt>UPDATE</tt> statement.
          */
-        List<UpdateValue> values;
+        private List<UpdateValue> values;
+
+        /**
+         * The schema of the input tuples produced by the query evaluation.  The
+         * update-expressions are evaluated in the context of this schema.
+         */
+        private Schema schema;
 
         /**
          * The environment used to evaluate the update expressions.  This object
          * is created once and reused throughout the update operation.
          */
-        Environment environment = new Environment();
+        private Environment environment = new Environment();
 
         /**
          * The map containing column names and their new values for the update
          * operation.  This object is created once and reused throughout the
          * update operation.
          */
-        HashMap<String, Object> newValues = new HashMap<String, Object>();
-
+        private HashMap<String, Object> newValues = new HashMap<String, Object>();
 
         /**
          * Initialize the tuple-updater object with the details it needs to
@@ -75,12 +81,22 @@ public class UpdateCommand extends QueryCommand {
         }
 
         /**
+         * Stores the schema that will be produced during result evaluation.
+         * Currently this will almost certainly be the table-file's schema, but
+         * if multiple-table update support is added then this could be an
+         * aggregated schema.
+         */
+        public void setSchema(Schema schema) {
+            this.schema = schema;
+        }
+
+        /**
          * This implementation updates each tuple it is handed, based on the
          * set of update-specs that were given in the constructor.
          */
         public void process(Tuple tuple) throws IOException {
             environment.clear();
-            environment.addTuple(tuple);
+            environment.addTuple(schema, tuple);
 
             newValues.clear();
             for (UpdateValue value : values) {

@@ -99,8 +99,8 @@ public class TypeConverter {
             result = Boolean.valueOf(num.intValue() != 0);
         }
         else {
-            throw new TypeCastException("Cannot convert type \"" +
-                (obj != null ? obj.getClass() : "null") + "\" to byte.");
+            throw new TypeCastException("Cannot convert type " +
+                obj.getClass() + " to byte.");
         }
 
         return result;

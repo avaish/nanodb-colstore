@@ -5,37 +5,36 @@ import java.util.*;
 import java.io.*;
 
 import edu.caltech.nanodb.expressions.*;
+import edu.caltech.nanodb.qeval.Cost;
 import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.Tuple;
 import edu.caltech.nanodb.relations.ColumnInfo;
 
 import edu.caltech.nanodb.commands.SelectValue;
+import org.apache.log4j.Logger;
 
 
 /**
  * PlanNode representing the <tt>SELECT</tt> clause in a <tt>SELECT</tt>
  * operation. This is the relational algebra Project operator.
  *
- * TODO:
- *
- * @review Does project support/require marking?
- *         Should projectTuple() do anything with the tuple argument?
- *
  * @todo   Add wildcard/alias support.
  *         Fix the getColumnInfos method.
- *         Add index scanning.
  *         Add cost estimation.
- *         Add marking/reseting of position.
- *         Add any cleanup functionality.
  */
 public class ProjectNode extends PlanNode {
+
+    /** A logging object for reporting anything interesting that happens. **/
+    private static Logger logger = Logger.getLogger(ProjectNode.class);
+
+
+    /** The schema of tuples produced by the subplan. */
+    private Schema inputSchema;
+
 
     /** The new schema that this project node creates */
     public List<SelectValue> projectionSpec;
 
-
-    /** The schema that this plan node produces. */
-    private Schema schema;
 
     /**
      * This collection holds the non-wildcard column information, so that we can
@@ -64,14 +63,18 @@ public class ProjectNode extends PlanNode {
 
         // This node has a child, load child information.
         this.leftChild = leftChild;
-        leftChild.parent = this;
 
         this.projectionSpec = projectionSpec;
     }
 
 
-    private void prepare() {
-        Schema childSchema = new Schema(leftChild.getColumnInfos());
+    /**
+     * This helper function computes the schema of the project plan-node, based
+     * on the schema of its child-plan, and also the expressions specified in
+     * the project operation.
+     */
+    protected void prepareSchema() {
+        inputSchema = leftChild.getSchema();
         schema = new Schema();
         nonWildcardColumnInfos = new ArrayList<ColumnInfo>();
 
@@ -81,17 +84,21 @@ public class ProjectNode extends PlanNode {
                 if (wildcard.isTableSpecified()) {
                     // Need to find all columns that are associated with the
                     // specified table.
-                    schema.append(childSchema.findColumns(wildcard).values());
+                    schema.append(inputSchema.findColumns(wildcard).values());
                 }
                 else {
                     // No table is specified, so this is all columns in the
                     // child schema.
-                    schema.append(childSchema);
+                    schema.append(inputSchema);
                 }
             }
             else if (selVal.isExpression()) {
                 Expression expr = selVal.getExpression();
-                ColumnInfo colInfo = expr.getColumnInfo(childSchema);
+                ColumnInfo colInfo = expr.getColumnInfo(inputSchema);
+
+                String alias = selVal.getAlias();
+                if (alias != null)
+                    colInfo = new ColumnInfo(alias, colInfo.getType());
 
                 schema.addColumnInfo(colInfo);
                 nonWildcardColumnInfos.add(colInfo);
@@ -184,8 +191,10 @@ public class ProjectNode extends PlanNode {
         if (isTrivial())
             return tuple;
 
+        // The projection is *not* trivial, so we need to do some evaluatin'.
+
         environment.clear();
-        environment.addTuple(tuple);
+        environment.addTuple(inputSchema, tuple);
 
         // Create an empty tuple to add values to.
         TupleLiteral newTuple = new TupleLiteral();
@@ -200,18 +209,18 @@ public class ProjectNode extends PlanNode {
                 // This value is a wildcard.  Find the columns that match the
                 // wildcard, then add their values one by one.
 
+                // Wildcard expressions cannot rename their results.
+
                 ColumnName wildcard = selVal.getWildcard();
                 if (wildcard.isTableSpecified()) {
                     // Need to find all columns that are associated with the
                     // specified table.
 
                     SortedMap<Integer, ColumnInfo> matchCols =
-                        tuple.findColumns(wildcard);
+                        inputSchema.findColumns(wildcard);
 
-                    for (int iCol : matchCols.keySet()) {
-                        newTuple.addValue(tuple.getColumnInfo(iCol),
-                                          tuple.getColumnValue(iCol));
-                    }
+                    for (int iCol : matchCols.keySet())
+                        newTuple.addValue(tuple.getColumnValue(iCol));
                 }
                 else {
                     // No table is specified, so this is all columns in the
@@ -229,15 +238,21 @@ public class ProjectNode extends PlanNode {
                 Object result = expr.evaluate(environment);
                 ColumnInfo colInfo = iterNonWildcardCols.next();
 
-// System.err.printf("Expression:  %s \tAlias:  %s\n", expr, alias);
-// System.err.printf("Result:  %s \tColInfo:  %s\n", result, colInfo);
+                logger.debug(String.format(
+                    "Expression:  %s \tColInfo:  %s\tAlias:  %s",
+                    expr, colInfo, alias));
 
                 // Add the result to the tuple.
 
+                /*
                 if (alias != null)
                     colInfo = new ColumnInfo(alias, colInfo.getType());
 
-                newTuple.addValue(colInfo, result);
+                logger.debug(String.format(
+                    "Result:  %s \tColInfo:  %s\n", result, colInfo));
+                */
+
+                newTuple.addValue(result);
             }
             else if (selVal.isScalarSubquery()) {
                 throw new UnsupportedOperationException(
@@ -274,20 +289,6 @@ public class ProjectNode extends PlanNode {
         currentTuple = null;
 
         leftChild.initialize();
-    }
-
-
-    /**
-     * Return the list of ColumnInfo objects that will make up the resulting
-     * schema of this node.  For project, this means we return the
-     * projectionSpec in terms of an List of ColumnInfo objects.
-     */
-    public List<ColumnInfo> getColumnInfos() {
-        // TODO:  This needs to be done in a more intelligent way.
-        if (schema == null)
-            prepare();
-
-        return new ArrayList<ColumnInfo>(schema.getColumnInfos());
     }
 
 

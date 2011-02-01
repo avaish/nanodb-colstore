@@ -1,35 +1,42 @@
 package edu.caltech.nanodb.qeval;
 
 
-import java.util.List;
-
 import edu.caltech.nanodb.plans.PlanNode;
 
-import edu.caltech.nanodb.relations.ColumnInfo;
+import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.Tuple;
 
 
 public class QueryEvaluator {
 
     /**
+     * Executes the specified query plan, and feeds the results to the specified
+     * tuple processor.
+     *
+     * @param plan the query plan to execute
+     *
+     * @param processor the tuple-processor to receive the results
+     *
      * @return An object containing statistics about the plan evaluation.
+     *
+     * @throws Exception if an error occurs during query evaluation or during
+     *         tuple-processing.
      */
     public static EvalStats executePlan(PlanNode plan, TupleProcessor processor)
         throws Exception {
 
-        // Execute the query and print out the results.
+        // Execute the plan, and record some basic statistics as we go.
 
         long startTime = System.nanoTime();
 
+        Schema resultSchema = plan.getSchema();
+        processor.setSchema(resultSchema);
+
         plan.initialize();
 
-        // TODO:  Fold this into the initialization code...
-        List<ColumnInfo> resultSchema = plan.getColumnInfos();
-
-        Tuple tuple = null;
         int rowsProduced = 0;
-
         try {
+            Tuple tuple;
             while (true) {
                 // Get the next tuple.  If there aren't anymore, we're done!
                 tuple = plan.getNextTuple();
@@ -38,8 +45,6 @@ public class QueryEvaluator {
 
                 rowsProduced++;
 
-                //plan.environment.setCString tableName, Tuple tuple
-
                 // Do whatever we're supposed to do with the tuple.
                 processor.process(tuple);
             }
@@ -47,8 +52,10 @@ public class QueryEvaluator {
         finally {
             plan.cleanUp();
         }
+
         long elapsedTimeNanos = System.nanoTime() - startTime;
 
+        // Return the basic statistics we gathered.
         return new EvalStats(rowsProduced, elapsedTimeNanos);
     }
 }

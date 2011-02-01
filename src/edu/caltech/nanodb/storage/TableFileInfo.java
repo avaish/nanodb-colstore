@@ -56,7 +56,7 @@ public class TableFileInfo {
         this.dbFile = dbFile;
 
         schema = new Schema();
-        stats = new TableStats();
+        stats = new TableStats(schema.numColumns());
     }
 
 

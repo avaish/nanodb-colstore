@@ -8,6 +8,7 @@ import edu.caltech.nanodb.expressions.Expression;
 import edu.caltech.nanodb.qeval.Planner;
 import edu.caltech.nanodb.qeval.TupleProcessor;
 
+import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.SchemaNameException;
 import edu.caltech.nanodb.relations.Tuple;
 
@@ -35,10 +36,10 @@ public class DeleteCommand extends QueryCommand {
      */
     private static class TupleRemover implements TupleProcessor {
         /** The table manager to use to delete tuples. */
-        TableManager tableMgr;
+        private TableManager tableMgr;
 
         /** The table whose tuples will be deleted. */
-        TableFileInfo tblFileInfo;
+        private TableFileInfo tblFileInfo;
 
         /**
          * Initialize the tuple-remover object with the details it needs to
@@ -49,6 +50,11 @@ public class DeleteCommand extends QueryCommand {
         public TupleRemover(TableFileInfo tblFileInfo) {
             this.tblFileInfo = tblFileInfo;
             this.tableMgr = tblFileInfo.getTableManager();
+        }
+
+        /** This tuple-processor implementation doesn't care about the schema. */
+        public void setSchema(Schema schema) {
+            // Ignore.
         }
 
         /** This implementation simply deletes each tuple it is handed. */

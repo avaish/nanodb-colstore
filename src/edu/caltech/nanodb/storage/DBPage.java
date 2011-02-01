@@ -5,6 +5,8 @@ import java.io.UnsupportedEncodingException;
 
 import java.util.Arrays;
 
+import edu.caltech.nanodb.expressions.TypeConverter;
+import edu.caltech.nanodb.relations.ColumnType;
 import org.apache.log4j.Logger;
 
 
@@ -734,5 +736,175 @@ public class DBPage {
 
         // Zero out the rest of the fixed-size string value.
         Arrays.fill(pageData, position + bytes.length, position + len, (byte) 0);
+    }
+
+
+    /**
+     * This method provides a higher-level wrapper around the other methods in
+     * the <tt>DBPage</tt> class, allowing object-values to be read, as long
+     * as the data-type is provided along with the object.
+     *
+     * @param position the location in the page to start reading the value from
+     *
+     * @param colType the type of the value being read
+     *
+     * @return the object read from the data
+     *
+     * @throws NullPointerException if <tt>colType</tt> or <tt>value</tt> is
+     *         <tt>null</tt>
+     *
+     * @throws IllegalArgumentException if the input string is longer than
+     *         <tt>len</tt> characters
+     */
+    public Object readObject(int position, ColumnType colType) {
+        Object value = null;
+
+        switch (colType.getBaseType()) {
+
+        case INTEGER:
+            value = new Integer(readInt(position));
+            break;
+
+        case SMALLINT:
+            value = new Short(readShort(position));
+            break;
+
+        case BIGINT:
+            value = new Long(readLong(position));
+            break;
+
+        case TINYINT:
+            value = new Byte(readByte(position));
+            break;
+
+        case FLOAT:
+            value = new Float(readFloat(position));
+            break;
+
+        case DOUBLE:
+            value = new Double(readDouble(position));
+            break;
+
+        case CHAR:
+            value = readFixedSizeString(position, colType.getLength());
+            break;
+
+        case VARCHAR:
+            value = readVarString65535(position);
+            break;
+
+        default:
+            throw new UnsupportedOperationException(
+                "Cannot currently read type " + colType.getBaseType());
+        }
+
+        return value;
+    }
+
+
+    /**
+     * This method provides a higher-level wrapper around the other methods in
+     * the <tt>DBPage</tt> class, allowing object-values to be stored, as long
+     * as the object isn't <tt>null</tt> and the data-type is provided along
+     * with the object.
+     *
+     * @param position the location in the page to start writing the value to
+     *
+     * @param colType the type of the value being stored
+     *
+     * @param value the object containing the data to store
+     *
+     * @return the total number of bytes written in the operation; i.e. this is
+     *         the amount that the position is advanced.
+     *
+     * @throws NullPointerException if <tt>colType</tt> or <tt>value</tt> is
+     *         <tt>null</tt>
+     *
+     * @throws IllegalArgumentException if the input string is longer than
+     *         <tt>len</tt> characters
+     */
+    public int writeObject(int position, ColumnType colType, Object value) {
+
+        if (colType == null)
+            throw new NullPointerException("colType cannot be null");
+
+        if (value == null)
+            throw new NullPointerException("value cannot be null");
+
+        int dataSize;
+
+        // This code relies on Java autoboxing.  Go, syntactic sugar.
+        switch (colType.getBaseType()) {
+
+        case INTEGER:
+            {
+                int iVal = TypeConverter.getIntegerValue(value);
+                writeInt(position, iVal);
+                dataSize = 4;
+                break;
+            }
+
+        case SMALLINT:
+            {
+                short sVal = TypeConverter.getShortValue(value);
+                writeShort(position, sVal);
+                dataSize = 2;
+                break;
+            }
+
+        case BIGINT:
+            {
+                long lVal = TypeConverter.getLongValue(value);
+                writeLong(position, lVal);
+                dataSize = 8;
+                break;
+            }
+
+        case TINYINT:
+            {
+                byte bVal = TypeConverter.getByteValue(value);
+                writeByte(position, bVal);
+                dataSize = 1;
+                break;
+            }
+
+        case FLOAT:
+            {
+                float fVal = TypeConverter.getFloatValue(value);
+                writeFloat(position, fVal);
+                dataSize = 4;
+                break;
+            }
+
+        case DOUBLE:
+            {
+                double dVal = TypeConverter.getDoubleValue(value);
+                writeDouble(position, dVal);
+                dataSize = 8;
+                break;
+            }
+
+        case CHAR:
+            {
+                String strVal = TypeConverter.getStringValue(value);
+                writeFixedSizeString(position, strVal, colType.getLength());
+                dataSize = colType.getLength();
+                break;
+            }
+
+        case VARCHAR:
+            {
+                String strVal = TypeConverter.getStringValue(value);
+                writeVarString65535(position, strVal);
+                dataSize = 2 + strVal.length();
+                break;
+            }
+
+        default:
+            throw new UnsupportedOperationException(
+                "Cannot currently store type " + colType.getBaseType());
+        }
+
+        return dataSize;
     }
 }

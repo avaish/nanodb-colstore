@@ -9,8 +9,9 @@ import java.util.List;
 
 import edu.caltech.nanodb.expressions.Environment;
 import edu.caltech.nanodb.expressions.OrderByExpression;
+import edu.caltech.nanodb.qeval.Cost;
+import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.Tuple;
-import edu.caltech.nanodb.relations.ColumnInfo;
 
 
 /**
@@ -27,10 +28,13 @@ public abstract class PlanNode implements Cloneable {
         /** Relational algebra Project operator. */
         PROJECT,
 
+        /** Relational algebra Rename operator. */
+        RENAME,
+
         /** Relational algebra Theta Join operator. **/
         THETA_JOIN,
 
-        /** Relational algebra Group By / Aggregate operator.
+        /** Relational algebra Group By / Aggregate operator. */
         GROUP_AGGREGATE,
 
         /** Sorting operator. */
@@ -42,28 +46,29 @@ public abstract class PlanNode implements Cloneable {
 
 
     /** The type of this plan node. */
-    public OperationType nodeType;
+    protected OperationType nodeType;
+
+
+    /**
+     * The schema of the results produced by this plan-node.  The schema is
+     * initialized by the {@link #prepareSchema()} method, which is called the
+     * first time that {@link #getSchema()} is called.
+     */
+    protected Schema schema;
 
 
     /**
      * The left child of this plan node.  If the plan node only has one child,
      * use this field.
      */
-    public PlanNode leftChild;
+    protected PlanNode leftChild;
 
 
     /**
      * If the plan node has two children, this field is set to the right child
      * node.  If the plan has only one child, this field will be <tt>null</tt>.
      */
-    public PlanNode rightChild;
-  
-  
-    /**
-     * The parent of this plan node. If the plan tree changes this must be 
-     * updated along with the children.
-     */
-    public PlanNode parent;
+    protected PlanNode rightChild;
 
 
     /**
@@ -78,9 +83,55 @@ public abstract class PlanNode implements Cloneable {
      * called by subclass constructors.
      *
      * @param op the operation type of the node.
+     *
+     * @throws IllegalArgumentException if <tt>op</tt> is <tt>null</tt>
      */
     protected PlanNode(OperationType op) {
+        if (op == null)
+            throw new IllegalArgumentException("op cannot be null");
+
         nodeType = op;
+    }
+
+
+    /**
+     * Constructs a PlanNode with a given operation type, and the specified left
+     * child-plan.  This method will be called by subclass constructors.
+     *
+     * @param op the operation type of the node.
+     * @param leftChild the left subplan of this node.
+     *
+     * @throws IllegalArgumentException if <tt>op</tt> or <tt>leftChild</tt> is
+     *         <tt>null</tt>
+     */
+    protected PlanNode(OperationType op, PlanNode leftChild) {
+        this(op);
+
+        if (leftChild == null)
+            throw new IllegalArgumentException("leftChild cannot be null");
+
+        this.leftChild = leftChild;
+    }
+
+
+    /**
+     * Constructs a PlanNode with a given operation type, and the specified left
+     * child-plan.  This method will be called by subclass constructors.
+     *
+     * @param op the operation type of the node.
+     * @param leftChild the left subplan of this node.
+     * @param rightChild the right subplan of this node.
+     *
+     * @throws IllegalArgumentException if <tt>op</tt>, <tt>leftChild</tt>, or
+     *         <tt>rightChild</tt> is <tt>null</tt>
+     */
+    protected PlanNode(OperationType op, PlanNode leftChild, PlanNode rightChild) {
+        this(op, leftChild);
+
+        if (rightChild == null)
+            throw new IllegalArgumentException("rightChild cannot be null");
+
+        this.rightChild = rightChild;
     }
 
 
@@ -171,13 +222,33 @@ public abstract class PlanNode implements Cloneable {
 
 
     /**
-     * Gets the schema that this node will produces. Some nodes such as Select
-     * will not change the input schema but others, such as Project and
+     * Gets the schema that this node will produces.  Some nodes such as Select
+     * will not change the input schema but others, such as Project, Rename, and
      * ThetaJoin, must change it.
+     * <p>
+     * The first time this method is called, it will call
+     * {@link #prepareSchema()} and cache the result.  After that, the cached
+     * schema will be returned.
      *
-     * @return The new schema produced by this node
+     * @return The schema produced by this plan-node.
      */
-    public abstract List<ColumnInfo> getColumnInfos();
+    public final Schema getSchema() {
+        if (schema == null)
+            prepareSchema();
+
+        return schema;
+    }
+
+
+    /**
+     * This method should be implemented by specific plan-nodes to either load
+     * or compute the schema of the results produced by this node.  This method
+     * is called by the {@link #getSchema()} method the first time that schema
+     * is requested for the node.  Implementations will often turn around and
+     * ask their child plan-nodes for their schemas in order to properly compute
+     * the results.
+     */
+    protected abstract void prepareSchema();
 
 
     /**
@@ -328,8 +399,7 @@ public abstract class PlanNode implements Cloneable {
         
         // PARENT CANNOT BE COPIED, SET TO NULL AND NOTE THAT WE NEED TO 
         // RUN THROUGH THE TREE AT THE END TO SET THE PARENT!
-        node.parent = null;
-        
+
         return node;
     }
 
@@ -341,11 +411,9 @@ public abstract class PlanNode implements Cloneable {
      **/
     private void setNodeParents() {
         if (leftChild != null) {
-            leftChild.parent = this;
             leftChild.setNodeParents();
         }
         if (rightChild != null) {
-            rightChild.parent = this;
             rightChild.setNodeParents();
         }
     }
@@ -363,7 +431,6 @@ public abstract class PlanNode implements Cloneable {
 
             // We have successfully cloned the node tree.
             // Set the top node's parent to null and set all the other parents.
-            dup.parent = null;
             dup.setNodeParents();
         }
         catch (CloneNotSupportedException e) {

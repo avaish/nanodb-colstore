@@ -5,13 +5,14 @@ import java.io.IOException;
 
 import java.util.List;
 
+import edu.caltech.nanodb.qeval.Cost;
+import edu.caltech.nanodb.qeval.SelectivityEstimator;
+import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.Tuple;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.expressions.Expression;
 import edu.caltech.nanodb.expressions.OrderByExpression;
-
-import edu.caltech.nanodb.relations.ColumnInfo;
 
 import edu.caltech.nanodb.storage.TableFileInfo;
 import edu.caltech.nanodb.storage.TableManager;
@@ -145,32 +146,32 @@ public class FileScanNode extends SelectNode {
     }
 
 
-    /** Returns the node's schema from the table file. */
-    public List<ColumnInfo> getColumnInfos() {
-        // Grab the column info from the table.
-        return tblFileInfo.getSchema().getColumnInfos();
+    protected void prepareSchema() {
+        // Grab the schema from the table.
+        schema = tblFileInfo.getSchema();
     }
 
 
     @Override
     public Cost estimateCost() {
-        float selectivity = 1.0f;
+        // Get the table schema and statistics.
+        Schema schema = tblFileInfo.getSchema();
+        TableStats stats = tblFileInfo.getStats();
 
         // If we don't have a predicate, selectivity is 100%, otherwise call the
         // helper function.
-        if (predicate != null)
-            selectivity = estimateSelectivity(predicate);
+        float selectivity = 1.0f;
+        if (predicate != null) {
+            selectivity = SelectivityEstimator.estimateSelectivity(predicate,
+                schema, stats);
+        }
 
-        // Get the table statistics.
-        TableStats stats = tblFileInfo.getStats();
+        // To get the number of tuples, multiply the number of rows by the
+        // selectivity.
+        float numTuples = ((float) stats.numTuples) * selectivity;
 
-        // To get the number of tuples, multiply by the selectivity and take the
-        // ceiling. This prevents 0.X from becoming 0 and zeroing out estimates.
-        double numTuplesD = (double) (stats.numTuples * selectivity);
-        numTuplesD = Math.ceil(numTuplesD);
-
-        return new Cost((long) numTuplesD, stats.avgTupleSize,
-            stats.numDataPages, 0);
+        // The entire table-file will always be scanned, for now.
+        return new Cost(numTuples, stats.avgTupleSize, stats.numDataPages);
     }
 
 

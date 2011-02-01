@@ -38,10 +38,10 @@ public class InsertCommand extends QueryCommand {
      */
     private static class TupleInserter implements TupleProcessor {
         /** The table manager to use to insert tuples. */
-        TableManager tableMgr;
+        private TableManager tableMgr;
 
         /** The table into which the new tuples will be inserted. */
-        TableFileInfo tblFileInfo;
+        private TableFileInfo tblFileInfo;
 
         /**
          * Initialize the tuple-inserter object with the details it needs to
@@ -55,6 +55,16 @@ public class InsertCommand extends QueryCommand {
             // Pull out the table manager right away, since we will use it over
             // and over again.
             this.tableMgr = tblFileInfo.getTableManager();
+        }
+
+        /**
+         * This implementation ignores the schema of the results, since we just
+         * don't care.
+         *
+         * @todo We could compare the schemas to see if they are compatible...
+         */
+        public void setSchema(Schema schema) {
+            // Ignore.
         }
 
         /** This implementation simply inserts each tuple it is handed. */

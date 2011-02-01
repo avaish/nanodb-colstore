@@ -9,6 +9,7 @@ import java.util.SortedMap;
 
 import edu.caltech.nanodb.expressions.*;
 import edu.caltech.nanodb.relations.*;
+import org.apache.log4j.Logger;
 
 
 /**
@@ -17,6 +18,10 @@ import edu.caltech.nanodb.relations.*;
  * so the class is written to be used easily within other classes.
  */
 public class SelectClause {
+
+    /** A logging object for reporting anything interesting that happens. **/
+    private static Logger logger = Logger.getLogger(SelectClause.class);
+
 
     /**
      * This flag indicates whether the SELECT expression should generate
@@ -217,12 +222,15 @@ public class SelectClause {
      */
     public Schema computeSchema() throws IOException, SchemaNameException {
 
+        // This object holds the schema that expressions in the select-clause
+        // will be evaluated against.
         Schema selectSchema = new Schema();
 
         // Compute the schema of the FROM clause first.
-
         if (fromClause != null) {
             Schema fromSchema = fromClause.prepare();
+            logger.debug("From-clause schema:  " + fromSchema);
+
             selectSchema.append(fromSchema);
         }
 
@@ -255,6 +263,8 @@ public class SelectClause {
                 selVal.getColumnInfos(selectSchema, selectResultsSchema));
         }
 
+        logger.debug("Select-results schema:  " + selectResultsSchema);
+
         // TODO:  Update selectSchema to include columns in selectResultsSchema as well.
 
         // WHERE clause:
@@ -280,52 +290,72 @@ public class SelectClause {
     }
 
 
-  private void resolveExpressionRefs(String desc, Expression expr, Schema s)
-    throws SchemaNameException {
+    /**
+     * This helper function goes through the expression and verifies that every
+     * symbol-reference corresponds to an actual value produced by the
+     * <tt>FROM</tt>-clause of the <tt>SELECT</tt> expression.  Any column-names
+     * that don't include a table-name are also updated to include the proper
+     * table-name.
+     *
+     * @param desc A short string describing the context of the expression,
+     *        since expressions can appear in the <tt>SELECT</tt> clause, the
+     *        <tt>WHERE</tt> clause, the <tt>GROUP BY</tt> clause, etc.
+     *
+     * @param expr The expression that will be evaluated.
+     *
+     * @param s The schema against which the expression will be evaluated.
+     *
+     * @throws SchemaNameException if an expression-reference cannot be resolved
+     *         against the specified schema, either because the named column
+     *         or table doesn't appear in the schema, or if a column name is
+     *         ambiguous.
+     */
+    private void resolveExpressionRefs(String desc, Expression expr, Schema s)
+        throws SchemaNameException {
 
-    // Get the list of column-values in the expression, and resolve each one.
+        // Get the list of column-values in the expression, and resolve each one.
 
-    ArrayList<ColumnName> exprColumns = new ArrayList<ColumnName>();
-    expr.getAllSymbols(exprColumns);
+        ArrayList<ColumnName> exprColumns = new ArrayList<ColumnName>();
+        expr.getAllSymbols(exprColumns);
 
-    for (ColumnName colName : exprColumns) {
-      assert !colName.isColumnWildcard();
+        for (ColumnName colName : exprColumns) {
+            assert !colName.isColumnWildcard();
 
-      SortedMap<Integer, ColumnInfo> found = s.findColumns(colName);
+            SortedMap<Integer, ColumnInfo> found = s.findColumns(colName);
 
-      if (!colName.isTableSpecified()) {
-        // Try to resolve the table name using the column name.
+            if (!colName.isTableSpecified()) {
+                // Try to resolve the table name using the column name.
 
-        if (found.size() == 1) {
-          ColumnInfo colInfo = found.get(found.firstKey());
-          colName.setTableName(colInfo.getTableName());
+                if (found.size() == 1) {
+                    ColumnInfo colInfo = found.get(found.firstKey());
+                    colName.setTableName(colInfo.getTableName());
+                }
+                else if (found.size() == 0) {
+                    throw new SchemaNameException(desc + " " + expr +
+                        " references an unknown column " + colName + ".");
+                }
+                else {
+                    assert found.size() > 1;
+                    throw new SchemaNameException(desc + " " + expr +
+                        " contains an ambiguous column " + colName +
+                        "; found " + found.values() + ".");
+                }
+            }
+            else {
+                // Verify that the column name references a real column.
+
+                // Shouldn't be possible to have this match multiple tables,
+                // since the table name is specified.
+                assert colName.isTableSpecified();
+                assert found.size() <= 1;
+
+                if (found.size() == 0) {
+                    throw new SchemaNameException(desc + " " + expr +
+                        " references an unknown column " + colName + ".");
+                }
+            }
         }
-        else if (found.size() == 0) {
-          throw new SchemaNameException(desc + " " + expr +
-            " references an unknown column " + colName + ".");
-        }
-        else {
-          assert found.size() > 1;
-          throw new SchemaNameException(desc + " " + expr +
-            " contains an ambiguous column " + colName + "; found " +
-            found.values() + ".");
-        }
-      }
-      else {
-        // Verify that the column name references a real column.
-
-        // Shouldn't be possible to have this match multiple tables, since
-        // the table name is specified.
-        assert colName.isTableSpecified();
-        assert found.size() <= 1;
-
-        if (found.size() == 0) {
-          throw new SchemaNameException(desc + " " + expr +
-            " references an unknown column " + colName + ".");
-        }
-      }
     }
-  }
 
 
     @Override

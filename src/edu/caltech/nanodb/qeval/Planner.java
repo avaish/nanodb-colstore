@@ -5,6 +5,7 @@ import java.io.IOException;
 
 import java.util.List;
 
+import edu.caltech.nanodb.plans.RenameNode;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.commands.FromClause;
@@ -207,17 +208,26 @@ public class Planner {
 
         PlanNode plan;
 
-        switch (fromClause.getClauseType()) {
+        FromClause.ClauseType clauseType = fromClause.getClauseType();
+        switch (clauseType) {
         case BASE_TABLE:
-            // This clause is a base-table, so we just generate a file-scan
-            // plan node for the table.
-            plan = makeLeafSelect(fromClause.getTableName(), null);
-            break;
-
         case SELECT_SUBQUERY:
-            // This clause is a SQL subquery, so generate a plan from the
-            // subquery and return it.
-            plan = makePlan(fromClause.getSelectClause());
+
+            if (clauseType == FromClause.ClauseType.SELECT_SUBQUERY) {
+                // This clause is a SQL subquery, so generate a plan from the
+                // subquery and return it.
+                plan = makePlan(fromClause.getSelectClause());
+            }
+            else {
+                // This clause is a base-table, so we just generate a file-scan
+                // plan node for the table.
+                plan = makeLeafSelect(fromClause.getTableName(), null);
+            }
+
+            // If the FROM-clause renames the result, apply the renaming here.
+            if (fromClause.isRenamed())
+                plan = new RenameNode(plan, fromClause.getResultName());
+
             break;
 
         case JOIN_EXPR:
@@ -228,10 +238,6 @@ public class Planner {
 
             plan = new NestedLoopsJoinNode(leftChild, rightChild,
                 fromClause.getJoinType(), joinPredicate);
-
-            // TODO:  If from-clause modifies the schema, we can put a project
-            //        node here too.  Or, we can make the theta-join node
-            //        produce correct tuples...
 
             break;
 

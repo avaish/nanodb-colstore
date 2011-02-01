@@ -385,6 +385,9 @@ public class StorageManager {
      * @return an object representing the schema and other details of the open
      *         table
      *
+     * @throws java.io.FileNotFoundException if no table-file exists for the
+     *         table; in other words, it doesn't yet exist.
+     *
      * @throws IOException if an IO error occurs when attempting to open the
      *         table.
      */

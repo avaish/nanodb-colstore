@@ -1,13 +1,14 @@
 package edu.caltech.nanodb.plans;
 
 
+import java.io.IOException;
+
+import java.util.List;
+
 import edu.caltech.nanodb.expressions.Expression;
 import edu.caltech.nanodb.expressions.OrderByExpression;
-import edu.caltech.nanodb.relations.ColumnInfo;
-
-import java.io.IOException;
-import java.io.PrintStream;
-import java.util.List;
+import edu.caltech.nanodb.qeval.Cost;
+import edu.caltech.nanodb.qeval.SelectivityEstimator;
 
 
 /**
@@ -17,13 +18,7 @@ import java.util.List;
 public class SimpleFilterNode extends SelectNode {
 
     public SimpleFilterNode(PlanNode child, Expression predicate) {
-        super(predicate);
-
-        if (child == null)
-            throw new NullPointerException("child cannot be null");
-
-        leftChild = child;
-        child.parent = this;
+        super(child, predicate);
     }
 
 
@@ -70,8 +65,7 @@ public class SimpleFilterNode extends SelectNode {
 
         // Copy the subtree.
         node.leftChild = leftChild.duplicate();
-        node.leftChild.parent = node;
-        
+
         return node;
     }
 
@@ -108,10 +102,13 @@ public class SimpleFilterNode extends SelectNode {
     }
 
 
-    /** Returns the node's schema from the subplan. */
-    public List<ColumnInfo> getColumnInfos() {
-        // Grab the column info from the left child.
-        return leftChild.getColumnInfos();
+    /**
+     * This method simply retrieves the left child-plan's schema and stores it
+     * locally.
+     */
+    protected void prepareSchema() {
+        // Grab the schema from the left child.
+        schema = leftChild.getSchema();
     }
 
 
@@ -121,8 +118,10 @@ public class SimpleFilterNode extends SelectNode {
         // compute the selectivity based on the selection predicate.
 
         float selectivity = 1.0f;
-        if (predicate != null)
-            selectivity = estimateSelectivity(predicate);
+        if (predicate != null) {
+            selectivity = SelectivityEstimator.estimateSelectivity(predicate,
+                leftChild.getSchema(), null);
+        }
 
         // Grab the left child's cost, then update the cost based on the
         // selectivity of our predicate.

@@ -1,6 +1,7 @@
 package edu.caltech.nanodb.commands;
 
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +26,17 @@ public class CreateTableCommand extends Command {
     /** Name of the table to be created. */
     private String tableName;
 
+    /** If this flag is <tt>true</tt> then the table is a temporary table. */
+    private boolean temporary;
+
+
+    /**
+     * If this flag is <tt>true</tt> then the create-table operation should only
+     * be performed if the specified table doesn't already exist.
+     */
+    private boolean ifNotExists;
+
+
     /** List of column-declarations for the new table. */
     private List<ColumnInfo> columnInfos = new ArrayList<ColumnInfo>();
 
@@ -37,10 +49,13 @@ public class CreateTableCommand extends Command {
      *
      * @param tableName the name of the table to be created
      */
-    public CreateTableCommand(String tableName) {
+    public CreateTableCommand(String tableName,
+                              boolean temporary, boolean ifNotExists) {
         super(Command.Type.DDL);
 
         this.tableName = tableName;
+        this.temporary = temporary;
+        this.ifNotExists = ifNotExists;
     }
 
 
@@ -77,6 +92,30 @@ public class CreateTableCommand extends Command {
 
 
     public void execute() throws ExecutionException {
+        StorageManager storageManager = StorageManager.getInstance();
+
+        // See if the table already exists.
+        if (ifNotExists) {
+            logger.debug("Checking if table " + tableName + " already exists.");
+
+            try {
+                storageManager.openTable(tableName);
+
+                // If we got here then the table exists.  Skip the operation.
+                System.out.println("Table " + tableName + " already exists.");
+                return;
+            }
+            catch (FileNotFoundException e) {
+                // Table doesn't exist yet!  This is an expected exception.
+            }
+            catch (IOException e) {
+                // Some other unexpected exception occurred.  Report an error.
+                throw new ExecutionException(
+                    "Exception while trying to determine if table " +
+                    tableName + " exists.", e);
+            }
+        }
+
         // Set up the table-file info based on the command details.
 
         logger.debug("Creating a TableFileInfo object describing the new table " +
@@ -105,6 +144,8 @@ public class CreateTableCommand extends Command {
                 "\".  See nested exception for details.", ioe);
         }
         logger.debug("New table " + tableName + " is created!");
+
+        System.out.println("Created table:  " + tableName);
     }
 
 

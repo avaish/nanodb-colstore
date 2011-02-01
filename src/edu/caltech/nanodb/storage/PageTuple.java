@@ -123,6 +123,17 @@ public class PageTuple implements Tuple {
     }
 
 
+    /**
+     * Since page-tuples are backed by data pages managed by the Buffer Manager,
+     * they are <em>not</em> cacheable.
+     *
+     * @return <tt>false</tt> because page-tuples are never cacheable.
+     */
+    public boolean isCacheable() {
+        return false;
+    }
+
+
     public DBPage getDBPage() {
         return dbPage;
     }
@@ -161,52 +172,6 @@ public class PageTuple implements Tuple {
      */
     public int getColumnCount() {
         return schema.numColumns();
-    }
-
-
-    public List<ColumnInfo> getColumnInfos() {
-        return schema.getColumnInfos();
-    }
-
-
-    public ColumnInfo getColumnInfo(int colIndex) {
-        return schema.getColumnInfo(colIndex);
-    }
-
-
-    // Let javadoc copy the docs from the interface spec.
-    public int getColumnIndex(String colName) {
-        return schema.getColumnIndex(colName);
-    }
-
-
-    // Let javadoc copy the docs from the interface spec.
-    public SortedMap<Integer, ColumnInfo> findColumns(ColumnName colName) {
-
-        TreeMap<Integer, ColumnInfo> found = new TreeMap<Integer, ColumnInfo>();
-
-        // If the ColumnName specifies a table-name, and it doesn't match
-        // this table file, we're done.
-        if (colName.isTableSpecified() &&
-            !tblFileInfo.getTableName().equals(colName.getTableName())) {
-            return found;
-        }
-
-        // If the ColumnName specifies a column-name, use it to look up the
-        // result against our fast internal mechanism.  (A table cannot have
-        // multiple columns with the same name.)
-        if (!colName.isColumnWildcard()) {
-            int index = getColumnIndex(colName.getColumnName());
-            found.put(new Integer(index), getColumnInfo(index));
-            return found;
-        }
-
-        // If we got here then we have a wildcard * and need to add all
-        // columns to the result.
-        for (int i = 0; i < getColumnCount(); i++)
-            found.put(new Integer(i), getColumnInfo(i));
-
-        return found;
     }
 
 
@@ -497,7 +462,7 @@ public class PageTuple implements Tuple {
         if (value == null)
             throw new NullPointerException();
 
-        ColumnInfo colInfo = getColumnInfo(colIndex);
+        ColumnInfo colInfo = schema.getColumnInfo(colIndex);
         ColumnType colType = colInfo.getType();
 
         int oldDataSize, newDataSize;
@@ -527,7 +492,7 @@ public class PageTuple implements Tuple {
                 // This value will be added after the previous non-NULL value
                 // that we just found.
                 int prevOffset = valueOffsets[prevCol];
-                ColumnType prevType = getColumnInfo(prevCol).getType();
+                ColumnType prevType = schema.getColumnInfo(prevCol).getType();
                 offset = prevOffset + getColumnValueSize(prevType, prevOffset);
             }
 
@@ -798,88 +763,7 @@ public class PageTuple implements Tuple {
      */
     public static int writeNonNullValue(DBPage dbPage, int offset,
         ColumnType colType, Object value) {
-
-        if (dbPage == null)
-            throw new NullPointerException("dbPage cannot be null");
-
-        if (value == null)
-            throw new NullPointerException("value cannot be null");
-
-        int dataSize;
-
-        // This code relies on Java autoboxing.  Go, syntactic sugar.
-        switch (colType.getBaseType()) {
-
-        case INTEGER:
-            {
-                int iVal = TypeConverter.getIntegerValue(value);
-                dbPage.writeInt(offset, iVal);
-                dataSize = 4;
-                break;
-            }
-
-        case SMALLINT:
-            {
-                short sVal = TypeConverter.getShortValue(value);
-                dbPage.writeShort(offset, sVal);
-                dataSize = 2;
-                break;
-            }
-
-        case BIGINT:
-            {
-                long lVal = TypeConverter.getLongValue(value);
-                dbPage.writeLong(offset, lVal);
-                dataSize = 8;
-                break;
-            }
-
-        case TINYINT:
-            {
-                byte bVal = TypeConverter.getByteValue(value);
-                dbPage.writeByte(offset, bVal);
-                dataSize = 1;
-                break;
-            }
-
-        case FLOAT:
-            {
-                float fVal = TypeConverter.getFloatValue(value);
-                dbPage.writeFloat(offset, fVal);
-                dataSize = 4;
-                break;
-            }
-
-        case DOUBLE:
-            {
-                double dVal = TypeConverter.getDoubleValue(value);
-                dbPage.writeDouble(offset, dVal);
-                dataSize = 8;
-                break;
-            }
-
-        case CHAR:
-            {
-                String strVal = TypeConverter.getStringValue(value);
-                dbPage.writeFixedSizeString(offset, strVal, colType.getLength());
-                dataSize = colType.getLength();
-                break;
-            }
-
-        case VARCHAR:
-            {
-                String strVal = TypeConverter.getStringValue(value);
-                dbPage.writeVarString65535(offset, strVal);
-                dataSize = 2 + strVal.length();
-                break;
-            }
-
-        default:
-            throw new UnsupportedOperationException(
-                "Cannot currently store type " + colType.getBaseType());
-        }
-
-        return dataSize;
+        return dbPage.writeObject(offset, colType, value);
     }
 
 

@@ -2,17 +2,11 @@ package edu.caltech.nanodb.commands;
 
 
 import java.io.IOException;
-import java.util.List;
 
 import edu.caltech.nanodb.relations.ColumnInfo;
 import org.apache.log4j.Logger;
 
-import edu.caltech.nanodb.plans.PlanNode;
-import edu.caltech.nanodb.plans.Cost;
-
-import edu.caltech.nanodb.qeval.EvalStats;
 import edu.caltech.nanodb.qeval.Planner;
-import edu.caltech.nanodb.qeval.QueryEvaluator;
 import edu.caltech.nanodb.qeval.TupleProcessor;
 
 import edu.caltech.nanodb.relations.Schema;
@@ -21,17 +15,51 @@ import edu.caltech.nanodb.relations.Tuple;
 
 
 /**
- * This command object represents a top-level <code>SELECT</code> command
- * issued against the database.  This class is <em>not</em> used to represent
- * a subquery; subqueries are represented with the {@link SelectClause}.  And
- * this is what the <code>SelectCommand</code> uses internally to represent
- * the query itself.
+ * This command object represents a top-level <tt>SELECT</tt> command issued
+ * against the database.  The query itself is represented by the
+ * {@link SelectClause} class, particularly because a <tt>SELECT</tt> statement
+ * can itself contain other <tt>SELECT</tt> statements.
  *
  * @see SelectClause
  */
 public class SelectCommand extends QueryCommand {
 
+    /** A logging object for reporting anything interesting that happens. */
+    private static Logger logger = Logger.getLogger(SelectCommand.class);
+
+
+    /**
+     * This implementation of the tuple-processor interface simply prints out
+     * the schema and tuples produced by the <tt>SELECT</tt> statement.
+     */
     private static class TuplePrinter implements TupleProcessor {
+
+        public void setSchema(Schema schema) {
+            // TODO:  Print the schema.  Not like this.
+            System.out.print("schema:  ");
+            for (ColumnInfo colInfo : schema) {
+                System.out.print(" | ");
+
+                String colName = colInfo.getName();
+                String tblName = colInfo.getTableName();
+
+                // TODO:  To only print out table-names when the column-name is
+                //        ambiguous by itself, uncomment the first part and
+                //        then comment out the next part.
+
+                // Only print out the table name if there are multiple columns
+                // with this column name.
+                // if (schema.numColumnsWithName(colName) > 1 && tblName != null)
+                //     System.out.print(tblName + '.');
+
+                // If table name is specified, always print it out.
+                if (tblName != null)
+                    System.out.print(tblName + '.');
+
+                System.out.print(colName);
+            }
+            System.out.println(" |");
+        }
 
         public void process(Tuple tuple) {
             // TODO:  Print the tuple data.  Not like this.
@@ -44,7 +72,6 @@ public class SelectCommand extends QueryCommand {
 
         }
     }
-
 
 
     /**
@@ -81,6 +108,8 @@ public class SelectCommand extends QueryCommand {
      */
     protected void prepareQueryPlan() throws IOException, SchemaNameException {
         Schema resultSchema = selClause.computeSchema();
+        logger.debug("Prepared SelectClause:\n" + selClause);
+        logger.debug("Result schema:  " + resultSchema);
 
         // Create a plan for executing the SQL query.
         Planner planner = new Planner();

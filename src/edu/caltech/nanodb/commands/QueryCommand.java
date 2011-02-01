@@ -3,9 +3,9 @@ package edu.caltech.nanodb.commands;
 
 import java.io.IOException;
 
+import edu.caltech.nanodb.qeval.Cost;
 import org.apache.log4j.Logger;
 
-import edu.caltech.nanodb.plans.Cost;
 import edu.caltech.nanodb.plans.PlanNode;
 import edu.caltech.nanodb.qeval.EvalStats;
 import edu.caltech.nanodb.qeval.QueryEvaluator;
@@ -91,8 +91,8 @@ public abstract class QueryCommand extends Command {
 
                 Cost cost = plan.estimateCost();
                 logger.debug("Estimated " + cost.numTuples +
-                    " tuples with average size " + cost.tupleSize);
-                logger.debug("Estimated number of page reads: " + cost.numPageReads);
+                    " tuples with average size " + cost.tupleSize + " bytes");
+                logger.debug("Estimated number of block IOs: " + cost.numBlockIOs);
 
                 // Execute the query plan, then print out the evaluation stats.
 
@@ -136,8 +136,8 @@ public abstract class QueryCommand extends Command {
                 Cost cost = plan.estimateCost();
                 System.out.println("Estimated " + cost.numTuples +
                     " tuples with average size " + cost.tupleSize);
-                System.out.println("Estimated number of page reads:  " +
-                    cost.numPageReads);
+                System.out.println("Estimated number of block IOs:  " +
+                    cost.numBlockIOs);
             }
         }
         catch (ExecutionException e) {

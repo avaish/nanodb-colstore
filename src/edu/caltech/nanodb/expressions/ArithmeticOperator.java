@@ -96,9 +96,9 @@ public class ArithmeticOperator extends Expression {
             SQLDataType.TINYINT
         };
 
-        for (int i = 0; i < typeOrder.length; i++) {
-            if (lType == typeOrder[i] || rType == typeOrder[i])
-                return typeOrder[i];
+        for (SQLDataType aTypeOrder : typeOrder) {
+            if (lType == aTypeOrder || rType == aTypeOrder)
+                return aTypeOrder;
         }
 
         // Just guess INTEGER.  Works for C...
@@ -112,29 +112,33 @@ public class ArithmeticOperator extends Expression {
         Object rhsValue = rightExpr.evaluate(env);
 
         // If either the LHS value or RHS value is NULL (represented by Java
-        // null value) then the entire expression evaluates to FALSE.
+        // null value) then the entire expression evaluates to NULL.
         if (lhsValue == null || rhsValue == null)
-            return Boolean.FALSE;
+            return null;
 
+        return evalObjects(type, lhsValue, rhsValue);
+    }
+
+
+    public static Object evalObjects(Type type, Object aObj, Object bObj) {
         // Coerce the values to both have the same numeric type.
 
-        TypeConverter.Pair coerced =
-            TypeConverter.coerceArithmetic(lhsValue, rhsValue);
+        TypeConverter.Pair coerced = TypeConverter.coerceArithmetic(aObj, bObj);
 
         Object result = null;
 
         if (coerced.value1 instanceof Double) {
-            result = evalDoubles((Double) coerced.value1, (Double) coerced.value2);
+            result = evalDoubles(type, (Double) coerced.value1, (Double) coerced.value2);
         }
         else if (coerced.value1 instanceof Float) {
-            result = evalFloats((Float) coerced.value1, (Float) coerced.value2);
+            result = evalFloats(type, (Float) coerced.value1, (Float) coerced.value2);
         }
         else if (coerced.value1 instanceof Long) {
-            result = evalLongs((Long) coerced.value1, (Long) coerced.value2);
+            result = evalLongs(type, (Long) coerced.value1, (Long) coerced.value2);
         }
         else {
             assert coerced.value1 instanceof Integer;
-            result = evalIntegers((Integer) coerced.value1, (Integer) coerced.value2);
+            result = evalIntegers(type, (Integer) coerced.value1, (Integer) coerced.value2);
         }
 
         return result;
@@ -142,7 +146,7 @@ public class ArithmeticOperator extends Expression {
 
 
     /** This helper implements the arithmetic operations for Double values. */
-    private Double evalDoubles(Double aObj, Double bObj) {
+    private static Double evalDoubles(Type type, Double aObj, Double bObj) {
         double a = aObj.doubleValue();
         double b = bObj.doubleValue();
         double result = 0;
@@ -177,7 +181,7 @@ public class ArithmeticOperator extends Expression {
 
 
     /** This helper implements the arithmetic operations for Float values. */
-    private Float evalFloats(Float aObj, Float bObj) {
+    private static Float evalFloats(Type type, Float aObj, Float bObj) {
         float a = aObj.floatValue();
         float b = bObj.floatValue();
         float result = 0;
@@ -212,7 +216,7 @@ public class ArithmeticOperator extends Expression {
 
 
     /** This helper implements the arithmetic operations for Long values. */
-    private Long evalLongs(Long aObj, Long bObj) {
+    private static Long evalLongs(Type type, Long aObj, Long bObj) {
         long a = aObj.longValue();
         long b = bObj.longValue();
         long result = 0;
@@ -247,7 +251,7 @@ public class ArithmeticOperator extends Expression {
 
 
     /** This helper implements the arithmetic operations for Integer values. */
-    private Integer evalIntegers(Integer aObj, Integer bObj) {
+    private static Integer evalIntegers(Type type, Integer aObj, Integer bObj) {
         int a = aObj.intValue();
         int b = bObj.intValue();
         int result = 0;

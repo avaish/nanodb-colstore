@@ -21,7 +21,7 @@ header {
  **/
 class NanoSqlParser extends Parser;
 options {
-  k = 3;
+  k = 2;
 }
 
 tokens {
@@ -192,12 +192,25 @@ column_name returns [ColumnName cn]
  * configured.
  **/
 create_stmt returns [Command c] { c = null; } :
-  CREATE (
-      ( TABLE    tn:IDENT { c = new CreateTableCommand(tn.getText()); } table_decl[(CreateTableCommand) c] )
-//  | ( (UNIQUE)? INDEX in:IDENT { c = new CreateIndexCommand(in.getText());    } index_decl[(CreateIndexCommand) c] )
-//  | ( VIEW     vn:IDENT { c = new CreateViewCommand(vn.getText());     } view_decl[(CreateViewCommand)  c]  )
-  );
+  c=create_table | c=create_view | c=create_index ;
 
+
+//===== TABLES ============================
+
+
+create_table returns [CreateTableCommand c]
+  {
+    c = null;
+    String name = null;
+    boolean temp = false;
+    boolean ifNotExists = false;
+  }
+  :
+  CREATE ( TEMPORARY { temp = true; } )? TABLE ( IF NOT EXISTS { ifNotExists = true; } )?
+  name=dbobj_ident
+  { c = new CreateTableCommand(name, temp, ifNotExists); }
+  table_decl[c]
+  ;
 
 /**
  * Parse a comma-delimited list of column-declarations, and add them to the
@@ -328,28 +341,44 @@ table_constraint returns [ConstraintDecl c]
   ) ;
 
 
-/*
- * Index declarations can specify the indexing method, and one or more columns
- * of a particular table to build the index on.  Partial indexes are not
- * supported.
- */
 
-/*
-index_decl :
-  (USING m:IDENT)?
-  ON tn:dbobj_ident LPAREN c1:dbobj_ident ( COMMA ci:dbobj_ident )* RPAREN
+
+
+
+create_view returns [CreateViewCommand c]
+  {
+    c = null;
+    String name = null;
+    SelectClause sc = null;
+  }
+  :
+  CREATE VIEW name=dbobj_ident AS sc=select_clause
+  { c = new CreateViewCommand(name, sc); }
   ;
-*/
 
-/* View declarations */
 
-/* TODO
-view_decl :
-  dbobj_ident ( LPAREN view_col_decl ( COMMA view_col_decl )* RPAREN )? AS select_stmt ;
+create_index returns [CreateIndexCommand c]
+  {
+    c = null;
+    String idxType = "btree";
+    boolean unique = false;
+    String idxName = null;
+    String tblName = null;
+    String colName = null;
+  }
+  :
+  CREATE ( UNIQUE { unique = true; } )? INDEX idxName=dbobj_ident
+  ( USING idxType=dbobj_ident )?
+  ON tblName=dbobj_ident
+  {
+    c = new CreateIndexCommand(idxName, tblName);
+    c.setTable(tblName);
+    c.setUnique(unique);
+  }
+  LPAREN colName=dbobj_ident { c.addColumn(colName); }
+         ( COMMA colName=dbobj_ident { c.addColumn(colName); } )* RPAREN
+  ;
 
-view_col_decl :
-  dbobj_ident column_type ;
-*/
 
 /* ALTER Statements */
 
@@ -413,10 +442,10 @@ select_value returns [SelectValue sv]
     SelectClause sc = null;
   }
   :
-    e=expression ( (AS)? n=dbobj_ident )? { sv = new SelectValue(e, n); }
-  | STAR { sv = new SelectValue(new ColumnName()); }
-//  TODO:  Uncommenting produces nondeterminism warning.
-//  | ( n=dbobj_ident PERIOD )? STAR { sv = new SelectValue(new ColumnName(n, null)); }
+    STAR { sv = new SelectValue(new ColumnName()); }
+//  TODO:  Nondeterminism warning.  Just ignore.
+  | n=dbobj_ident PERIOD STAR { sv = new SelectValue(new ColumnName(n, null)); }
+  | e=expression ( (AS)? n=dbobj_ident )? { sv = new SelectValue(e, n); }
   | LPAREN sc=select_clause RPAREN ( (AS)? n=dbobj_ident )? { sv = new SelectValue(sc, n); }
   ;
 
@@ -558,13 +587,13 @@ delete_stmt returns [QueryCommand c]
 
 /* ANALYZE Statements */
 
-analyze_stmt returns [Command c]
+analyze_stmt returns [AnalyzeCommand c]
   {
     c = null;
     String tblName = null;
   } :
   ANALYZE tblName=dbobj_ident { c = new AnalyzeCommand(tblName); }
-  ( COMMA tblName=dbobj_ident { ((AnalyzeCommand) c).addTable(tblName); } )*
+  ( COMMA tblName=dbobj_ident { c.addTable(tblName); } )*
   ;
 
 

@@ -202,6 +202,35 @@ public class CompareOperator extends Expression {
     public Expression getRightExpression() {
         return rightExpr;
     }
+
+
+    public void normalize() {
+        if (leftExpr instanceof LiteralValue && rightExpr instanceof ColumnValue) {
+            // Switch left and right expressions.
+            Expression temp = leftExpr;
+            leftExpr = rightExpr;
+            rightExpr = temp;
+
+            // Adjust the operator to properly reflect the reordering.
+            switch (type) {
+            case GREATER_THAN:
+                type = CompareOperator.Type.LESS_THAN;
+                break;
+
+            case LESS_THAN:
+                type = CompareOperator.Type.GREATER_THAN;
+                break;
+
+            case GREATER_OR_EQUAL:
+                type = CompareOperator.Type.LESS_OR_EQUAL;
+                break;
+
+            case LESS_OR_EQUAL:
+                type = CompareOperator.Type.GREATER_OR_EQUAL;
+                break;
+            }
+        }
+    }
   
   
     /**

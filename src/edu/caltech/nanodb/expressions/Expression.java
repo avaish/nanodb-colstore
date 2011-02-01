@@ -119,7 +119,7 @@ public abstract class Expression implements Cloneable {
 
 
     /**
-     * Returns an <code>Expression</code> reference to a (possibly) simplified
+     * Returns an <tt>Expression</tt> reference to a (possibly) simplified
      * version of this expression.  If it's not possible to simplify the
      * expression, or if the expression class doesn't support simplification,
      * then the return-value will simply be this expression object, unsimplified.
