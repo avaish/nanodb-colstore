@@ -55,7 +55,7 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 
 
 <a name="drop_stmt">drop_stmt</a>
-	:	DROP TABLE IDENT 
+	:	<a href="NanoSqlParser.html#drop_table_stmt">drop_table_stmt</a> 
 	;
 
 
@@ -293,6 +293,15 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 		(	ORDER BY <a href="NanoSqlParser.html#expression">expression</a> ( COMMA <a href="NanoSqlParser.html#expression">expression</a> )* 
 		|	
 		) 
+	;
+
+
+<a name="drop_table_stmt">drop_table_stmt</a>
+	:	DROP TABLE 
+		(	IF EXISTS 
+		|	
+		) 
+		<a href="NanoSqlParser.html#dbobj_ident">dbobj_ident</a> 
 	;
 
 

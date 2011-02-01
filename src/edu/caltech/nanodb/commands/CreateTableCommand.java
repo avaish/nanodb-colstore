@@ -102,7 +102,8 @@ public class CreateTableCommand extends Command {
                 storageManager.openTable(tableName);
 
                 // If we got here then the table exists.  Skip the operation.
-                System.out.println("Table " + tableName + " already exists.");
+                System.out.println("Table " + tableName +
+                    " already exists; skipping create-table.");
                 return;
             }
             catch (FileNotFoundException e) {

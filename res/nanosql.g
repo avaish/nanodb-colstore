@@ -52,6 +52,7 @@ tokens {
   FOREIGN    = "foreign";
   FROM       = "from";
   FULL       = "full";
+  IF         = "if";
   IN         = "in";
   INDEX      = "index";
   INNER      = "inner";
@@ -394,7 +395,20 @@ alter_stmt :
 /* DROP Statements */
 
 drop_stmt returns [Command c] { c = null; } :
-  DROP TABLE ti:IDENT { c = new DropTableCommand(ti.getText()); } ;
+  c=drop_table_stmt /* | c=drop_index_stmt | c=drop_view_stmt */ ;
+
+drop_table_stmt returns [DropTableCommand c]
+  {
+    c = null;
+    String name = null;
+    boolean ifExists = false;
+  }
+  :
+  DROP TABLE ( IF EXISTS { ifExists = true; } )? name=dbobj_ident
+  { c = new DropTableCommand(name, ifExists); }
+  ;
+
+
 
 /* SELECT Statements */
 
