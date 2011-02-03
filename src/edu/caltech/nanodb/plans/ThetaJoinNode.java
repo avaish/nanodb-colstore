@@ -1,34 +1,21 @@
 package edu.caltech.nanodb.plans;
 
 
-import java.io.IOException;
-
-import java.util.ArrayList;
-import java.util.List;
-
-import edu.caltech.nanodb.expressions.BooleanOperator;
 import edu.caltech.nanodb.expressions.Expression;
 import edu.caltech.nanodb.expressions.TupleLiteral;
 
+import edu.caltech.nanodb.qeval.ColumnStats;
 import edu.caltech.nanodb.relations.JoinType;
 import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.Tuple;
-import edu.caltech.nanodb.relations.ColumnInfo;
+
+import java.util.ArrayList;
 
 
 /**
  * PlanNode representing the <tt>FROM</tt> clause in a <tt>SELECT</tt>
- * operation. This is the relational algebra ThetaJoin operator.
- *
- * @todo <ul>
- *         <li>FIX PREDICATE CHECK</li>
- *         <li>ADD MERGE, HASH JOINS</li>
- *
- *         <li>Add cost estimation.</li>
- *         <li>Add marking/reseting of position.</li>
- *         <li>Add any cleanup functionality.</li>
- *       </ul>
- **/
+ * operation.  This is the relational algebra ThetaJoin operator.
+ */
 public abstract class ThetaJoinNode extends PlanNode {
 
     /** The type of the join operation to perform. */
@@ -46,6 +33,10 @@ public abstract class ThetaJoinNode extends PlanNode {
     protected Schema leftSchema;
 
 
+    /** The cached statistics of the left subplan, used for cost estimation. */
+    protected ArrayList<ColumnStats> leftStats;
+
+
     /**
      * The cached schema of the right subplan, used for join-predicate
      * evaluation.
@@ -53,7 +44,18 @@ public abstract class ThetaJoinNode extends PlanNode {
     protected Schema rightSchema;
 
 
-    /** True if the schema of this node needs to be swapped. */
+    /** The cached statistics of the right subplan, used for cost estimation. */
+    protected ArrayList<ColumnStats> rightStats;
+
+
+    /**
+     * True if the output schema of this node is swapped.  If this flag is true
+     * then tuples from the left subplan will be on the right of joined results
+     * and so forth, but if the flag is false then the tuples from the left
+     * subplan will be on the left of the joined results.  The schema and the
+     * statistics values reflect the state of this flag, after {@link #prepare}
+     * has been called.
+     */
     protected boolean schemaSwapped = false;
 
 
@@ -128,21 +130,35 @@ public abstract class ThetaJoinNode extends PlanNode {
 
 
     /**
-     * Return the list of ColumnInfo objects that will make up the resulting
-     * schema of this node. For joins, we must combine the two schemas.
+     * This helper method can be used by the {@link #prepare} method in
+     * subclasses, to compute the output schema and initial stats of the
+     * join operation.  This method is provided because it takes the
+     * {@link #schemaSwapped} flag into account when ordering the schema
+     * and stats.
      */
-    protected void prepareSchema() {
+    protected void prepareSchemaStats() {
         leftSchema = leftChild.getSchema();
         rightSchema = rightChild.getSchema();
+
+        leftStats = leftChild.getStats();
+        rightStats = rightChild.getStats();
+
+        stats = new ArrayList<ColumnStats>();
 
         schema = new Schema();
         if (!schemaSwapped) {
             schema.append(leftSchema);
             schema.append(rightSchema);
+
+            stats.addAll(leftStats);
+            stats.addAll(rightStats);
         }
         else {
             schema.append(rightSchema);
             schema.append(leftSchema);
+
+            stats.addAll(rightStats);
+            stats.addAll(leftStats);
         }
     }
 
@@ -162,7 +178,11 @@ public abstract class ThetaJoinNode extends PlanNode {
 
 
     /**
-     * Returns true if the schema is swapped in this theta join node.
+     * Returns true if the schema is swapped in this theta join node, false
+     * otherwise.
+     *
+     * @return true if the schema is swapped in this theta join node, false
+     *         otherwise.
      */
     public boolean isSwapped() {
         return schemaSwapped;

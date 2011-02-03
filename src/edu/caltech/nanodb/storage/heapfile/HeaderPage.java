@@ -1,14 +1,14 @@
 package edu.caltech.nanodb.storage.heapfile;
 
 
+import edu.caltech.nanodb.qeval.ColumnStats;
+import edu.caltech.nanodb.qeval.TableStats;
 import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.relations.Schema;
-import edu.caltech.nanodb.storage.ColumnStats;
 import edu.caltech.nanodb.storage.DBPage;
 import edu.caltech.nanodb.storage.PageReader;
 import edu.caltech.nanodb.storage.PageWriter;
 import edu.caltech.nanodb.storage.TableFileInfo;
-import edu.caltech.nanodb.storage.TableStats;
 import org.apache.log4j.Logger;
 
 import java.util.ArrayList;
@@ -378,7 +378,7 @@ public class HeaderPage {
         PageWriter writer = new PageWriter(dbPage);
         writer.setPosition(getStatsOffset(dbPage) + RELOFF_COLUMN_STATS);
 
-        ArrayList<ColumnStats> colStats = stats.getColumnStats();
+        ArrayList<ColumnStats> colStats = stats.getAllColumnStats();
         for (int i = 0; i < colStats.size(); i++) {
             ColumnStats c = colStats.get(i);
             ColumnInfo colInfo = schema.getColumnInfo(i);

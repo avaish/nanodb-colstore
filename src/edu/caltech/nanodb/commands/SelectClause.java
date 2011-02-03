@@ -75,7 +75,7 @@ public class SelectClause {
      * values.  If the <tt>SELECT</tt> expression has no <tt>ORDER BY</tt>
      * clause, this collection will be empty.
      */
-    private List<Expression> orderByExprs = new ArrayList<Expression>();
+    private List<OrderByExpression> orderByExprs = new ArrayList<OrderByExpression>();
 
 
     /**
@@ -198,12 +198,12 @@ public class SelectClause {
     }
 
 
-    public void addOrderByExpr(Expression orderByExpr) {
+    public void addOrderByExpr(OrderByExpression orderByExpr) {
         orderByExprs.add(orderByExpr);
     }
 
 
-    public List<Expression> getOrderByExprs() {
+    public List<OrderByExpression> getOrderByExprs() {
         return orderByExprs;
     }
 
@@ -280,8 +280,8 @@ public class SelectClause {
             resolveExpressionRefs("HAVING clause", havingExpr, selectSchema);
 
         // ORDER BY clauses:
-        for (Expression expr : orderByExprs)
-            resolveExpressionRefs("ORDER BY clause", expr, selectSchema);
+        for (OrderByExpression expr : orderByExprs)
+            resolveExpressionRefs("ORDER BY clause", expr.getExpression(), selectSchema);
 
         // All done!  Store and return the results.
 
@@ -374,14 +374,16 @@ public class SelectClause {
             buf.append("\twhere=").append(whereExpr).append('\n');
 
         if (groupByExprs != null && groupByExprs.size() > 0)
-            buf.append("\tgroup=").append(groupByExprs).append('\n');
+            buf.append("\tgroup_by=").append(groupByExprs).append('\n');
 
         if (havingExpr != null)
             buf.append("\thaving=").append(havingExpr).append('\n');
+
+        if (orderByExprs != null && orderByExprs.size() > 0)
+            buf.append("\torder_by=").append(orderByExprs).append('\n');
 
         buf.append(']');
 
         return buf.toString();
     }
 }
-

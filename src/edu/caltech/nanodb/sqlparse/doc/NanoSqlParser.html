@@ -290,7 +290,17 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 			) 
 		|	
 		) 
-		(	ORDER BY <a href="NanoSqlParser.html#expression">expression</a> ( COMMA <a href="NanoSqlParser.html#expression">expression</a> )* 
+		(	ORDER BY <a href="NanoSqlParser.html#expression">expression</a> 
+			(	ASC 
+			|	DESC 
+			|	
+			) 
+			( COMMA <a href="NanoSqlParser.html#expression">expression</a> 
+				(	ASC 
+				|	DESC 
+				|	
+				) 
+				)* 
 		|	
 		) 
 	;

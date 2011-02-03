@@ -7,9 +7,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
 
+import edu.caltech.nanodb.qeval.ColumnStats;
+import edu.caltech.nanodb.qeval.ColumnStatsCollector;
 import edu.caltech.nanodb.storage.BlockedTableReader;
-import edu.caltech.nanodb.storage.ColumnStats;
-import edu.caltech.nanodb.storage.ColumnStatsCollector;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.relations.ColumnInfo;
@@ -28,7 +28,7 @@ import edu.caltech.nanodb.storage.PageWriter;
 import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.storage.TableFileInfo;
 import edu.caltech.nanodb.storage.TableManager;
-import edu.caltech.nanodb.storage.TableStats;
+import edu.caltech.nanodb.qeval.TableStats;
 
 
 /**
@@ -574,8 +574,11 @@ public class HeapFileTableManager implements TableManager {
 
         ArrayList<ColumnStatsCollector> colStatsCollectors =
             new ArrayList<ColumnStatsCollector>(schema.numColumns());
-        for (int i = 0; i < schema.numColumns(); i++)
-            colStatsCollectors.add(new ColumnStatsCollector());
+
+        for (ColumnInfo colInfo : schema) {
+            colStatsCollectors.add(
+                new ColumnStatsCollector(colInfo.getType().getBaseType()));
+        }
 
         BlockedTableReader blockedReader = getBlockedReader();
 

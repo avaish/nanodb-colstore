@@ -3,10 +3,13 @@ package edu.caltech.nanodb.plans;
 
 import java.io.IOException;
 
+import java.util.ArrayList;
 import java.util.List;
 
-import edu.caltech.nanodb.qeval.Cost;
+import edu.caltech.nanodb.qeval.ColumnStats;
+import edu.caltech.nanodb.qeval.PlanCost;
 import edu.caltech.nanodb.qeval.SelectivityEstimator;
+import edu.caltech.nanodb.qeval.TableStats;
 import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.Tuple;
 import org.apache.log4j.Logger;
@@ -16,7 +19,6 @@ import edu.caltech.nanodb.expressions.OrderByExpression;
 
 import edu.caltech.nanodb.storage.TableFileInfo;
 import edu.caltech.nanodb.storage.TableManager;
-import edu.caltech.nanodb.storage.TableStats;
 
 
 /**
@@ -152,11 +154,14 @@ public class FileScanNode extends SelectNode {
     }
 
 
-    @Override
-    public Cost estimateCost() {
-        // Get the table schema and statistics.
-        Schema schema = tblFileInfo.getSchema();
-        TableStats stats = tblFileInfo.getStats();
+    // Inherit javadocs from base class.
+    public void prepare() {
+        // Grab the schema and statistics from the table file.
+
+        schema = tblFileInfo.getSchema();
+
+        TableStats tableStats = tblFileInfo.getStats();
+        stats = tableStats.getAllColumnStats();
 
         // If we don't have a predicate, selectivity is 100%, otherwise call the
         // helper function.
@@ -166,12 +171,19 @@ public class FileScanNode extends SelectNode {
                 schema, stats);
         }
 
-        // To get the number of tuples, multiply the number of rows by the
-        // selectivity.
-        float numTuples = ((float) stats.numTuples) * selectivity;
+        // Grab the left child's cost, then update the cost based on the
+        // selectivity of our predicate.
 
-        // The entire table-file will always be scanned, for now.
-        return new Cost(numTuples, stats.avgTupleSize, stats.numDataPages);
+        float numTuples = tableStats.numTuples;
+        numTuples *= selectivity;
+
+        // The CPU cost will be proportional to the total number of tuples, not
+        // the number of tuples we expect to output.
+        cost = new PlanCost(numTuples, tableStats.avgTupleSize,
+            tableStats.numTuples, tableStats.numDataPages);
+
+        // TODO:  We should update the table statistics based on the predicate,
+        //        but for now we'll leave them unchanged.
     }
 
 

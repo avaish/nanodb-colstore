@@ -5,7 +5,9 @@ import java.io.IOException;
 
 import java.util.List;
 
+import edu.caltech.nanodb.expressions.OrderByExpression;
 import edu.caltech.nanodb.plans.RenameNode;
+import edu.caltech.nanodb.plans.SortNode;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.commands.FromClause;
@@ -110,12 +112,21 @@ public class Planner {
         if (whereExpr != null)
             plan = new SimpleFilterNode(plan, whereExpr);
 
-        // Finally, depending on the SELECT clause, create a project node
-        // at the top of the tree.
+        // TODO:  Grouping/aggregation will go somewhere in here.
+
+        // Depending on the SELECT clause, create a project node at the top of
+        // the tree.
         if (!selClause.isTrivialProject()) {
             List<SelectValue> selectValues = selClause.getSelectValues();
             plan = new ProjectNode(plan, selectValues);
         }
+
+        // Finally, apply any sorting at the end.
+        List<OrderByExpression> orderByExprs = selClause.getOrderByExprs();
+        if (!orderByExprs.isEmpty())
+            plan = new SortNode(plan, orderByExprs);
+
+        plan.prepare();
 
         return plan;
     }

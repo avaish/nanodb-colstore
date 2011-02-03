@@ -7,8 +7,6 @@ import java.util.SortedMap;
 import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.SchemaNameException;
-import edu.caltech.nanodb.relations.Tuple;
-import org.apache.commons.lang.ObjectUtils;
 
 
 /**
@@ -22,6 +20,12 @@ public class ColumnValue extends Expression {
     private ColumnName columnName;
 
 
+    /**
+     * Initialize a new column-value expression object with the specified
+     * column-name.
+     *
+     * @param columnName the name of the column to retrieve the value for
+     */
     public ColumnValue(ColumnName columnName) {
         if (columnName == null)
           throw new NullPointerException();
@@ -35,7 +39,11 @@ public class ColumnValue extends Expression {
     }
 
 
-    /** Returns the column name object */
+    /**
+     * Returns the column name object
+     *
+     * @return the column name object
+     */
     public ColumnName getColumnName() {
         return columnName;
     }
@@ -99,7 +107,7 @@ public class ColumnValue extends Expression {
   
     /**
      * Checks if the argument is an expression with the same structure, but not
-     * necesarily the same references.
+     * necessarily the same references.
      *
      * @param obj the object to which we are comparing
      */

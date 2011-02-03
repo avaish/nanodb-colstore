@@ -3,17 +3,9 @@ package edu.caltech.nanodb.plans;
 
 import java.io.IOException;
 
-import edu.caltech.nanodb.expressions.ColumnValue;
-import edu.caltech.nanodb.expressions.CompareOperator;
-import edu.caltech.nanodb.expressions.LiteralValue;
-import edu.caltech.nanodb.relations.ColumnInfo;
-import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.Tuple;
 
 import edu.caltech.nanodb.expressions.Expression;
-import edu.caltech.nanodb.expressions.BooleanOperator;
-import edu.caltech.nanodb.storage.TableStats;
-import sun.tools.tree.BooleanExpression;
 
 
 /**
@@ -66,6 +58,16 @@ public abstract class SelectNode extends PlanNode {
             node.predicate = null;
 
         return node;
+    }
+
+
+    /** Do initialization for the select operation. Resets state variables. */
+    @Override
+    public void initialize() {
+        super.initialize();
+
+        done = false;
+        currentTuple = null;
     }
 
 
@@ -127,15 +129,5 @@ public abstract class SelectNode extends PlanNode {
         environment.clear();
         environment.addTuple(schema, tuple);
         return predicate.evaluatePredicate(environment);
-    }
-
-
-    /** Do initialization for the select operation. Resets state variables. */
-    @Override
-    public void initialize() {
-        super.initialize();
-
-        done = false;
-        currentTuple = null;
     }
 }

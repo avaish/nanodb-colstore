@@ -318,18 +318,48 @@ public class Schema implements Iterable<ColumnInfo> {
     }
 
 
+    public int getColumnIndex(ColumnName colName) {
+        if (colName.isColumnWildcard())
+            throw new IllegalArgumentException("colName cannot be a wildcard");
+
+        return getColumnIndex(colName.getTableName(), colName.getColumnName());
+    }
+
+
+    public int getColumnIndex(ColumnInfo colInfo) {
+        return getColumnIndex(colInfo.getTableName(), colInfo.getName());
+    }
+
+
     public int getColumnIndex(String colName) {
+        return getColumnIndex(null, colName);
+    }
+
+
+    public int getColumnIndex(String tblName, String colName) {
         ArrayList<IndexedColumnInfo> colList = colsHashedByColumn.get(colName);
 
         if (colList == null)
             return -1;
 
-        if (colList.size() > 1) {
-            throw new SchemaNameException("Column name \"" + colName +
-                "\" is ambiguous in this schema.");
+        if (tblName == null) {
+            if (colList.size() > 1) {
+                throw new SchemaNameException("Column name \"" + colName +
+                    "\" is ambiguous in this schema.");
+            }
+
+            return colList.get(0).colIndex;
+        }
+        else {
+            // Table-name is specified.
+
+            for (IndexedColumnInfo c : colList) {
+                if (tblName.equals(c.colInfo.getTableName()))
+                    return c.colIndex;
+            }
         }
 
-        return colList.get(0).colIndex;
+        return -1;
     }
 
 

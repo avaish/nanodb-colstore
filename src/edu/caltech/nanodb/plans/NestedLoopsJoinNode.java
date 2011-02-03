@@ -3,12 +3,14 @@ package edu.caltech.nanodb.plans;
 
 import edu.caltech.nanodb.expressions.Expression;
 import edu.caltech.nanodb.expressions.OrderByExpression;
-import edu.caltech.nanodb.qeval.Cost;
+import edu.caltech.nanodb.qeval.ColumnStats;
+import edu.caltech.nanodb.qeval.PlanCost;
 import edu.caltech.nanodb.qeval.SelectivityEstimator;
 import edu.caltech.nanodb.relations.JoinType;
 import edu.caltech.nanodb.relations.Tuple;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 
@@ -140,15 +142,26 @@ public class NestedLoopsJoinNode extends ThetaJoinNode {
     }
 
 
-    /** Computes the cost in terms of disk accesses of the selected algorithm. */
-    public Cost estimateCost() {
-        Cost leftCost = leftChild.estimateCost();
-        Cost rightCost = rightChild.estimateCost();
+    @Override
+    public void prepare() {
+        // Need to prepare the left and right child-nodes before we can do
+        // our own work.
+        leftChild.prepare();
+        rightChild.prepare();
+
+        // Use the parent class' helper-function to prepare the schema.
+        prepareSchemaStats();
+
+        PlanCost leftCost = leftChild.getCost();
+        ArrayList<ColumnStats> leftStats = leftChild.getStats();
+
+        PlanCost rightCost = rightChild.getCost();
+        ArrayList<ColumnStats> rightStats = rightChild.getStats();
 
         float selectivity = 1.0f;
         if (predicate != null) {
             selectivity = SelectivityEstimator.estimateSelectivity(predicate,
-                null, null);
+                schema, stats);
         }
 
         // Number of tuples in the plain cartesian product is left*right.
@@ -160,11 +173,14 @@ public class NestedLoopsJoinNode extends ThetaJoinNode {
         float tupleSize = leftCost.tupleSize + rightCost.tupleSize;
 
         // In a nested loops join, the right table must be fully read once for
-        // each row in the left table.
+        // each row in the left table.  Thus, we have the left cost, plus the
+        // right cost times the number of tuples on the left.
+
+        float cpuCost = leftCost.cpuCost + leftCost.numTuples * rightCost.cpuCost;
         long numBlockIOs = leftCost.numBlockIOs +
             (long) Math.ceil(leftCost.numTuples) * rightCost.numBlockIOs;
 
-        return new Cost(numTuples, tupleSize, numBlockIOs);
+        cost = new PlanCost(numTuples, tupleSize, cpuCost, numBlockIOs);
     }
 
 

@@ -1,6 +1,7 @@
 package edu.caltech.nanodb.storage;
 
 
+import edu.caltech.nanodb.qeval.TableStats;
 import edu.caltech.nanodb.relations.Schema;
 
 

@@ -1,12 +1,14 @@
-package edu.caltech.nanodb.storage;
+package edu.caltech.nanodb.qeval;
 
+
+import edu.caltech.nanodb.relations.SQLDataType;
 
 import java.util.HashSet;
 
 
 /**
  * This class facilitates the collection of statistics for a single column of a
- * table being analyzed by the {@link TableManager#analyzeTable(TableFileInfo)}
+ * table being analyzed by the {@link edu.caltech.nanodb.storage.TableManager#analyzeTable}
  * method.  Instances of the class compute the number of distinct values, the
  * number of non-<tt>NULL</tt> values, and for appropriate data types, the
  * minimum and maximum values for the column.
@@ -20,6 +22,10 @@ import java.util.HashSet;
  *         large tables.
  */
 public class ColumnStatsCollector {
+
+    /** The SQL data-type for the column that stats are being collected for. */
+    private SQLDataType sqlType;
+
 
     /**
      * The set of all values seen in this column.  This set could obviously
@@ -47,7 +53,14 @@ public class ColumnStatsCollector {
     Comparable maxValue;
 
 
-    public ColumnStatsCollector() {
+    /**
+     * Initializes a new column-stats collector object for a column with the
+     * specified base SQL datatype.
+     *
+     * @param sqlType the base SQL datatype for the column.
+     */
+    public ColumnStatsCollector(SQLDataType sqlType) {
+        this.sqlType = sqlType;
         uniqueValues = new HashSet<Object>();
         numNullValues = 0;
         minValue = null;
@@ -55,6 +68,12 @@ public class ColumnStatsCollector {
     }
 
 
+    /**
+     * Adds another column-value to this stats-collector object, updating the
+     * statistics for the column.
+     *
+     * @param value the value from the column being analyzed.
+     */
     public void addValue(Object value) {
         if (value == null) {
             numNullValues++;
@@ -62,7 +81,9 @@ public class ColumnStatsCollector {
         else {
             // If the value implements the Comparable interface, use it to
             // update the minimum and maximum values.
-            if (value instanceof Comparable) {
+            if (SelectivityEstimator.typeSupportsCompareEstimates(sqlType) &&
+                value instanceof Comparable) {
+
                 Comparable comp = (Comparable) value;
 
                 if (minValue == null || comp.compareTo(minValue) < 0)
@@ -78,26 +99,59 @@ public class ColumnStatsCollector {
     }
 
 
+    /**
+     * Returns the number of <tt>NULL</tt> values seen for the column.
+     *
+     * @return the number of <tt>NULL</tt> values seen for the column
+     */
     public int getNumNullValues() {
         return numNullValues;
     }
 
 
+    /**
+     * Returns the number of unique (and non-<tt>NULL</tt>) values seen for the
+     * column.
+     *
+     * @return the number of unique (and non-<tt>NULL</tt>) values seen for the
+     *         column
+     */
     public int getNumUniqueValues() {
         return uniqueValues.size();
     }
 
 
+    /**
+     * Returns the minimum value seen for the column, or <tt>null</tt> if the
+     * column's type isn't supported for comparison estimates (or if there
+     * aren't any rows in the table being analyzed).
+     *
+     * @return the minimum value in the table for the column
+     */
     public Object getMinValue() {
         return minValue;
     }
 
 
+    /**
+     * Returns the maximum value seen for the column, or <tt>null</tt> if the
+     * column's type isn't supported for comparison estimates (or if there
+     * aren't any rows in the table being analyzed).
+     *
+     * @return the maximum value in the table for the column
+     */
     public Object getMaxValue() {
         return maxValue;
     }
 
 
+    /**
+     * This helper method constructs and returns a new column-statistics object
+     * containing the stats collected by this object.
+     *
+     * @return a new column-stats object containing the stats that have been
+     *         collected by this object
+     */
     public ColumnStats getColumnStats() {
         return new ColumnStats(getNumUniqueValues(), numNullValues,
             minValue, maxValue);

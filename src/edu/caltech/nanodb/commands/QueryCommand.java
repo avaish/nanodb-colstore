@@ -3,7 +3,7 @@ package edu.caltech.nanodb.commands;
 
 import java.io.IOException;
 
-import edu.caltech.nanodb.qeval.Cost;
+import edu.caltech.nanodb.qeval.PlanCost;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.plans.PlanNode;
@@ -87,12 +87,13 @@ public abstract class QueryCommand extends Command {
                 // Debug:  print out the plan and its costing details.
 
                 logger.debug("Generated execution plan:\n" +
-                    PlanNode.printNodeTreeToString(plan));
+                    PlanNode.printNodeTreeToString(plan, true));
 
-                Cost cost = plan.estimateCost();
+                PlanCost cost = plan.getCost();
                 logger.debug("Estimated " + cost.numTuples +
                     " tuples with average size " + cost.tupleSize + " bytes");
                 logger.debug("Estimated number of block IOs: " + cost.numBlockIOs);
+                logger.debug("Estimated CPU cost:  " + cost.cpuCost);
 
                 // Execute the query plan, then print out the evaluation stats.
 
@@ -129,15 +130,16 @@ public abstract class QueryCommand extends Command {
             }
             else {
                 System.out.println("Explain Plan:");
-                plan.printNodeTree(System.out, "    ");
+                plan.printNodeTree(System.out, true, "    ");
 
                 System.out.println();
 
-                Cost cost = plan.estimateCost();
+                PlanCost cost = plan.getCost();
                 System.out.println("Estimated " + cost.numTuples +
                     " tuples with average size " + cost.tupleSize);
                 System.out.println("Estimated number of block IOs:  " +
                     cost.numBlockIOs);
+                logger.debug("Estimated CPU cost:  " + cost.cpuCost);
             }
         }
         catch (ExecutionException e) {

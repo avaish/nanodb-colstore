@@ -1,4 +1,4 @@
-package edu.caltech.nanodb.storage;
+package edu.caltech.nanodb.qeval;
 
 
 /**
@@ -23,8 +23,8 @@ public class ColumnStats {
 
 
     /**
-     * The total number of NULL values for this column in the table, or -1 if
-     * the total number of NULL values is unknown.
+     * The total number of <tt>NULL</tt> values for this column in the table,
+     * or -1 if the total number of <tt>NULL</tt> values is unknown.
      */
     private int numNullValues;
 
@@ -167,5 +167,29 @@ public class ColumnStats {
      */
     public void setMaxValue(Object maxValue) {
         this.maxValue = maxValue;
+    }
+
+
+    /**
+     * Returns <tt>true</tt> if this column-stats object has both minimum and
+     * maximum values.
+     *
+     * @return <tt>true</tt> if this column-stats object has both minimum and
+     *         maximum values
+     */
+    public boolean hasMinMaxValues() {
+        return (minValue != null && maxValue != null);
+    }
+
+
+    /**
+     * Returns <tt>true</tt> if this column-stats object has both minimum and
+     * maximum values, and they are actually different values.
+     *
+     * @return <tt>true</tt> if this column-stats object has both minimum and
+     *         maximum values, and they are actually different values.
+     */
+    public boolean hasDifferentMinMaxValues() {
+        return hasMinMaxValues() && (!minValue.equals(maxValue));
     }
 }

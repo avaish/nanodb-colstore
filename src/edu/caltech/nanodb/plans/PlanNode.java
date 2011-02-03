@@ -5,18 +5,22 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import edu.caltech.nanodb.expressions.Environment;
 import edu.caltech.nanodb.expressions.OrderByExpression;
-import edu.caltech.nanodb.qeval.Cost;
+
+import edu.caltech.nanodb.qeval.ColumnStats;
+import edu.caltech.nanodb.qeval.PlanCost;
+
 import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.Tuple;
 
 
 /**
- * Represents a query plan node in its most abstract form. To create actual plan
- * nodes, use the subclasses of this node.
+ * Represents a query plan node in its most abstract form.  To create actual
+ * plan nodes, use the subclasses of this node.
  */
 public abstract class PlanNode implements Cloneable {
 
@@ -50,14 +54,6 @@ public abstract class PlanNode implements Cloneable {
 
 
     /**
-     * The schema of the results produced by this plan-node.  The schema is
-     * initialized by the {@link #prepareSchema()} method, which is called the
-     * first time that {@link #getSchema()} is called.
-     */
-    protected Schema schema;
-
-
-    /**
      * The left child of this plan node.  If the plan node only has one child,
      * use this field.
      */
@@ -69,6 +65,35 @@ public abstract class PlanNode implements Cloneable {
      * node.  If the plan has only one child, this field will be <tt>null</tt>.
      */
     protected PlanNode rightChild;
+
+
+    /**
+     * The schema of the results produced by this plan-node.  The schema is
+     * initialized by the {@link #prepare} method; before that method has been
+     * called, this will be <tt>null</tt>.
+     */
+    protected Schema schema;
+
+
+    /**
+     * The estimated cost of executing this plan and its subplans.  This cost is
+     * computed by the {@link #prepare} method; before that method has been
+     * called, this will be <tt>null</tt>.
+     */
+    protected PlanCost cost;
+
+
+    /**
+     * Statistics (possibly estimated) describing the results produced by this
+     * plan node.  These statistics are produced when the {@link #prepare}
+     * method is called; before that method has been called, this will be
+     * <tt>null</tt>.
+     * <p>
+     * This collection corresponds to the {@link #schema} object; it will
+     * contain the same number of columns, and the individual columns will
+     * correspond with the specific columns in the schema object.
+     */
+    protected ArrayList<ColumnStats> stats;
 
 
     /**
@@ -185,6 +210,71 @@ public abstract class PlanNode implements Cloneable {
 
 
     /**
+     * This method is responsible for computing critical details about the plan
+     * node, such as the schema of the results that are produced, the estimated
+     * cost of evaluating the plan node (and its children), and statistics
+     * describing the results produced by the plan node.
+     */
+    public abstract void prepare();
+
+
+    /**
+     * Returns the schema of the results that this node produces.  Some nodes
+     * such as Select will not change the input schema but others, such as
+     * Project, Rename, and ThetaJoin, must change it.
+     * <p>
+     * The schema is not computed until the {@link #prepare} method is called;
+     * until that point, this method will return <tt>null</tt>.
+     *
+     * @return the schema produced by this plan-node.
+     */
+    public final Schema getSchema() {
+        return schema;
+    }
+
+
+    /**
+     * Returns the estimated cost of this plan node's operation.  The estimate
+     * depends on which algorithm the node uses and the data it is working with.
+     * <p>
+     * The cost is not computed until the {@link #prepare} method is called;
+     * until that point, this method will return <tt>null</tt>.
+     *
+     * @return an object containing various cost measures such as the worst-case
+     *         number of disk accesses, the number of tuples produced, etc.
+     */
+    public final PlanCost getCost() {
+        return cost;
+    }
+
+
+    /**
+     * Returns statistics (possibly estimated) describing the results that this
+     * plan node will produce.  Estimating statistics for output results is a
+     * very imprecise task, to say the least.
+     * <p>
+     * These statistics are not computed until the {@link #prepare} method is
+     * called; until that point, this method will return <tt>null</tt>.
+     *
+     * @return statistics describing the results that will be produced by this
+     *         plan-node.
+     */
+    public final ArrayList<ColumnStats> getStats() {
+        return stats;
+    }
+
+
+    /**
+     * Does any initialization the node might need.  This could include
+     * resetting state variables or starting the node over from the beginning.
+     */
+    public void initialize() {
+        if (environment == null)
+            environment = new Environment();
+    }
+
+
+    /**
      * Gets the next tuple that fulfills the conditions for this plan node.
      * If the node has a child, it should call getNextTuple() on the child.
      * If the node is a leaf, the tuple comes from some external source such
@@ -201,83 +291,29 @@ public abstract class PlanNode implements Cloneable {
 
 
     /**
-     * Computes the cost of this plan node's operation.  The computation will
-     * depend on which algorithm the node uses and the data it is working with.
-     *
-     * @return an object containing various cost measures such as the worst-case
-     *         number of disk accesses, the number of tuples produced, etc.
-     */
-    public abstract Cost estimateCost();
-
-
-    /**
-     * Does any initialization the node might need.  This could include
-     * resetting state variables or starting the node over from the beginning.
-     *
-     */
-    public void initialize() {
-        if (environment == null)
-            environment = new Environment();
-    }
-
-
-    /**
-     * Gets the schema that this node will produces.  Some nodes such as Select
-     * will not change the input schema but others, such as Project, Rename, and
-     * ThetaJoin, must change it.
-     * <p>
-     * The first time this method is called, it will call
-     * {@link #prepareSchema()} and cache the result.  After that, the cached
-     * schema will be returned.
-     *
-     * @return The schema produced by this plan-node.
-     */
-    public final Schema getSchema() {
-        if (schema == null)
-            prepareSchema();
-
-        return schema;
-    }
-
-
-    /**
-     * This method should be implemented by specific plan-nodes to either load
-     * or compute the schema of the results produced by this node.  This method
-     * is called by the {@link #getSchema()} method the first time that schema
-     * is requested for the node.  Implementations will often turn around and
-     * ask their child plan-nodes for their schemas in order to properly compute
-     * the results.
-     */
-    protected abstract void prepareSchema();
-
-
-    /**
      * Marks the current tuple in the tuple-stream produced by this node.  The
      * {@link #resetToLastMark} method can be used to return to this tuple.
      * Note that only one marker can be set in the tuple-stream at a time.
      *
-     * @throws java.lang.UnsupportedOperationException if the node does not
-     *         support marking.
+     * @throws UnsupportedOperationException if the node does not support marking.
      *
-     * @throws java.lang.IllegalStateException if there is no "current tuple" to
-     *         mark.  This will occur if {@link #getNextTuple} hasn't yet been
-     *         called (i.e. we are before the first tuple in the tuple-stream),
-     *         or if we have already reached the end of the tuple-stream (i.e.
-     *         we are after the last tuple in the stream).
+     * @throws IllegalStateException if there is no "current tuple" to mark.
+     *         This will occur if {@link #getNextTuple} hasn't yet been called
+     *         (i.e. we are before the first tuple in the tuple-stream), or if
+     *         we have already reached the end of the tuple-stream (i.e. we are
+     *         after the last tuple in the stream).
      */
-    public abstract void markCurrentPosition()
-        throws UnsupportedOperationException;
+    public abstract void markCurrentPosition();
 
 
     /**
      * Resets the node's tuple-stream to the most recently marked position.
      * Note that only one marker can be set in the tuple-stream at a time.
      *
-     * @throws java.lang.UnsupportedOperationException if the node does not
-     *         support marking.
+     * @throws UnsupportedOperationException if the node does not support marking.
      *
-     * @throws java.lang.IllegalStateException if {@link #markCurrentPosition}
-     *         hasn't yet been called on this plan-node
+     * @throws IllegalStateException if {@link #markCurrentPosition} hasn't yet
+     *         been called on this plan-node
      */
     public abstract void resetToLastMark();
 
@@ -304,16 +340,24 @@ public abstract class PlanNode implements Cloneable {
      * Prints the entire plan subtree starting at this node.
      *
      * @param out PrintStream to be used for output.
+     * @param includeCosts a flag controlling whether the cost estimates will be
+     *        included in the plan output
      * @param indent the indentation level.
      */
-    public void printNodeTree(PrintStream out, String indent) {
-        out.println(indent + toString());
+    public void printNodeTree(PrintStream out, boolean includeCosts, String indent) {
+        StringBuilder buf = new StringBuilder();
+        buf.append(indent);
+        buf.append(toString());
+        if (includeCosts)
+            buf.append(" cost=").append(cost);
+
+        out.println(buf.toString());
 
         if (leftChild != null)
-            leftChild.printNodeTree(out, indent + "    ");
+            leftChild.printNodeTree(out, includeCosts, indent + "    ");
 
         if (rightChild != null)
-            rightChild.printNodeTree(out, indent + "    ");
+            rightChild.printNodeTree(out, includeCosts, indent + "    ");
     }
 
   
@@ -322,12 +366,48 @@ public abstract class PlanNode implements Cloneable {
      * stream starting from indentation level 0.
      *
      * @param out the output stream.
+     * @param includeCosts a flag controlling whether costs are included in the
+     *        output
+     */
+    public void printNodeTree(PrintStream out, boolean includeCosts) {
+        printNodeTree(out, includeCosts, "");
+    }
+
+
+    /**
+     * Prints the entire node tree with indentation to the specified output
+     * stream starting from indentation level 0.  Costs are not included in the
+     * output.
+     *
+     * @param out the output stream.
      */
     public void printNodeTree(PrintStream out) {
-        printNodeTree(out, "");
+        printNodeTree(out, false);
     }
-  
+
     
+    /**
+     * Generates the same result as {@link #printNodeTree(PrintStream)}, but
+     * into a string instead of to an output stream.
+     *
+     * @param plan The plan tree to print to a string.
+     * @param includeCosts a flag controlling whether costs are included in the
+     *        output
+     *
+     * @return A string containing the indented printout of the plan.
+     */
+    public static String printNodeTreeToString(PlanNode plan,
+                                               boolean includeCosts) {
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        PrintStream ps = new PrintStream(baos);
+        plan.printNodeTree(ps, includeCosts);
+        ps.flush();
+        
+        return baos.toString();
+    }
+
+
     /**
      * Generates the same result as {@link #printNodeTree(PrintStream)}, but
      * into a string instead of to an output stream.
@@ -337,12 +417,7 @@ public abstract class PlanNode implements Cloneable {
      * @return A string containing the indented printout of the plan.
      */
     public static String printNodeTreeToString(PlanNode plan) {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        PrintStream ps = new PrintStream(baos);
-        plan.printNodeTree(ps);
-        ps.flush();
-        
-        return baos.toString();
+        return printNodeTreeToString(plan, false);
     }
 
 

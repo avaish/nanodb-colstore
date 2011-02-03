@@ -1,4 +1,4 @@
-package edu.caltech.nanodb.storage;
+package edu.caltech.nanodb.qeval;
 
 
 import java.util.ArrayList;
@@ -59,7 +59,7 @@ public class TableStats {
 
     /**
      * Create a new table-statistics object with all statistics initialized to
-     * zero or NULL values.
+     * zero or <tt>NULL</tt> values.
      *
      * @param numColumns the number of columns in the table
      */
@@ -74,11 +74,29 @@ public class TableStats {
     }
 
 
-    public ArrayList<ColumnStats> getColumnStats() {
+    /**
+     * Returns the column-statistics for the specified column.
+     *
+     * @param index the index of the column to retrieve the stats for
+     *
+     * @return the column-stats object for the specified column
+     */
+    public ColumnStats getColumnStats(int index) {
+        return columnStats.get(index);
+    }
+
+
+    /**
+     * Returns the collection of all column-statistics collected for this table.
+     *
+     * @return a collection of all column-statistics for the table
+     */
+    public ArrayList<ColumnStats> getAllColumnStats() {
         return columnStats;
     }
 
 
+    @Override
     public String toString() {
       return "TableStats[numDataPages=" + numDataPages + ", numTuples=" +
         numTuples + ", avgTupleSize=" + avgTupleSize + "]";

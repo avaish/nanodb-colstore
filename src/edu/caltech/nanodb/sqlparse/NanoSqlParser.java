@@ -256,7 +256,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			e=expression();
 			uc.addValue(name, e);
 			{
-			_loop97:
+			_loop99:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -266,7 +266,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					uc.addValue(name, e);
 				}
 				else {
-					break _loop97;
+					break _loop99;
 				}
 				
 			} while (true);
@@ -351,7 +351,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			tblName=dbobj_ident();
 			c = new AnalyzeCommand(tblName);
 			{
-			_loop103:
+			_loop105:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -359,7 +359,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					c.addTable(tblName);
 				}
 				else {
-					break _loop103;
+					break _loop105;
 				}
 				
 			} while (true);
@@ -522,7 +522,9 @@ public NanoSqlParser(ParserSharedInputState state) {
 			}
 			case AND:
 			case AS:
+			case ASC:
 			case CROSS:
+			case DESC:
 			case FROM:
 			case FULL:
 			case INNER:
@@ -530,6 +532,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			case LEFT:
 			case NATURAL:
 			case OR:
+			case ORDER:
 			case RIGHT:
 			case WHERE:
 			case SEMICOLON:
@@ -539,7 +542,6 @@ public NanoSqlParser(ParserSharedInputState state) {
 			case RPAREN:
 			case GROUP:
 			case HAVING:
-			case ORDER:
 			case STAR:
 			case EQUALS:
 			case NOT_EQUALS:
@@ -1319,6 +1321,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		SelectValue sv = null;
 		FromClause fc = null;
 		Expression e = null;
+		boolean ascending;
 		
 		
 		try {      // for error handling
@@ -1386,11 +1389,11 @@ public NanoSqlParser(ParserSharedInputState state) {
 				sc.setFromClause(fc);
 				break;
 			}
+			case ORDER:
 			case WHERE:
 			case SEMICOLON:
 			case RPAREN:
 			case GROUP:
-			case ORDER:
 			{
 				break;
 			}
@@ -1409,10 +1412,10 @@ public NanoSqlParser(ParserSharedInputState state) {
 				sc.setWhereExpr(e);
 				break;
 			}
+			case ORDER:
 			case SEMICOLON:
 			case RPAREN:
 			case GROUP:
-			case ORDER:
 			{
 				break;
 			}
@@ -1453,9 +1456,9 @@ public NanoSqlParser(ParserSharedInputState state) {
 					sc.setHavingExpr(e);
 					break;
 				}
+				case ORDER:
 				case SEMICOLON:
 				case RPAREN:
-				case ORDER:
 				{
 					break;
 				}
@@ -1467,9 +1470,9 @@ public NanoSqlParser(ParserSharedInputState state) {
 				}
 				break;
 			}
+			case ORDER:
 			case SEMICOLON:
 			case RPAREN:
-			case ORDER:
 			{
 				break;
 			}
@@ -1486,17 +1489,69 @@ public NanoSqlParser(ParserSharedInputState state) {
 				match(ORDER);
 				match(BY);
 				e=expression();
-				sc.addOrderByExpr(e);
+				ascending = true;
 				{
-				_loop61:
+				switch ( LA(1)) {
+				case ASC:
+				{
+					match(ASC);
+					break;
+				}
+				case DESC:
+				{
+					match(DESC);
+					ascending = false;
+					break;
+				}
+				case SEMICOLON:
+				case COMMA:
+				case RPAREN:
+				{
+					break;
+				}
+				default:
+				{
+					throw new NoViableAltException(LT(1), getFilename());
+				}
+				}
+				}
+				sc.addOrderByExpr(new OrderByExpression(e, ascending));
+				{
+				_loop63:
 				do {
 					if ((LA(1)==COMMA)) {
 						match(COMMA);
 						e=expression();
-						sc.addOrderByExpr(e);
+						ascending = true;
+						{
+						switch ( LA(1)) {
+						case ASC:
+						{
+							match(ASC);
+							break;
+						}
+						case DESC:
+						{
+							match(DESC);
+							ascending = false;
+							break;
+						}
+						case SEMICOLON:
+						case COMMA:
+						case RPAREN:
+						{
+							break;
+						}
+						default:
+						{
+							throw new NoViableAltException(LT(1), getFilename());
+						}
+						}
+						}
+						sc.addOrderByExpr(new OrderByExpression(e, ascending));
 					}
 					else {
-						break _loop61;
+						break _loop63;
 					}
 					
 				} while (true);
@@ -1615,12 +1670,12 @@ public NanoSqlParser(ParserSharedInputState state) {
 					break;
 				}
 				case FROM:
+				case ORDER:
 				case WHERE:
 				case SEMICOLON:
 				case COMMA:
 				case RPAREN:
 				case GROUP:
-				case ORDER:
 				{
 					break;
 				}
@@ -1664,12 +1719,12 @@ public NanoSqlParser(ParserSharedInputState state) {
 					break;
 				}
 				case FROM:
+				case ORDER:
 				case WHERE:
 				case SEMICOLON:
 				case COMMA:
 				case RPAREN:
 				case GROUP:
-				case ORDER:
 				{
 					break;
 				}
@@ -1704,7 +1759,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			fc=join_expr();
 			{
-			_loop69:
+			_loop71:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -1712,7 +1767,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					fc = new FromClause(fc, next, JoinType.CROSS);
 				}
 				else {
-					break _loop69;
+					break _loop71;
 				}
 				
 			} while (true);
@@ -1766,7 +1821,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			fc=from_expr();
 			{
-			_loop81:
+			_loop83:
 			do {
 				if ((_tokenSet_13.member(LA(1)))) {
 					{
@@ -1911,7 +1966,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						fc.addUsingName(n);
 						
 						{
-						_loop80:
+						_loop82:
 						do {
 							if ((LA(1)==COMMA)) {
 								match(COMMA);
@@ -1919,7 +1974,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 								fc.addUsingName(n);
 							}
 							else {
-								break _loop80;
+								break _loop82;
 							}
 							
 						} while (true);
@@ -1933,13 +1988,13 @@ public NanoSqlParser(ParserSharedInputState state) {
 					case JOIN:
 					case LEFT:
 					case NATURAL:
+					case ORDER:
 					case RIGHT:
 					case WHERE:
 					case SEMICOLON:
 					case COMMA:
 					case RPAREN:
 					case GROUP:
-					case ORDER:
 					{
 						break;
 					}
@@ -1952,7 +2007,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					}
 				}
 				else {
-					break _loop81;
+					break _loop83;
 				}
 				
 			} while (true);
@@ -2012,6 +2067,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 				case LEFT:
 				case NATURAL:
 				case ON:
+				case ORDER:
 				case RIGHT:
 				case USING:
 				case WHERE:
@@ -2019,7 +2075,6 @@ public NanoSqlParser(ParserSharedInputState state) {
 				case COMMA:
 				case RPAREN:
 				case GROUP:
-				case ORDER:
 				{
 					break;
 				}
@@ -2090,7 +2145,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 				name=dbobj_ident();
 				cols = new ArrayList<String>(); cols.add(name);
 				{
-				_loop91:
+				_loop93:
 				do {
 					if ((LA(1)==COMMA)) {
 						match(COMMA);
@@ -2098,7 +2153,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						cols.add(name);
 					}
 					else {
-						break _loop91;
+						break _loop93;
 					}
 					
 				} while (true);
@@ -2139,7 +2194,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			e=expression();
 			exprs.add(e);
 			{
-			_loop94:
+			_loop96:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -2147,7 +2202,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					exprs.add(e);
 				}
 				else {
-					break _loop94;
+					break _loop96;
 				}
 				
 			} while (true);
@@ -2173,7 +2228,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			e=logical_and_expr();
 			{
-			_loop113:
+			_loop115:
 			do {
 				if ((LA(1)==OR)) {
 					match(OR);
@@ -2193,7 +2248,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					
 				}
 				else {
-					break _loop113;
+					break _loop115;
 				}
 				
 			} while (true);
@@ -2237,7 +2292,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 				e=expression();
 				exprs.add(e);
 				{
-				_loop110:
+				_loop112:
 				do {
 					if ((LA(1)==COMMA)) {
 						match(COMMA);
@@ -2245,7 +2300,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						exprs.add(e);
 					}
 					else {
-						break _loop110;
+						break _loop112;
 					}
 					
 				} while (true);
@@ -2283,7 +2338,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			e=logical_not_expr();
 			{
-			_loop116:
+			_loop118:
 			do {
 				if ((LA(1)==AND)) {
 					match(AND);
@@ -2303,7 +2358,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					
 				}
 				else {
-					break _loop116;
+					break _loop118;
 				}
 				
 			} while (true);
@@ -2449,7 +2504,9 @@ public NanoSqlParser(ParserSharedInputState state) {
 			}
 			case AND:
 			case AS:
+			case ASC:
 			case CROSS:
+			case DESC:
 			case FROM:
 			case FULL:
 			case INNER:
@@ -2457,6 +2514,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			case LEFT:
 			case NATURAL:
 			case OR:
+			case ORDER:
 			case RIGHT:
 			case WHERE:
 			case SEMICOLON:
@@ -2466,7 +2524,6 @@ public NanoSqlParser(ParserSharedInputState state) {
 			case RPAREN:
 			case GROUP:
 			case HAVING:
-			case ORDER:
 			{
 				break;
 			}
@@ -2515,7 +2572,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			e=mult_expr();
 			{
-			_loop126:
+			_loop128:
 			do {
 				if ((LA(1)==PLUS||LA(1)==MINUS)) {
 					{
@@ -2542,7 +2599,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					e = new ArithmeticOperator(mathType, e, e2);
 				}
 				else {
-					break _loop126;
+					break _loop128;
 				}
 				
 			} while (true);
@@ -2571,7 +2628,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			e=unary_op_expr();
 			{
-			_loop130:
+			_loop132:
 			do {
 				if ((LA(1)==STAR||LA(1)==SLASH||LA(1)==PERCENT)) {
 					{
@@ -2604,7 +2661,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					e = new ArithmeticOperator(mathType, e, e2);
 				}
 				else {
-					break _loop130;
+					break _loop132;
 				}
 				
 			} while (true);
@@ -2896,8 +2953,10 @@ public NanoSqlParser(ParserSharedInputState state) {
 		"\"and\"",
 		"\"any\"",
 		"\"as\"",
+		"\"asc\"",
 		"\"avg\"",
 		"\"between\"",
+		"\"by\"",
 		"\"column\"",
 		"\"constraint\"",
 		"\"count\"",
@@ -2905,6 +2964,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		"\"cross\"",
 		"\"default\"",
 		"\"delete\"",
+		"\"desc\"",
 		"\"distinct\"",
 		"\"drop\"",
 		"\"exists\"",
@@ -2932,6 +2992,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		"\"null\"",
 		"\"on\"",
 		"\"or\"",
+		"\"order\"",
 		"\"outer\"",
 		"\"primary\"",
 		"\"quit\"",
@@ -2984,9 +3045,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		"COMMA",
 		"RPAREN",
 		"GROUP",
-		"BY",
 		"HAVING",
-		"ORDER",
 		"STAR",
 		"EQUALS",
 		"NOT_EQUALS",
@@ -3013,107 +3072,107 @@ public NanoSqlParser(ParserSharedInputState state) {
 	}
 	public static final BitSet _tokenSet_0 = new BitSet(mk_tokenSet_0());
 	private static final long[] mk_tokenSet_1() {
-		long[] data = { 0L, 134217728L, 0L, 0L};
+		long[] data = { 0L, 2147483648L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_1 = new BitSet(mk_tokenSet_1());
 	private static final long[] mk_tokenSet_2() {
-		long[] data = { 31635496849507584L, 562914452832275L, 0L, 0L};
+		long[] data = { 506411453839314176L, 2251781560074544L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_2 = new BitSet(mk_tokenSet_2());
 	private static final long[] mk_tokenSet_3() {
-		long[] data = { 4578714713195776L, 562912238239760L, 0L, 0L};
+		long[] data = { 73784414635035904L, 2251746126594304L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_3 = new BitSet(mk_tokenSet_3());
 	private static final long[] mk_tokenSet_4() {
-		long[] data = { 2307259180190285824L, 0L};
+		long[] data = { 22588366881095680L, 2L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_4 = new BitSet(mk_tokenSet_4());
 	private static final long[] mk_tokenSet_5() {
-		long[] data = { 0L, 12884901888L, 0L, 0L};
+		long[] data = { 0L, 206158430208L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_5 = new BitSet(mk_tokenSet_5());
 	private static final long[] mk_tokenSet_6() {
-		long[] data = { 2307259180190285824L, 12884901888L, 0L, 0L};
+		long[] data = { 22588366881095680L, 206158430210L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_6 = new BitSet(mk_tokenSet_6());
 	private static final long[] mk_tokenSet_7() {
-		long[] data = { 0L, 8724152320L, 0L, 0L};
+		long[] data = { 0L, 139586437120L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_7 = new BitSet(mk_tokenSet_7());
 	private static final long[] mk_tokenSet_8() {
-		long[] data = { 1152947892919500800L, 668506085392384L, 0L, 0L};
+		long[] data = { 211106501099520L, 2674060530024449L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_8 = new BitSet(mk_tokenSet_8());
 	private static final long[] mk_tokenSet_9() {
-		long[] data = { 1153018261797897472L, 1125795749691408L, 0L, 0L};
+		long[] data = { 1899957435106560L, 4503032624578817L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_9 = new BitSet(mk_tokenSet_9());
 	private static final long[] mk_tokenSet_10() {
-		long[] data = { 134217728L, 167637942288L, 0L, 0L};
+		long[] data = { 1125900980584448L, 483183821056L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_10 = new BitSet(mk_tokenSet_10());
 	private static final long[] mk_tokenSet_11() {
-		long[] data = { 0L, 163342974992L, 0L, 0L};
+		long[] data = { 1125899906842624L, 414464344320L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_11 = new BitSet(mk_tokenSet_11());
 	private static final long[] mk_tokenSet_12() {
-		long[] data = { 4508345969017856L, 237162725392L, 0L, 0L};
+		long[] data = { 73221464681614336L, 1045824536832L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_12 = new BitSet(mk_tokenSet_12());
 	private static final long[] mk_tokenSet_13() {
-		long[] data = { 4508345834799104L, 0L};
+		long[] data = { 72095563696832512L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_13 = new BitSet(mk_tokenSet_13());
 	private static final long[] mk_tokenSet_14() {
-		long[] data = { 0L, 167637942288L, 0L, 0L};
+		long[] data = { 1125899906842624L, 483183821056L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_14 = new BitSet(mk_tokenSet_14());
 	private static final long[] mk_tokenSet_15() {
-		long[] data = { 4543530206887936L, 167637942289L, 0L, 0L};
+		long[] data = { 73502938580385792L, 483183821072L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_15 = new BitSet(mk_tokenSet_15());
 	private static final long[] mk_tokenSet_16() {
-		long[] data = { 9007199254740992L, 2L, 0L, 0L};
+		long[] data = { 144115188075855872L, 32L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_16 = new BitSet(mk_tokenSet_16());
 	private static final long[] mk_tokenSet_17() {
-		long[] data = { 4578714713195520L, 237162725392L, 0L, 0L};
+		long[] data = { 73784414635035648L, 1045824536832L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_17 = new BitSet(mk_tokenSet_17());
 	private static final long[] mk_tokenSet_18() {
-		long[] data = { 4578714713195776L, 237162725392L, 0L, 0L};
+		long[] data = { 73784414635035904L, 1045824536832L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_18 = new BitSet(mk_tokenSet_18());
 	private static final long[] mk_tokenSet_19() {
-		long[] data = { 4578714713195776L, 34871779000336L, 0L, 0L};
+		long[] data = { 73784414635035904L, 139584289636608L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_19 = new BitSet(mk_tokenSet_19());
 	private static final long[] mk_tokenSet_20() {
-		long[] data = { 4578714713195776L, 140424895266832L, 0L, 0L};
+		long[] data = { 73784414635035904L, 561796754702592L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_20 = new BitSet(mk_tokenSet_20());
 	private static final long[] mk_tokenSet_21() {
-		long[] data = { 4578714713195776L, 562912305348624L, 0L, 0L};
+		long[] data = { 73784414635035904L, 2251747200336128L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_21 = new BitSet(mk_tokenSet_21());

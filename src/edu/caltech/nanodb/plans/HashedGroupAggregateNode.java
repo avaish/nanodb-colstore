@@ -16,14 +16,14 @@ import edu.caltech.nanodb.expressions.TupleLiteral;
 
 import edu.caltech.nanodb.functions.AggregateFunction;
 
-import edu.caltech.nanodb.qeval.Cost;
+import edu.caltech.nanodb.qeval.PlanCost;
 import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.relations.Tuple;
 
 
 /**
  */
-public class HashedGroupAggregateNode extends GroupAggregateNode {
+public abstract class HashedGroupAggregateNode extends GroupAggregateNode {
 
     /**
      * This hash-map holds the various groups that have been encountered so far
@@ -130,7 +130,7 @@ public class HashedGroupAggregateNode extends GroupAggregateNode {
      * @return an object containing various cost measures such as the worst-case
      *         number of disk accesses, the number of tuples produced, etc.
      */
-    public Cost estimateCost() {
+    public PlanCost estimateCost() {
         // TODO
         return null;
     }

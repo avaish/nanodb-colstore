@@ -3,12 +3,15 @@ package edu.caltech.nanodb.plans;
 
 import java.io.IOException;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import edu.caltech.nanodb.expressions.Expression;
 import edu.caltech.nanodb.expressions.OrderByExpression;
-import edu.caltech.nanodb.qeval.Cost;
+import edu.caltech.nanodb.qeval.ColumnStats;
+import edu.caltech.nanodb.qeval.PlanCost;
 import edu.caltech.nanodb.qeval.SelectivityEstimator;
+import edu.caltech.nanodb.qeval.TableStats;
 
 
 /**
@@ -102,37 +105,40 @@ public class SimpleFilterNode extends SelectNode {
     }
 
 
-    /**
-     * This method simply retrieves the left child-plan's schema and stores it
-     * locally.
-     */
-    protected void prepareSchema() {
+    // Inherit javadocs from base class.
+    public void prepare() {
+        // Need to prepare the left child-node before we can do our own work.
+        leftChild.prepare();
+
         // Grab the schema from the left child.
         schema = leftChild.getSchema();
-    }
+        ArrayList<ColumnStats> childStats = leftChild.getStats();
 
-
-    @Override
-    public Cost estimateCost() {
         // If we don't have a predicate, selectivity is 100%.  Otherwise,
         // compute the selectivity based on the selection predicate.
 
         float selectivity = 1.0f;
         if (predicate != null) {
             selectivity = SelectivityEstimator.estimateSelectivity(predicate,
-                leftChild.getSchema(), null);
+                schema, childStats);
         }
 
         // Grab the left child's cost, then update the cost based on the
         // selectivity of our predicate.
 
-        Cost childCost = leftChild.estimateCost();
+        PlanCost childCost = leftChild.getCost();
 
-        Cost cost = new Cost(childCost);
-        cost.numTuples = (long) Math.ceil((double) (cost.numTuples *
-              selectivity));
+        cost = new PlanCost(childCost);
+        cost.numTuples *= selectivity;
 
-        return cost;
+        // The CPU cost will be proportional to the total number of tuples, not
+        // the number of tuples we expect to output.
+        cost.cpuCost += childCost.numTuples;
+
+        // TODO:  We should update the table statistics, but for now we'll just
+        //        use the child's stats unmodified.
+
+        stats = childStats;
     }
 
 

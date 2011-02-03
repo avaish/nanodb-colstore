@@ -7,7 +7,6 @@ import java.util.List;
 
 import edu.caltech.nanodb.expressions.OrderByExpression;
 
-import edu.caltech.nanodb.qeval.Cost;
 import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.Tuple;
 
@@ -53,15 +52,17 @@ public class RenameNode extends PlanNode {
     }
 
     @Override
-    public Cost estimateCost() {
-        return leftChild.estimateCost();
-    }
+    public void prepare() {
+        // Need to prepare the left child-node before we can do our own work.
+        leftChild.prepare();
 
-    @Override
-    protected void prepareSchema() {
         // Copy the left child's schema, then change the schema's table-name.
         schema = new Schema(leftChild.getSchema());
         schema.setTableName(resultTableName);
+
+        // Use the child's cost and stats unmodified.
+        cost = leftChild.getCost();
+        stats = leftChild.getStats();
     }
 
     @Override

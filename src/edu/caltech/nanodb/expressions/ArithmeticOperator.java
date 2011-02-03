@@ -10,7 +10,6 @@ import edu.caltech.nanodb.relations.SchemaNameException;
 import java.util.Collection;
 
 
-
 /**
  * This class implements simple binary arithmetic operations.  The supported
  * operations are:
@@ -21,13 +20,13 @@ import java.util.Collection;
  *   <li>division, <tt>/</tt></li>
  *   <li>remainder, <tt>%</tt></li>
  * </ul>
- *
- * @todo Division probably should generate floating-point results on integer arguments.
  */
 public class ArithmeticOperator extends Expression {
 
     /**
      * This enum specifies the arithmetic operations that this class can provide.
+     * Each arithmetic operation also holds its string representation, which is
+     * used when converting an arithmetic expression into a string for display.
      */
     public enum Type {
         ADD("+"),
@@ -39,12 +38,20 @@ public class ArithmeticOperator extends Expression {
         /** The string representation for each operator.  Used for printing. */
         private final String stringRep;
 
-        /** Construct a Type enum with the specified string representation. */
+        /**
+         * Construct a Type enum with the specified string representation.
+         *
+         * @param rep the string representation of the arithmetic operation
+         */
         Type(String rep) {
             stringRep = rep;
         }
 
-        /** Accessor for the operator type's string representation. */
+        /**
+         * Accessor for the operator type's string representation.
+         *
+         * @return the string representation of the arithmetic operation
+         */
         public String stringRep() {
             return stringRep;
         }
@@ -120,6 +127,21 @@ public class ArithmeticOperator extends Expression {
     }
 
 
+    /**
+     * This static helper method can be used to compute basic arithmetic
+     * operations between two arguments.  It is of course used to evaluate
+     * <tt>ArithmeticOperator</tt> objects, but it can also be used to evaluate
+     * specific arithmetic operations within other components of the database
+     * system.
+     *
+     * @param type the arithmetic operation to perform
+     * @param aObj the first operand value for the operation
+     * @param bObj the second operand value for the operation
+     *
+     * @return the result of the arithmetic operation
+     *
+     * @throws ExpressionException if the operand type is unrecognized
+     */
     public static Object evalObjects(Type type, Object aObj, Object bObj) {
         // Coerce the values to both have the same numeric type.
 
@@ -145,7 +167,19 @@ public class ArithmeticOperator extends Expression {
     }
 
 
-    /** This helper implements the arithmetic operations for Double values. */
+    /**
+     * This helper implements the arithmetic operations for <tt>Double</tt>
+     * values.  Note that division of two <tt>Double</tt>s will produce a
+     * <tt>Double</tt>.
+     *
+     * @param type the arithmetic operation to perform
+     * @param aObj the first operand value for the operation
+     * @param bObj the second operand value for the operation
+     *
+     * @return the result of the arithmetic operation
+     *
+     * @throws ExpressionException if the operand type is unrecognized
+     */
     private static Double evalDoubles(Type type, Double aObj, Double bObj) {
         double a = aObj.doubleValue();
         double b = bObj.doubleValue();
@@ -165,6 +199,7 @@ public class ArithmeticOperator extends Expression {
             break;
 
         case DIVIDE:
+            // TODO:  How to handle divide-by-zero?
             result = a / b;
             break;
 
@@ -180,7 +215,19 @@ public class ArithmeticOperator extends Expression {
     }
 
 
-    /** This helper implements the arithmetic operations for Float values. */
+    /**
+     * This helper implements the arithmetic operations for <tt>Float</tt>
+     * values.  Note that division of two <tt>Float</tt>s will produce a
+     * <tt>Float</tt>.
+     *
+     * @param type the arithmetic operation to perform
+     * @param aObj the first operand value for the operation
+     * @param bObj the second operand value for the operation
+     *
+     * @return the result of the arithmetic operation
+     *
+     * @throws ExpressionException if the operand type is unrecognized
+     */
     private static Float evalFloats(Type type, Float aObj, Float bObj) {
         float a = aObj.floatValue();
         float b = bObj.floatValue();
@@ -200,6 +247,7 @@ public class ArithmeticOperator extends Expression {
             break;
 
         case DIVIDE:
+            // TODO:  How to handle divide-by-zero?
             result = a / b;
             break;
 
@@ -215,10 +263,29 @@ public class ArithmeticOperator extends Expression {
     }
 
 
-    /** This helper implements the arithmetic operations for Long values. */
-    private static Long evalLongs(Type type, Long aObj, Long bObj) {
+    /**
+     * This helper implements the arithmetic operations for <tt>Long</tt>
+     * values.  Note that division of two <tt>Long</tt>s will produce a
+     * <tt>Double</tt>, not a <tt>Long</tt>.
+     *
+     * @param type the arithmetic operation to perform
+     * @param aObj the first operand value for the operation
+     * @param bObj the second operand value for the operation
+     *
+     * @return the result of the arithmetic operation
+     *
+     * @throws ExpressionException if the operand type is unrecognized
+     */
+    private static Object evalLongs(Type type, Long aObj, Long bObj) {
         long a = aObj.longValue();
         long b = bObj.longValue();
+
+        if (type == Type.DIVIDE) {
+            // TODO:  How to handle divide-by-zero?
+            double result = (double) a / (double) b;
+            return new Double(result);
+        }
+
         long result = 0;
 
         switch (type) {
@@ -234,9 +301,7 @@ public class ArithmeticOperator extends Expression {
             result = a * b;
             break;
 
-        case DIVIDE:
-            result = a / b;
-            break;
+        // Division is handled separately.
 
         case REMAINDER:
             result = a % b;
@@ -250,10 +315,29 @@ public class ArithmeticOperator extends Expression {
     }
 
 
-    /** This helper implements the arithmetic operations for Integer values. */
-    private static Integer evalIntegers(Type type, Integer aObj, Integer bObj) {
+    /**
+     * This helper implements the arithmetic operations for <tt>Integer</tt>
+     * values.  Note that division of two <tt>Integer</tt>s will produce a
+     * <tt>Double</tt>, not an <tt>Integer</tt>.
+     *
+     * @param type the arithmetic operation to perform
+     * @param aObj the first operand value for the operation
+     * @param bObj the second operand value for the operation
+     *
+     * @return the result of the arithmetic operation
+     *
+     * @throws ExpressionException if the operand type is unrecognized
+     */
+    private static Object evalIntegers(Type type, Integer aObj, Integer bObj) {
         int a = aObj.intValue();
         int b = bObj.intValue();
+
+        if (type == Type.DIVIDE) {
+            // TODO:  How to handle divide-by-zero?
+            double result = (double) a / (double) b;
+            return new Double(result);
+        }
+
         int result = 0;
 
         switch (type) {
@@ -269,9 +353,7 @@ public class ArithmeticOperator extends Expression {
             result = a * b;
             break;
 
-        case DIVIDE:
-            result = a / b;
-            break;
+        // Division is handled separately.
 
         case REMAINDER:
             result = a % b;

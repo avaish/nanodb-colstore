@@ -2,6 +2,7 @@ package edu.caltech.nanodb.relations;
 
 
 import edu.caltech.nanodb.expressions.ColumnName;
+import org.apache.commons.lang.ObjectUtils;
 
 
 /**
@@ -116,7 +117,31 @@ public class ColumnInfo {
     }
 
 
+    @Override
+    public boolean equals(Object obj) {
+        if (obj instanceof ColumnInfo) {
+            ColumnInfo other = (ColumnInfo) obj;
+
+            return ObjectUtils.equals(name, other.name) &&
+                   ObjectUtils.equals(tableName, other.tableName) &&
+                   type == other.type;
+        }
+        return false;
+    }
+
+
+    @Override
+    public int hashCode() {
+        int hash = 7;
+        hash = 13 * hash + (name != null ? name.hashCode() : 0);
+        hash = 13 * hash + (tableName != null ? tableName.hashCode() : 0);
+        hash = 13 * hash + type.hashCode();
+        return hash;
+    }
+
+
     /** Returns a string representation of the column-info. */
+    @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
 

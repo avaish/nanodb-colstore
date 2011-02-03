@@ -5,7 +5,8 @@ import java.util.*;
 import java.io.*;
 
 import edu.caltech.nanodb.expressions.*;
-import edu.caltech.nanodb.qeval.Cost;
+import edu.caltech.nanodb.qeval.ColumnStats;
+import edu.caltech.nanodb.qeval.PlanCost;
 import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.Tuple;
 import edu.caltech.nanodb.relations.ColumnInfo;
@@ -16,11 +17,7 @@ import org.apache.log4j.Logger;
 
 /**
  * PlanNode representing the <tt>SELECT</tt> clause in a <tt>SELECT</tt>
- * operation. This is the relational algebra Project operator.
- *
- * @todo   Add wildcard/alias support.
- *         Fix the getColumnInfos method.
- *         Add cost estimation.
+ * operation.  This is the relational algebra Project operator.
  */
 public class ProjectNode extends PlanNode {
 
@@ -68,15 +65,41 @@ public class ProjectNode extends PlanNode {
     }
 
 
+    public void prepare() {
+        // Need to prepare the left child-node before we can do our own work.
+        leftChild.prepare();
+
+        // Use the helper function to prepare the schema of this project-node,
+        // since it is a complicated operation.
+        prepareSchemaStats();
+
+        // Come up with a cost estimate now.  Projection does require some
+        // computation, so increase the CPU cost based on the number of tuples
+        // expected to come into this plan-node.
+
+        PlanCost inputCost = leftChild.getCost();
+
+        cost = new PlanCost(inputCost);
+        cost.cpuCost += inputCost.numTuples;
+
+        // TODO:  Estimate the final tuple-size.  It isn't hard, just tedious.
+    }
+
+
     /**
      * This helper function computes the schema of the project plan-node, based
      * on the schema of its child-plan, and also the expressions specified in
      * the project operation.
      */
-    protected void prepareSchema() {
+    protected void prepareSchemaStats() {
         inputSchema = leftChild.getSchema();
+        ArrayList<ColumnStats> inputStats = leftChild.getStats();
+        PlanCost inputCost = leftChild.getCost();
+
         schema = new Schema();
         nonWildcardColumnInfos = new ArrayList<ColumnInfo>();
+
+        stats = new ArrayList<ColumnStats>();
 
         for (SelectValue selVal : projectionSpec) {
             if (selVal.isWildcard()) {
@@ -84,18 +107,52 @@ public class ProjectNode extends PlanNode {
                 if (wildcard.isTableSpecified()) {
                     // Need to find all columns that are associated with the
                     // specified table.
-                    schema.append(inputSchema.findColumns(wildcard).values());
+                    SortedMap<Integer, ColumnInfo> found =
+                        inputSchema.findColumns(wildcard);
+
+                    // Add each column that was found, as well as its stats.
+                    schema.append(found.values());
+                    for (Integer idx : found.keySet())
+                        stats.add(inputStats.get(idx));
                 }
                 else {
                     // No table is specified, so this is all columns in the
                     // child schema.
                     schema.append(inputSchema);
+                    stats.addAll(inputStats);
                 }
             }
             else if (selVal.isExpression()) {
-                Expression expr = selVal.getExpression();
-                ColumnInfo colInfo = expr.getColumnInfo(inputSchema);
+                // Determining the schema is relatively straightforward.  The
+                // statistics, unfortunately, are a different matter:  if the
+                // expression is a simple column-reference then we can look up
+                // the stats from the subplan, but if the expression is an
+                // arithmetic operation, we need to guess...
 
+                Expression expr = selVal.getExpression();
+                ColumnInfo colInfo;
+
+                if (expr instanceof ColumnValue) {
+                    // This is a simple column-reference.  Pull out the schema
+                    // and the statistics from the input.
+                    ColumnValue colValue = (ColumnValue) expr;
+                    int colIndex = inputSchema.getColumnIndex(colValue.getColumnName());
+                    colInfo = inputSchema.getColumnInfo(colIndex);
+                    stats.add(inputStats.get(colIndex));
+                }
+                else {
+                    // This is a more complicated expression.  Guess the schema,
+                    // and assume that every row will have a distinct value.
+
+                    colInfo = expr.getColumnInfo(inputSchema);
+
+                    // TODO:  We could be more sophisticated about this...
+                    ColumnStats colStat = new ColumnStats();
+                    colStat.setNumUniqueValues((int) (inputCost.numTuples + 0.5f));
+                    stats.add(colStat);
+                }
+
+                // Apply any aliases here...
                 String alias = selVal.getAlias();
                 if (alias != null)
                     colInfo = new ColumnInfo(alias, colInfo.getType());
@@ -268,20 +325,7 @@ public class ProjectNode extends PlanNode {
     }
 
 
-    /** Computes the cost in terms of disk accesses of the selected algorithm. */
-    public Cost estimateCost() {
-        // Get the cost from the left child.
-        Cost childCost = leftChild.estimateCost();
-
-        Cost cost = new Cost(childCost);
-
-        // TODO: Adjust the tuple size from the projectionSpec.
-
-        return cost;
-    }
-
-
-    /** Do initialization for the select operation. Resets state variables. */
+    /** Do initialization for the select operation.  Resets state variables. */
     public void initialize() {
         super.initialize();
 

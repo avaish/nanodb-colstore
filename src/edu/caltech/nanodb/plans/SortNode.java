@@ -1,17 +1,19 @@
 package edu.caltech.nanodb.plans;
 
 
-import edu.caltech.nanodb.expressions.OrderByExpression;
-import edu.caltech.nanodb.expressions.TupleComparator;
-import edu.caltech.nanodb.expressions.TupleLiteral;
-import edu.caltech.nanodb.qeval.Cost;
-import edu.caltech.nanodb.relations.Tuple;
-
 import java.io.IOException;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import edu.caltech.nanodb.expressions.OrderByExpression;
+import edu.caltech.nanodb.expressions.TupleComparator;
+import edu.caltech.nanodb.expressions.TupleLiteral;
+
+import edu.caltech.nanodb.qeval.PlanCost;
+
+import edu.caltech.nanodb.relations.Tuple;
 
 
 /**
@@ -35,10 +37,11 @@ public class SortNode extends PlanNode {
      * Constructs a PlanNode with a given operation type.  This method will be
      * called by subclass constructors.
      *
+     * @param subplan the subplan that produces the results to sort
      * @param orderByExprs a specification of how the results should be ordered
      */
-    public SortNode(PlanNode leftChild, List<OrderByExpression> orderByExprs) {
-        super(PlanNode.OperationType.SORT, leftChild);
+    public SortNode(PlanNode subplan, List<OrderByExpression> orderByExprs) {
+        super(PlanNode.OperationType.SORT, subplan);
 
         if (orderByExprs == null)
             throw new IllegalArgumentException("orderByExprs cannot be null");
@@ -76,6 +79,33 @@ public class SortNode extends PlanNode {
      */
     public boolean requiresRightMarking() {
         return false;
+    }
+
+
+    /**
+     * The sort plan-node produces the same schema as its child plan-node, so
+     * this method simply caches the subplan's schema object.
+     */
+    public void prepare() {
+        // Need to prepare the left child-node before we can do our own work.
+        leftChild.prepare();
+
+        // Grab the schema and column-statistics from the left child.
+        schema = leftChild.getSchema();
+        stats = leftChild.getStats();
+
+        // Grab the left child's cost, then update the cost based on the cost
+        // of sorting.
+
+        PlanCost childCost = leftChild.getCost();
+        cost = new PlanCost(childCost);
+
+        // Sorting is an N*log(N) operation.
+        cost.cpuCost += cost.numTuples * (float) Math.log(cost.numTuples);
+
+        // We can prepare the tuple-comparator here too, since we know what the
+        // subplan's schema will be.
+        comparator = new TupleComparator(schema, orderByExprs);
     }
 
 
@@ -148,61 +178,14 @@ public class SortNode extends PlanNode {
     }
 
 
-    /**
-     * Computes the cost of this plan node's operation.  The computation will
-     * depend on which algorithm the node uses and the data it is working with.
-     *
-     * @return an object containing various cost measures such as the worst-case
-     *         number of disk accesses, the number of tuples produced, etc.
-     */
-    public Cost estimateCost() {
-        return new Cost(0, 0, 0);
-    }
-
-
-    /**
-     * The sort plan-node produces the same schema as its child plan-node, so
-     * this method simply caches the subplan's schema object.
-     */
-    protected void prepareSchema() {
-        schema = leftChild.getSchema();
-
-        // We can prepare the tuple-comparator here too, since we know what the
-        // subplan's schema will be.
-        comparator = new TupleComparator(schema, orderByExprs);
-    }
-
-
-    /**
-     * Marks the current tuple in the tuple-stream produced by this node.  The
-     * {@link #resetToLastMark} method can be used to return to this tuple.
-     * Note that only one marker can be set in the tuple-stream at a time.
-     *
-     * @throws java.lang.UnsupportedOperationException if the node does not
-     *         support marking.
-     *
-     * @throws java.lang.IllegalStateException if there is no "current tuple" to
-     *         mark.  This will occur if {@link #getNextTuple} hasn't yet been
-     *         called (i.e. we are before the first tuple in the tuple-stream),
-     *         or if we have already reached the end of the tuple-stream (i.e.
-     *         we are after the last tuple in the stream).
-     */
+    /** The sort plan-node doesn't support marking. */
     public void markCurrentPosition() {
         throw new UnsupportedOperationException(
             "Sort plan-node doesn't support marking.");
     }
 
 
-    /**
-     * Resets the node's tuple-stream to the most recently marked position.
-     * Note that only one marker can be set in the tuple-stream at a time.
-     *
-     * @throws java.lang.UnsupportedOperationException if the node does not
-     *         support marking.
-     *
-     * @throws java.lang.IllegalStateException if {@link #markCurrentPosition}
-     *         hasn't yet been called on this plan-node
-     */
+    /** The sort plan-node doesn't support marking. */
     public void resetToLastMark() {
         throw new UnsupportedOperationException(
             "Sort plan-node doesn't support marking.");

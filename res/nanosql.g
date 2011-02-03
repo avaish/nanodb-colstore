@@ -34,8 +34,10 @@ tokens {
   AND        = "and";
   ANY        = "any";
   AS         = "as";
+  ASC        = "asc";
   AVG        = "avg";
   BETWEEN    = "between";
+  BY         = "by";
   COLUMN     = "column";
   CONSTRAINT = "constraint";
   COUNT      = "count";
@@ -43,6 +45,7 @@ tokens {
   CROSS      = "cross";
   DEFAULT    = "default";
   DELETE     = "delete";
+  DESC       = "desc";
   DISTINCT   = "distinct";
   DROP       = "drop";
   EXISTS     = "exists";
@@ -70,6 +73,7 @@ tokens {
   NULL       = "null";
   ON         = "on";
   OR         = "or";
+  ORDER      = "order";
   OUTER      = "outer";
   PRIMARY    = "primary";
   QUIT       = "quit";
@@ -427,6 +431,7 @@ select_clause returns [SelectClause sc]
     SelectValue sv = null;
     FromClause fc = null;
     Expression e = null;
+    boolean ascending;
   }
   :
   SELECT ( ALL | DISTINCT { sc.setDistinct(true); } )?
@@ -441,8 +446,10 @@ select_clause returns [SelectClause sc]
     ( HAVING e=expression { sc.setHavingExpr(e); } )?
   )?
 
-  ( ORDER BY e=expression { sc.addOrderByExpr(e); }
-             ( COMMA e=expression { sc.addOrderByExpr(e); } )* )?
+  ( ORDER BY e=expression { ascending = true; } ( ASC | DESC { ascending = false; } )?
+  { sc.addOrderByExpr(new OrderByExpression(e, ascending)); }
+             ( COMMA e=expression { ascending = true; } ( ASC | DESC { ascending = false; } )?
+             { sc.addOrderByExpr(new OrderByExpression(e, ascending)); } )* )?
 /*
   ( ( UNION | INTERSECT | EXCEPT ) (ALL)? select_stmt )?
 */
