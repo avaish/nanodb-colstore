@@ -128,7 +128,10 @@ public class BooleanOperator extends Expression {
 
             // Evaluate the term...
             objResult = terms.get(0).evaluate(env);
-            boolResult = TypeConverter.getBooleanValue(objResult);
+            if (objResult == null)
+                boolResult = false;  // TODO:  this is UNKNOWN, not FALSE.
+            else
+                boolResult = TypeConverter.getBooleanValue(objResult);
 
             // ...then negate it.
             boolResult = !boolResult;
@@ -152,7 +155,12 @@ public class BooleanOperator extends Expression {
             for (Expression term : terms) {
                 // Evaluate the i-th term, and combine it with the current answer.
                 objResult = term.evaluate(env);
-                boolean termValue = TypeConverter.getBooleanValue(objResult);
+
+                boolean termValue;
+                if (objResult == null)
+                    termValue = false;  // TODO:  this is UNKNOWN, not FALSE.
+                else
+                    termValue = TypeConverter.getBooleanValue(objResult);
 
                 if (type == Type.AND_EXPR && !termValue) {
                     // AND term is false, so we are done.  Answer is false.

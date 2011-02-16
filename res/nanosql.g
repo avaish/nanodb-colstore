@@ -2,7 +2,7 @@ header {
   /**
    * Copyright (c) 2005-2011 by the California Institute of Technology.
    * All rights reserved.
-   **/
+   */
   package edu.caltech.nanodb.sqlparse;
 
   import java.util.ArrayList;
@@ -18,7 +18,7 @@ header {
  * from {@link edu.caltech.nanodb.commands.Command}.  The information in these
  * commands is then used for data-definition, data-manipulation, and general
  * utility operations, within the database.
- **/
+ */
 class NanoSqlParser extends Parser;
 options {
   k = 2;
@@ -27,75 +27,81 @@ options {
 tokens {
   // Keywords:
 
-  ADD        = "add";
-  ALL        = "all";
-  ALTER      = "alter";
-  ANALYZE    = "analyze";
-  AND        = "and";
-  ANY        = "any";
-  AS         = "as";
-  ASC        = "asc";
-  AVG        = "avg";
-  BETWEEN    = "between";
-  BY         = "by";
-  COLUMN     = "column";
-  CONSTRAINT = "constraint";
-  COUNT      = "count";
-  CREATE     = "create";
-  CROSS      = "cross";
-  DEFAULT    = "default";
-  DELETE     = "delete";
-  DESC       = "desc";
-  DISTINCT   = "distinct";
-  DROP       = "drop";
-  EXISTS     = "exists";
-  EXIT       = "exit";
-  EXPLAIN    = "explain";
-  FALSE      = "false";
-  FOREIGN    = "foreign";
-  FROM       = "from";
-  FULL       = "full";
-  IF         = "if";
-  IN         = "in";
-  INDEX      = "index";
-  INNER      = "inner";
-  INSERT     = "insert";
-  INTO       = "into";
-  IS         = "is";
-  JOIN       = "join";
-  KEY        = "key";
-  LEFT       = "left";
-  LIKE       = "like";
-  MAX        = "max";
-  MIN        = "min";
-  NATURAL    = "natural";
-  NOT        = "not";
-  NULL       = "null";
-  ON         = "on";
-  OR         = "or";
-  ORDER      = "order";
-  OUTER      = "outer";
-  PRIMARY    = "primary";
-  QUIT       = "quit";
-  REFERENCES = "references";
-  RENAME     = "rename";
-  RIGHT      = "right";
-  SELECT     = "select";
-  SET        = "set";
-  SOME       = "some";
-  STDDEV     = "stddev";
-  SUM        = "sum";
-  TABLE      = "table";
-  TO         = "to";
-  TRUE       = "true";
-  UNIQUE     = "unique";
-  UNKNOWN    = "unknown";
-  UPDATE     = "update";
-  USING      = "using";
-  VALUES     = "values";
-  VARIANCE   = "variance";
-  VIEW       = "view";
-  WHERE      = "where";
+  ADD         = "add";
+  ALL         = "all";
+  ALTER       = "alter";
+  ANALYZE     = "analyze";
+  AND         = "and";
+  ANY         = "any";
+  AS          = "as";
+  ASC         = "asc";
+  AVG         = "avg";
+  BEGIN       = "begin";
+  BETWEEN     = "between";
+  BY          = "by";
+  COLUMN      = "column";
+  COMMIT      = "commit";
+  CONSTRAINT  = "constraint";
+  COUNT       = "count";
+  CREATE      = "create";
+  CROSS       = "cross";
+  DEFAULT     = "default";
+  DELETE      = "delete";
+  DESC        = "desc";
+  DISTINCT    = "distinct";
+  DROP        = "drop";
+  EXISTS      = "exists";
+  EXIT        = "exit";
+  EXPLAIN     = "explain";
+  FALSE       = "false";
+  FOREIGN     = "foreign";
+  FROM        = "from";
+  FULL        = "full";
+  IF          = "if";
+  IN          = "in";
+  INDEX       = "index";
+  INNER       = "inner";
+  INSERT      = "insert";
+  INTO        = "into";
+  IS          = "is";
+  JOIN        = "join";
+  KEY         = "key";
+  LEFT        = "left";
+  LIKE        = "like";
+  MAX         = "max";
+  MIN         = "min";
+  NATURAL     = "natural";
+  NOT         = "not";
+  NULL        = "null";
+  ON          = "on";
+  OR          = "or";
+  ORDER       = "order";
+  OUTER       = "outer";
+  PRIMARY     = "primary";
+  QUIT        = "quit";
+  REFERENCES  = "references";
+  RENAME      = "rename";
+  RIGHT       = "right";
+  ROLLBACK    = "rollback";
+  SELECT      = "select";
+  SET         = "set";
+  SOME        = "some";
+  START       = "start";
+  STDDEV      = "stddev";
+  SUM         = "sum";
+  TABLE       = "table";
+  TO          = "to";
+  TRANSACTION = "transaction";
+  TRUE        = "true";
+  UNIQUE      = "unique";
+  UNKNOWN     = "unknown";
+  UPDATE      = "update";
+  USING       = "using";
+  VALUES      = "values";
+  VARIANCE    = "variance";
+  VIEW        = "view";
+  WHERE       = "where";
+  WORK        = "work";
 
   // These tokens are for type-recognition.  A number of these types have
   // additional syntax for specifying length or precision, which is why we have
@@ -151,7 +157,8 @@ commands returns [List<Command> cmds]
 command returns [Command c] { c = null; } :
   ( c=create_stmt /* | alter_stmt */ | c=drop_stmt                 // DDL
   | c=select_stmt | c=insert_stmt | c=update_stmt | c=delete_stmt  // DML
-  | c=analyze_stmt | c=explain_stmt | c=exit_stmt            // Utility
+  | c=begin_txn_stmt | c=commit_txn_stmt | c=rollback_txn_stmt     // Transactions
+  | c=analyze_stmt | c=explain_stmt | c=exit_stmt                  // Utility
   )
   SEMICOLON
   ;
@@ -464,8 +471,8 @@ select_value returns [SelectValue sv]
   }
   :
     STAR { sv = new SelectValue(new ColumnName()); }
-//  TODO:  Nondeterminism warning.  Just ignore.
-  | n=dbobj_ident PERIOD STAR { sv = new SelectValue(new ColumnName(n, null)); }
+//  TODO:  Nondeterminism warning.
+//  | n=dbobj_ident PERIOD STAR { sv = new SelectValue(new ColumnName(n, null)); }
   | e=expression ( (AS)? n=dbobj_ident )? { sv = new SelectValue(e, n); }
   | LPAREN sc=select_clause RPAREN ( (AS)? n=dbobj_ident )? { sv = new SelectValue(sc, n); }
   ;
@@ -604,6 +611,23 @@ delete_stmt returns [QueryCommand c]
   { c = new DeleteCommand(name, e); }
   ;
 
+
+/* Transaction-processing statements */
+
+begin_txn_stmt returns [BeginTransactionCommand c] { c = null; } :
+  (
+    START TRANSACTION
+  | BEGIN ( WORK )?
+  )
+  ;
+
+commit_txn_stmt returns [CommitTransactionCommand c] { c = null; } :
+  COMMIT ( WORK )?
+  ;
+
+rollback_txn_stmt returns [RollbackTransactionCommand c] { c = null; } :
+  ROLLBACK ( WORK )?
+  ;
 
 
 /* ANALYZE Statements */
@@ -817,7 +841,7 @@ base_expr returns [Expression e]
   | fval:FLOAT_LITERAL  { e = new LiteralValue(new Float(fval.getText()));   }
   | dval:DEC_LITERAL    { e = new LiteralValue(new Double(dval.getText()));  }
   | sval:STRING_LITERAL { e = new LiteralValue(sval.getText()); }
-  | cn=column_name { e = new ColumnValue(cn); }
+  | cn=column_name      { e = new ColumnValue(cn); }
   | e=function_call
   | LPAREN e=logical_or_expr RPAREN
   ;
@@ -858,10 +882,11 @@ function_call returns [FunctionCall f]
  * <p>
  * All of the SQL-specific keywords are actually declared in the parser, so that
  * keeps the lexer definition pretty short and sweet.
- **/
+ */
 class NanoSqlLexer extends Lexer;
 options {
   k = 2;
+  testLiterals = false;
   caseSensitiveLiterals = false;
   defaultErrorHandler = false;
 }
@@ -940,48 +965,15 @@ QUOTED_IDENT :
  **/
 NUM_LITERAL_OR_SYMBOL :
     ('0'..'9')+ { $setType(INT_LITERAL); }
-      ( ('L' {
-               $setType(LONG_LITERAL);
-
-               // Remove the trailing "L", which confuses the parser!
-               String str = $getText;
-               str = str.substring(0, str.length() - 1);
-               $setText(str);
-             }
-        )
+      ( ('L'! { $setType(LONG_LITERAL); } )
       | ('.' { $setType(DEC_LITERAL); } ('0'..'9')*
-          ( ('f' | 'F')
-            {
-              $setType(FLOAT_LITERAL);
-
-              // Remove the trailing "f", which confuses the parser!
-              String str = $getText;
-              str = str.substring(0, str.length() - 1);
-              $setText(str);
-            }
-          )?
+          ( ('f' | 'F')! { $setType(FLOAT_LITERAL); } )?
         )
       )?
   | '.' { $setType(PERIOD); }
       ( ('0'..'9') { $setType(DEC_LITERAL); } ('0'..'9')*
-        ( ('f' | 'F')
-          {
-            $setType(FLOAT_LITERAL);
-
-            // Remove the trailing "f", which confuses the parser!
-            String str = $getText;
-            str = str.substring(0, str.length() - 1);
-            $setText(str);
-          }
-        )?
+        ( ('f' | 'F')! { $setType(FLOAT_LITERAL); } )?
       )?
   ;
 
-STRING_LITERAL : '\'' ( ~( '\'' | '\r' | '\n' ))* '\''
-  {
-    // Remove the leading and trailing single-quotes.
-    String str = $getText;
-    str = str.substring(1, str.length() - 1);
-    $setText(str);
-  }
-  ;
+STRING_LITERAL : '\''! ( ~( '\'' | '\r' | '\n' ))* '\''! ;

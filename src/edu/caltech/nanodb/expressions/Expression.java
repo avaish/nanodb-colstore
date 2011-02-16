@@ -86,7 +86,10 @@ public abstract class Expression implements Cloneable {
      */
     public boolean evaluatePredicate(Environment env) throws ExpressionException {
         Object result = evaluate(env);
-        return TypeConverter.getBooleanValue(result);
+        if (result == null)
+            return false;   // TODO:  This is UNKNOWN, not FALSE.
+        else
+            return TypeConverter.getBooleanValue(result);
     }
 
 

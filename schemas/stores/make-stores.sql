@@ -24,10 +24,15 @@ CREATE TABLE employees (
   last_name  VARCHAR(30),
   first_name VARCHAR(30),
 
+  -- These ID values reference the cities.city_id column.
+  -- There is currently no relationship between employees
+  -- and stores in this database.
   home_loc_id INTEGER,
   work_loc_id INTEGER,
 
   salary     INTEGER,
+
+  -- The manager_id is another employee's emp_id value.
   manager_id INTEGER
 );
 

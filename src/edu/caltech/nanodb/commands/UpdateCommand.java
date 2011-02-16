@@ -171,6 +171,7 @@ public class UpdateCommand extends QueryCommand {
         // Create a plan for executing the SQL query.
         Planner planner = new Planner();
         plan = planner.makeLeafSelect(tableName, whereExpr);
+        plan.prepare();
     }
 
 

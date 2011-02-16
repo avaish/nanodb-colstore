@@ -22,7 +22,7 @@ Terence Parr, <a href="http://www.magelang.com">MageLang Institute</a>
  * from {@link edu.caltech.nanodb.commands.Command}.  The information in these
  * commands is then used for data-definition, data-manipulation, and general
  * utility operations, within the database.
- **/
+ */
 Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 
 
@@ -33,6 +33,9 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 		|	<a href="NanoSqlParser.html#insert_stmt">insert_stmt</a> 
 		|	<a href="NanoSqlParser.html#update_stmt">update_stmt</a> 
 		|	<a href="NanoSqlParser.html#delete_stmt">delete_stmt</a> 
+		|	<a href="NanoSqlParser.html#begin_txn_stmt">begin_txn_stmt</a> 
+		|	<a href="NanoSqlParser.html#commit_txn_stmt">commit_txn_stmt</a> 
+		|	<a href="NanoSqlParser.html#rollback_txn_stmt">rollback_txn_stmt</a> 
 		|	<a href="NanoSqlParser.html#analyze_stmt">analyze_stmt</a> 
 		|	<a href="NanoSqlParser.html#explain_stmt">explain_stmt</a> 
 		|	<a href="NanoSqlParser.html#exit_stmt">exit_stmt</a> 
@@ -86,6 +89,32 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 		|	
 		) 
 		
+	;
+
+
+<a name="begin_txn_stmt">begin_txn_stmt</a>
+	:	(	START TRANSACTION 
+		|	BEGIN 
+			(	WORK 
+			|	
+			) 
+		) 
+	;
+
+
+<a name="commit_txn_stmt">commit_txn_stmt</a>
+	:	COMMIT 
+		(	WORK 
+		|	
+		) 
+	;
+
+
+<a name="rollback_txn_stmt">rollback_txn_stmt</a>
+	:	ROLLBACK 
+		(	WORK 
+		|	
+		) 
 	;
 
 
@@ -317,7 +346,6 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 
 <a name="select_value">select_value</a>
 	:	STAR 
-	|	<a href="NanoSqlParser.html#dbobj_ident">dbobj_ident</a> PERIOD STAR 
 	|	<a href="NanoSqlParser.html#expression">expression</a> 
 		(	(	AS 
 			|	

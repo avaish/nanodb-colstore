@@ -5,10 +5,8 @@ import java.io.IOException;
 
 import java.util.List;
 
+import edu.caltech.nanodb.expressions.BooleanOperator;
 import edu.caltech.nanodb.expressions.OrderByExpression;
-import edu.caltech.nanodb.plans.RenameNode;
-import edu.caltech.nanodb.plans.SortNode;
-import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.commands.FromClause;
 import edu.caltech.nanodb.commands.SelectClause;
@@ -18,14 +16,17 @@ import edu.caltech.nanodb.expressions.Expression;
 
 import edu.caltech.nanodb.plans.FileScanNode;
 import edu.caltech.nanodb.plans.NestedLoopsJoinNode;
-import edu.caltech.nanodb.plans.PlanArray;
 import edu.caltech.nanodb.plans.PlanNode;
 import edu.caltech.nanodb.plans.ProjectNode;
+import edu.caltech.nanodb.plans.RenameNode;
 import edu.caltech.nanodb.plans.SelectNode;
 import edu.caltech.nanodb.plans.SimpleFilterNode;
+import edu.caltech.nanodb.plans.SortNode;
 
 import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.storage.TableFileInfo;
+
+import org.apache.log4j.Logger;
 
 
 /**
@@ -39,32 +40,6 @@ public class Planner {
 
     /** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(Planner.class);
-
-
-    /** BeanShell interpreter. */
-    // private static Interpreter interpreter;
-    //Interpreter i = new Interpreter();
-
-    /*
-    static {
-        interpreter = new Interpreter();
-        
-        // Load the script once.
-        try {
-            interpreter.source("res/planscript.bsh");
-            interpreter.set("logger", logger);
-        }
-        catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-        catch (IOException e) {
-            e.printStackTrace();
-        }
-        catch (EvalError e) {
-            e.printStackTrace();
-        }
-    }
-    */
 
 
     /** Constructs a Planner object to use for generating plans. */
@@ -93,7 +68,7 @@ public class Planner {
         // schema.  This plan is legal for all such queries, but it is definitely
         // slow.
 
-        PlanNode plan = null;
+        PlanNode plan;
 
         // Create a subplan that generates the relation specified by the FROM
         // clause.  If there are joins in the FROM clause then this will be a
@@ -107,10 +82,50 @@ public class Planner {
                 "NanoDB doesn't yet support SQL queries without a FROM clause!");
         }
 
-        // If we have a WHERE clause, put a select node above the join node.
+        // If we have a WHERE clause, we have two choices.  If the current plan
+        // is a simple file-scan then put the predicate on the file-scan.
+        // Otherwise, put a select node above the current plan.
         Expression whereExpr = selClause.getWhereExpr();
-        if (whereExpr != null)
-            plan = new SimpleFilterNode(plan, whereExpr);
+        if (whereExpr != null) {
+            if (plan instanceof FileScanNode) {
+                FileScanNode fileScan = (FileScanNode) plan;
+
+                if (fileScan.predicate != null) {
+                    // There is already an existing predicate.  Add this as a
+                    // conjunct to the existing predicate.
+                    Expression pred = fileScan.predicate;
+                    boolean handled = false;
+
+                    // If the current predicate is an AND operation, just make
+                    // the where-expression an additional term.
+                    if (pred instanceof BooleanOperator) {
+                        BooleanOperator bool = (BooleanOperator) pred;
+                        if (bool.getType() == BooleanOperator.Type.AND_EXPR) {
+                            bool.addTerm(whereExpr);
+                            handled = true;
+                        }
+                    }
+
+                    if (!handled) {
+                        // Oops, the current file-scan predicate wasn't an AND.
+                        // Create an AND expression instead.
+                        BooleanOperator bool =
+                            new BooleanOperator(BooleanOperator.Type.AND_EXPR);
+                        bool.addTerm(pred);
+                        bool.addTerm(whereExpr);
+                        fileScan.predicate = bool;
+                    }
+                }
+                else {
+                    // Simple - just add where-expression onto the file-scan.
+                    fileScan.predicate = whereExpr;
+                }
+            }
+            else {
+                // The subplan is more complex, so put a filter node above it.
+                plan = new SimpleFilterNode(plan, whereExpr);
+            }
+        }
 
         // TODO:  Grouping/aggregation will go somewhere in here.
 
@@ -130,57 +145,6 @@ public class Planner {
 
         return plan;
     }
-  
-
-    /*
-     * Creates a list of SelectNodes that serve as the leaves of the tree. These
-     * nodes just do a simple file scan, one per table in the query.
-     *
-     * @param relation the tables that need to be opened
-     * @return list of select nodes that open table files
-     * @throws ExecutionException if one of the tables if derived (because then
-     *         it is not a leaf) or if the table manager fails to open a table
-     *         (check nested exception).
-    private PlanNode makeLeafSelects(FromClause relation)
-        throws ExecutionException {
-
-        PlanNode result = null;
-
-        if (relation.isBaseTable()) {
-            // Get the table name from the clause
-            String table = relation.getTableName();
-
-            try {
-                // Open the table.
-                TableFileInfo tableInfo = tableManager.openTable(table);
-
-                // Make a SelectNode whose sole purpose is to read rows from the table.
-                // Use a null predicate to indicate full selection
-                SelectNode newNode = new SelectNode(tableInfo,
-                    SelectNode.ImplementationType.FILE_SCAN, null);
-
-                // Set the result name for this table to the from clause's result name
-                newNode.resultName = relation.getResultName();
-
-                // Set this node's environment
-                newNode.environment = env;
-
-                result = newNode;
-            }
-            catch (IOException e) {
-                // The TableManager failed to open the db file.
-                // Do some horrible error.
-
-                throw new ExecutionException(e);
-            }
-        }
-        else {
-            result =
-        }
-
-        return result;
-    }
-     */
 
 
     /**
@@ -293,49 +257,5 @@ public class Planner {
         SelectNode node = new FileScanNode(tableInfo, predicate);
 
         return node;
-    }
-
-
-
-    /**
-     * Generates all interesting plans to be considered.
-     *
-     * @param original the naive plan tree to be transformed.
-     * @return a list of plan trees to be costed and executed
-     */
-    private PlanArray generateAlternatePlans(PlanNode original) {
-        // TODO
-
-        PlanArray plans = new PlanArray();
-        plans.addPlan(original);
-
-/*
-        try {
-            interpreter.set("originator", originator);
-            interpreter.eval("pushConditions(originator)");;
-            interpreter.eval("originator = eliminateNodes(originator)");
-            originator = (PlanNode)interpreter.get("originator");
-          
-            interpreter.eval("plans = equivalentPlans(originator)");
-            plans = (PlanArray)interpreter.get("plans");
-        }
-        catch (EvalError e) {
-            e.printStackTrace();
-        }
-      
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        PrintStream ps = new PrintStream(baos, true);  // autoFlush = true
-        for (int i = 0; i < plans.size(); i++) {
-            plans.getPlan(i).printNodeTree(ps);
-            logger.debug("PLANNER:\n" + baos.toString());
-            baos.reset();
-        }
-      
-        logger.debug("Planner generated " + plans.size() + " plans.");
-        logger.debug("Planner rejected " + plans.redundantPlans() +
-            " redundant plans.");
-*/
-        
-        return plans;
     }
 }
