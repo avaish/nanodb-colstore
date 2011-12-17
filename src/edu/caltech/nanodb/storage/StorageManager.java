@@ -1,8 +1,10 @@
 package edu.caltech.nanodb.storage;
 
 
-import edu.caltech.nanodb.storage.heapfile.HeapFileTableManager;
 import org.apache.log4j.Logger;
+
+import edu.caltech.nanodb.storage.heapfile.HeapFileTableManager;
+import edu.caltech.nanodb.storage.writeahead.WALManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -17,6 +19,11 @@ public class StorageManager {
 
     /** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(StorageManager.class);
+
+
+    /*========================================================================
+     * STATIC FIELDS AND METHODS
+     */
 
 
     /**
@@ -150,6 +157,9 @@ public class StorageManager {
     private FileManager fileManager;
 
 
+    private WALManager walManager;
+
+
     /**
      * This mapping is used to keep track of the table manager used for each
      * file-type we need to operate on.
@@ -201,6 +211,14 @@ public class StorageManager {
 
         fileManager = new FileManager(this);
         bufferManager = new BufferManager(fileManager);
+
+        walManager = new WALManager(this);
+    }
+
+
+    private void shutdownStorage() throws IOException {
+        // TODO
+        closeAllOpenTables();
     }
 
 
@@ -248,6 +266,11 @@ public class StorageManager {
         }
 
         return manager;
+    }
+
+
+    public WALManager getWALManager() {
+        return walManager;
     }
 
 
@@ -316,9 +339,57 @@ public class StorageManager {
      */
     public DBPage loadDBPage(DBFile dbFile, int pageNo) throws IOException {
         return loadDBPage(dbFile, pageNo, false);
-    }    
+    }
 
 
+    /*========================================================================
+     * CODE RELATED TO THE WRITE-AHEAD LOG
+     */
+
+
+    /** Write-ahead log files follow this pattern. */
+    public static final String WAL_FILENAME_PATTERN = "wal-%05d.log";
+
+
+    public static String getWALFileName(int fileNo) {
+        return String.format(WAL_FILENAME_PATTERN, fileNo);
+    }
+
+
+    public DBFile openWALFile(int fileNo) throws IOException {
+        String filename = getWALFileName(fileNo);
+        DBFile dbFile = fileManager.openDBFile(filename);
+        DBFileType type = dbFile.getType();
+
+        if (type != DBFileType.WRITE_AHEAD_LOG_FILE) {
+            throw new IOException(String.format(
+                "File %s is not of WAL-file type.", filename));
+        }
+
+        return dbFile;
+    }
+
+
+    /**
+     * This method closes a table file that is currently open, possibly flushing
+     * any dirty pages to the table's storage in the process.
+     *
+     * @param walFile the WAL file to sync to disk
+     *
+     * @throws IOException if an IO error occurs while attempting to sync the
+     *         WAL file to disk.  If this occurs, the database is probably
+     *         going to be broken.
+     */
+    public void syncWALFile(DBFile walFile) throws IOException {
+        // Flush all open pages for the WAL file, then sync the file to disk.
+        bufferManager.flushDBFile(walFile);
+        fileManager.syncDBFile(walFile);
+    }
+
+
+    /*========================================================================
+     * CODE RELATED TO TABLE FILES
+     */
 
 
     /**
@@ -490,11 +561,5 @@ public class StorageManager {
 
         String tblFileName = getTableFileName(tableName);
         fileManager.deleteDBFile(tblFileName);
-    }
-
-
-    private void shutdownStorage() throws IOException {
-        // TODO
-        closeAllOpenTables();
     }
 }

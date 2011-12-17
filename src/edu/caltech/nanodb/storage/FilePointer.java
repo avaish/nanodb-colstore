@@ -15,7 +15,7 @@ package edu.caltech.nanodb.storage;
  *       files are limited to a maximum page-size of 64 Kbytes.)</li>
  * </ul>
  */
-public class FilePointer {
+public class FilePointer implements Cloneable {
     /**
      * This constant can be used for a "null" file-pointer; that is, a
      * file-pointer that points to nothing.
@@ -63,6 +63,7 @@ public class FilePointer {
      * Returns <em>true</em> if <code>obj</code> refers to a
      * <code>FilePointer</code> with the same internal values.
      */
+    @Override
     public boolean equals(Object obj) {
         if (obj instanceof FilePointer) {
             FilePointer fp = (FilePointer) obj;
@@ -73,6 +74,7 @@ public class FilePointer {
 
 
     /** Calculate a hash-code for the file pointer. */
+    @Override
     public int hashCode() {
         int hashCode;
 
@@ -82,5 +84,11 @@ public class FilePointer {
         hashCode = 41 * hashCode + offset;
 
         return hashCode;
+    }
+
+
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        return super.clone();
     }
 }

@@ -893,12 +893,16 @@ tryAgain:
 					switch ( LA(1)) {
 					case 'f':
 					{
+						_saveIndex=text.length();
 						match('f');
+						text.setLength(_saveIndex);
 						break;
 					}
 					case 'F':
 					{
+						_saveIndex=text.length();
 						match('F');
+						text.setLength(_saveIndex);
 						break;
 					}
 					default:
@@ -951,12 +955,16 @@ tryAgain:
 					switch ( LA(1)) {
 					case 'f':
 					{
+						_saveIndex=text.length();
 						match('f');
+						text.setLength(_saveIndex);
 						break;
 					}
 					case 'F':
 					{
+						_saveIndex=text.length();
 						match('F');
+						text.setLength(_saveIndex);
 						break;
 					}
 					default:

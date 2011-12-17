@@ -5,6 +5,7 @@ import java.io.IOException;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 
 import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.storage.TableFileInfo;
@@ -23,7 +24,22 @@ public class AnalyzeCommand extends Command {
      * Table names are kept in a set so that we don't need to worry about a
      * particular table being specified multiple times.
      */
-    private HashSet<String> tableNames;
+    private LinkedHashSet<String> tableNames;
+
+
+    private boolean verbose = false;
+
+
+    /**
+     * Construct a new ANALYZE command with an empty table list.  Tables can be
+     * added to the internal list using the {@link #addTable} method.
+     */
+    public AnalyzeCommand(boolean verbose) {
+        super(Command.Type.UTILITY);
+        tableNames = new LinkedHashSet<String>();
+
+        this.verbose = verbose;
+    }
 
 
     /**
@@ -31,8 +47,7 @@ public class AnalyzeCommand extends Command {
      * added to the internal list using the {@link #addTable} method.
      */
     public AnalyzeCommand() {
-        super(Command.Type.UTILITY);
-        tableNames = new HashSet<String>();
+        this(false);
     }
 
 
@@ -41,8 +56,8 @@ public class AnalyzeCommand extends Command {
      *
      * @param tableName the name of the table to analyze.
      */
-    public AnalyzeCommand(String tableName) {
-        this();
+    public AnalyzeCommand(String tableName, boolean verbose) {
+        this(verbose);
         addTable(tableName);
     }
 

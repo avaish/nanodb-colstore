@@ -6,6 +6,7 @@ import java.io.IOException;
 import edu.caltech.nanodb.relations.ColumnInfo;
 import org.apache.log4j.Logger;
 
+import edu.caltech.nanodb.qeval.DPJoinPlanner;
 import edu.caltech.nanodb.qeval.Planner;
 import edu.caltech.nanodb.qeval.TupleProcessor;
 
@@ -112,7 +113,7 @@ public class SelectCommand extends QueryCommand {
         logger.debug("Result schema:  " + resultSchema);
 
         // Create a plan for executing the SQL query.
-        Planner planner = new Planner();
+        DPJoinPlanner planner = new DPJoinPlanner();
         plan = planner.makePlan(selClause);
     }
 

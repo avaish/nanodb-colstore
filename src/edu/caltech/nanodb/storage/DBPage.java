@@ -53,6 +53,13 @@ public class DBPage {
 
 
     /**
+     * When the page is marked dirty, this gets set to the original version of
+     * the page, so that we can properly record changes to the write-ahead log.
+     */
+    private byte[] oldPageData;
+
+
+    /**
      * Constructs a new, empty table-page for the specified table file.
      * Note that the page data is not loaded into the object; that must be
      * done in a separate step.
@@ -80,6 +87,7 @@ public class DBPage {
 
         // Allocate the space for the page data.
         pageData = new byte[dbFile.getPageSize()];
+        oldPageData = null;
     }
 
 
@@ -139,6 +147,18 @@ public class DBPage {
 
 
     /**
+     * Returns the byte-array of the page's data at the last point when the page
+     * became dirty, or <tt>null</tt> if the page is currently clean.
+     *
+     * @return a byte-array containing the last "clean" version of the page's
+     *         data
+     */
+    public byte[] getOldPageData() {
+        return oldPageData;
+    }
+
+
+    /**
      * Returns true if the page's data has been changed in memory; false
      * otherwise.
      *
@@ -156,6 +176,17 @@ public class DBPage {
      *        otherwise
      */
     public void setDirty(boolean dirty) {
+        if (!this.dirty && dirty) {
+            // Page is being changed from clean to dirty.  Duplicate the current
+            // data so that we have it when updating the write-ahead log.
+            oldPageData = pageData.clone();
+        }
+        else if (this.dirty && !dirty) {
+            // Page is being changed from dirty to clean.  Clear out the old
+            // page data since we don't need it anymore.
+            oldPageData = null;
+        }
+        
         this.dirty = dirty;
     }
 

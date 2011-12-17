@@ -99,6 +99,7 @@ tokens {
   USING       = "using";
   VALUES      = "values";
   VARIANCE    = "variance";
+  VERBOSE     = "verbose";
   VIEW        = "view";
   WHERE       = "where";
   WORK        = "work";
@@ -635,9 +636,11 @@ rollback_txn_stmt returns [RollbackTransactionCommand c] { c = null; } :
 analyze_stmt returns [AnalyzeCommand c]
   {
     c = null;
+    boolean verbose = false;
     String tblName = null;
   } :
-  ANALYZE tblName=dbobj_ident { c = new AnalyzeCommand(tblName); }
+  ANALYZE (VERBOSE { verbose = true; } )?
+  tblName=dbobj_ident { c = new AnalyzeCommand(tblName, verbose); }
   ( COMMA tblName=dbobj_ident { c.addTable(tblName); } )*
   ;
 
@@ -967,12 +970,12 @@ NUM_LITERAL_OR_SYMBOL :
     ('0'..'9')+ { $setType(INT_LITERAL); }
       ( ('L'! { $setType(LONG_LITERAL); } )
       | ('.' { $setType(DEC_LITERAL); } ('0'..'9')*
-          ( ('f' | 'F')! { $setType(FLOAT_LITERAL); } )?
+          ( ('f'! | 'F'!) { $setType(FLOAT_LITERAL); } )?
         )
       )?
   | '.' { $setType(PERIOD); }
       ( ('0'..'9') { $setType(DEC_LITERAL); } ('0'..'9')*
-        ( ('f' | 'F')! { $setType(FLOAT_LITERAL); } )?
+        ( ('f'! | 'F'!) { $setType(FLOAT_LITERAL); } )?
       )?
   ;
 

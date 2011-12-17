@@ -66,13 +66,23 @@ public class BooleanOperator extends Expression {
     private ArrayList<Expression> terms;
 
 
-    public BooleanOperator(Type type) {
+    public BooleanOperator(Type type, Collection<Expression> terms) {
 
         if (type == null)
             throw new NullPointerException("type cannot be null");
 
         this.type = type;
-        terms = new ArrayList<Expression>();
+        this.terms = new ArrayList<Expression>();
+
+        if (terms != null) {
+            for (Expression term : terms)
+                addTerm(term);
+        }
+    }
+
+
+    public BooleanOperator(Type type) {
+        this(type, null);
     }
 
 
@@ -477,4 +487,3 @@ public class BooleanOperator extends Expression {
         return expr;
     }
 }
-

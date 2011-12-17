@@ -1,0 +1,119 @@
+<html>
+<body>
+<p>
+This package contains the implementation for the write-ahead log, which allows
+us to provide transaction atomicity, consistency and durability.  The
+write-ahead log format is designed with several goals in mind:
+</p>
+
+<ul>
+    <li>Log records provide <a href="http://en.wikipedia.org/wiki/Algorithms_for_Recovery_and_Isolation_Exploiting_Semantics">ARIES</a>-like
+        features:  the individual records corresponding to a given transaction
+        are chained together via "previous LSN" values stored in each record,
+        allowing fast rollback of transaction modifications.</li>
+    <li>The entire log file can be efficiently traversed both forward and
+        backward, which is necessary during recovery processing.</li>
+    <!--
+    <li>The log-record format is also chosen to be relatively space efficient;
+        a lot of space can be used up by "previous LSN" values if not
+        careful.</li>
+    -->
+</ul>
+
+<p>
+To implement all of these features, the log record format is somewhat complex:
+</p>
+
+<dl>
+    <dt>&lt;<i>T<sub>i</sub></i> start&gt;</dt>
+    <dd>
+        Start-transaction records don't require a "previous LSN" value, because
+        there is no previous LSN for the transaction.  Thus, the format is as
+        follows:
+        <table>
+            <tr><th>Size</th><th>Description</th></tr>
+
+            <tr><td>1B</td><td>{@link edu.caltech.nanodb.storage.writeahead.WALRecordType#START_TXN}</td></tr>
+            <tr><td>4B</td><td>Transaction ID</td></tr>
+
+            <tr><td>1B</td><td>{@link edu.caltech.nanodb.storage.writeahead.WALRecordType#START_TXN}</td></tr>
+        </table>
+    </dd>
+
+    <dt>&lt;<i>T<sub>i</sub></i> update <i>P</i> &rarr; <i>P'</i>&gt;</dt>
+    <dd>
+        Update records record modifications to data pages.  We record changes on
+        the page-level for a variety of reasons.  First, in some situations the
+        old value or the new value is actually missing, e.g. in the cases of an
+        insert or a delete.  Also, we don't want the WAL to be tied to specific
+        data-file formats; we would like to use the WAL for logging index changes
+        as well as table changes.  The format is as follows:
+        <table>
+            <tr><th>Size</th><th>Description</th></tr>
+
+            <tr><td>1B</td><td>{@link edu.caltech.nanodb.storage.writeahead.WALRecordType#UPDATE_PAGE}<!-- + <i>PrevLSN Flags</i>--></td></tr>
+            <tr><td>4B</td><td>Transaction ID</td></tr>
+            <tr><td><!-- 2B - -->6B</td><td>PrevLSN</td></tr>
+
+            <tr><td>?B</td><td>Description of old page <i>P</i>.</td></tr>
+            <tr><td>?B</td><td>Description of new page <i>P'</i>.</td></tr>
+
+            <tr><td>4B</td><td>Size of this update record, up to the start of
+                this size value.  (In other words, it's the WAL record's size -
+                5.)</td></tr>
+            <tr><td>1B</td><td>{@link edu.caltech.nanodb.storage.writeahead.WALRecordType#UPDATE_PAGE}<!-- + <i>PrevLSN Flags</i>--></td></tr>
+        </table>
+    </dd>
+
+    <dt>&lt;<i>T<sub>i</sub></i> update (redo-only) <i>P'</i>&gt;</dt>
+    <dd>
+        Redo-only update records are similar to standard update records, except
+        that they contain no undo information.  The format is as follows:
+        <table>
+            <tr><th>Size</th><th>Description</th></tr>
+
+            <tr><td>1B</td><td>{@link WALRecordType#UPDATE_PAGE}<!-- + <i>PrevLSN Flags</i>--></td></tr>
+            <tr><td>4B</td><td>Transaction ID</td></tr>
+            <tr><td><!-- 2B - -->6B</td><td>PrevLSN</td></tr>
+
+            <tr><td>?B</td><td>Description of page <i>P'</i>.</td></tr>
+
+            <tr><td>4B</td><td>Size of this update record, up to the start of
+                this size value.  (In other words, it's the WAL record's size -
+                5.)</td></tr>
+            <tr><td>1B</td><td>{@link WALRecordType#UPDATE_PAGE}<!-- + <i>PrevLSN Flags</i>--></td></tr>
+        </table>
+    </dd>
+
+    <dt>&lt;<i>T<sub>i</sub></i> commit&gt;</dt>
+    <dd>
+        Commit records <!-- range in size from 8 bytes to --> are 12 bytes:
+        <table>
+            <tr><th>Size</th><th>Description</th></tr>
+
+            <tr><td>1B</td><td>{@link edu.caltech.nanodb.storage.writeahead.WALRecordType#COMMIT_TXN} + <i>PrevLSN Flags</i></td></tr>
+            <tr><td>4B</td><td>Transaction ID</td></tr>
+            <tr><td><!-- 2B - -->6B</td><td>PrevLSN</td></tr>
+
+            <tr><td>1B</td><td>{@link edu.caltech.nanodb.storage.writeahead.WALRecordType#COMMIT_TXN} + <i>PrevLSN Flags</i></td></tr>
+        </table>
+    </dd>
+
+    <dt>&lt;<i>T<sub>i</sub></i> abort&gt;</dt>
+    <dd>
+        Abort records <!-- range in size from 8 bytes to --> are 12 bytes:
+        <table>
+            <tr><th>Size</th><th>Description</th></tr>
+
+            <tr><td>1B</td><td>{@link edu.caltech.nanodb.storage.writeahead.WALRecordType#ABORT_TXN} + <i>PrevLSN Flags</i></td></tr>
+            <tr><td>4B</td><td>Transaction ID</td></tr>
+            <tr><td><!-- 2B - -->6B</td><td>PrevLSN</td></tr>
+
+            <tr><td>1B</td><td>{@link edu.caltech.nanodb.storage.writeahead.WALRecordType#ABORT_TXN} + <i>PrevLSN Flags</i></td></tr>
+        </table>
+    </dd>
+
+</dl>
+
+</body>
+</html>

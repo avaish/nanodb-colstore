@@ -1,6 +1,7 @@
 package edu.caltech.nanodb.expressions;
 
 
+import java.io.Serializable;
 import java.util.ArrayList;
 
 import edu.caltech.nanodb.relations.Tuple;
@@ -10,7 +11,7 @@ import edu.caltech.nanodb.relations.Tuple;
  * A simple implementation of the {@link Tuple} interface for storing literal
  * tuple values.
  */
-public class TupleLiteral implements Tuple {
+public class TupleLiteral implements Tuple, Serializable {
 
     /** The actual values of the columns in the tuple. **/
     private ArrayList<Object> values;

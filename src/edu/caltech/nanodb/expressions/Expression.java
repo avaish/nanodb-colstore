@@ -166,12 +166,12 @@ public abstract class Expression implements Cloneable {
      * @return a deep copy of this expression
      */
     public Expression duplicate() {
-        Expression expr = null;
+        Expression expr;
         try {
-            expr = (Expression)clone();
+            expr = (Expression) clone();
         }
         catch (CloneNotSupportedException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
 
         return expr;
