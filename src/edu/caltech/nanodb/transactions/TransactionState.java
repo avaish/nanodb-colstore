@@ -41,4 +41,9 @@ public class TransactionState {
         transactionID = NO_TRANSACTION;
         lastLSN = null;
     }
+
+
+    public boolean isTxnInProgress() {
+        return (transactionID != NO_TRANSACTION);
+    }
 }

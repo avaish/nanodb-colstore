@@ -50,6 +50,10 @@ public class AnalyzeCommand extends Command {
         this(false);
     }
 
+    
+    public AnalyzeCommand(String tableName) {
+        this(tableName, false);
+    }
 
     /**
      * Construct a new ANALYZE command to analyze the specified table.

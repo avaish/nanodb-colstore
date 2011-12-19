@@ -230,6 +230,17 @@ public class StorageManager {
     public File getBaseDir() {
         return baseDir;
     }
+    
+    
+    public DBFile openDBFile(String filename) throws IOException {
+        DBFile dbFile = bufferManager.getFile(filename);
+        if (dbFile == null) {
+            dbFile = fileManager.openDBFile(filename);
+            bufferManager.addFile(filename, dbFile);
+        }
+
+        return dbFile;
+    }
 
 
     /**
@@ -347,12 +358,8 @@ public class StorageManager {
      */
 
 
-    /** Write-ahead log files follow this pattern. */
-    public static final String WAL_FILENAME_PATTERN = "wal-%05d.log";
-
-
     public static String getWALFileName(int fileNo) {
-        return String.format(WAL_FILENAME_PATTERN, fileNo);
+        return String.format(WALManager.WAL_FILENAME_PATTERN, fileNo);
     }
 
 
@@ -473,7 +480,7 @@ public class StorageManager {
         // Open the data file for the table; read out its type and page-size.
 
         String tblFileName = getTableFileName(tableName);
-        DBFile dbFile = fileManager.openDBFile(tblFileName);
+        DBFile dbFile = openDBFile(tblFileName);
         DBFileType type = dbFile.getType();
         TableManager tblManager = getTableManager(type);
 

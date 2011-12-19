@@ -12,7 +12,10 @@ import java.util.Map;
  * The buffer manager reduces the number of disk IO operations by managing an
  * in-memory cache of data pages.
  *
+ * @todo Add integrity checks, e.g. to make sure every cached page also appears
+ *       in the collection of cached files.
  *
+ * @todo Provide ways to close out files, i.e. flush them from the file-cache.
  */
 public class BufferManager {
 
@@ -70,8 +73,19 @@ public class BufferManager {
 
     
     private FileManager fileManager;
-    
 
+
+    /**
+     * This collection holds the {@link DBFile} objects corresponding to various
+     * opened files the database is currently using.
+     */
+    private LinkedHashMap<String, DBFile> cachedFiles;
+
+
+    /**
+     * This collection holds database pages that the database is currently
+     * working with, so that they don't continually need to be reloaded.
+     */
     private LinkedHashMap<CachedPageInfo, DBPage> cachedPages;
 
 
@@ -84,6 +98,8 @@ public class BufferManager {
         this.fileManager = fileManager;
 
         configureMaxCacheSize();
+
+        cachedFiles = new LinkedHashMap<String, DBFile>();
 
         String replacementPolicy = configureReplacementPolicy();
         cachedPages = new LinkedHashMap<CachedPageInfo, DBPage>(16, 0.75f,
@@ -152,6 +168,47 @@ public class BufferManager {
     }
 
 
+    /**
+     * Retrieves the specified {@link DBFile} from the buffer manager, if it has
+     * already been opened.
+     *
+     * @param filename The filename of the database file to retrieve.  This
+     *        should be ONLY the database filename, no path.  The path is
+     *        expected to be relative to the database's base directory.
+     *
+     * @return the {@link DBFile} corresponding to the filename, if it has
+     *         already been opened, or <tt>null</tt> if the file isn't currently
+     *         open.
+     */
+    public DBFile getFile(String filename) {
+        DBFile dbFile = cachedFiles.get(filename);
+
+        logger.debug(String.format(
+            "Requested file %s is%s in file-cache.",
+            filename, (dbFile != null ? "" : " NOT")));
+
+        return dbFile;
+    }
+    
+    
+    public void addFile(String filename, DBFile dbFile) {
+        if (dbFile == null)
+            throw new IllegalArgumentException("dbFile cannot be null");
+
+        if (cachedFiles.containsKey(filename)) {
+            throw new IllegalStateException(
+                "File cache already contains file " + filename);
+        }
+        
+        // TODO:  If we want to keep a cap on how many files are opened, we
+        //        would do that here.
+
+        logger.debug(String.format( "Adding file %s to file-cache.", filename));
+        
+        cachedFiles.put(filename, dbFile);
+    }
+
+
     public DBPage getPage(DBFile dbFile, int pageNo) {
         DBPage dbPage = cachedPages.get(new CachedPageInfo(dbFile, pageNo));
 
@@ -170,11 +227,16 @@ public class BufferManager {
         DBFile dbFile = dbPage.getDBFile();
         int pageNo = dbPage.getPageNo();
 
+        CachedPageInfo cpi = new CachedPageInfo(dbFile, pageNo);
+        if (cachedPages.containsKey(cpi)) {
+            throw new IllegalStateException(String.format(
+                "Page cache already contains page [%s,%d]", dbFile, pageNo));
+        }
+        
         logger.debug(String.format( "Adding page [%s,%d] to page-cache.",
             dbFile, pageNo));
 
         int pageSize = dbPage.getPageSize();
-
         if (pageSize + totalBytesCached > maxCacheSize && !cachedPages.isEmpty()) {
             // The cache will be too large after adding this page.  Try to solve
             // this problem by evicting pages.
@@ -202,7 +264,7 @@ public class BufferManager {
             }
         }
 
-        cachedPages.put(new CachedPageInfo(dbFile, pageNo), dbPage);
+        cachedPages.put(cpi, dbPage);
     }
 
 

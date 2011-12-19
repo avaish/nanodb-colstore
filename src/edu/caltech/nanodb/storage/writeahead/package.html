@@ -72,7 +72,7 @@ To implement all of these features, the log record format is somewhat complex:
         <table>
             <tr><th>Size</th><th>Description</th></tr>
 
-            <tr><td>1B</td><td>{@link WALRecordType#UPDATE_PAGE}<!-- + <i>PrevLSN Flags</i>--></td></tr>
+            <tr><td>1B</td><td>{@link edu.caltech.nanodb.storage.writeahead.WALRecordType#UPDATE_PAGE_REDO_ONLY}<!-- + <i>PrevLSN Flags</i>--></td></tr>
             <tr><td>4B</td><td>Transaction ID</td></tr>
             <tr><td><!-- 2B - -->6B</td><td>PrevLSN</td></tr>
 
@@ -81,7 +81,7 @@ To implement all of these features, the log record format is somewhat complex:
             <tr><td>4B</td><td>Size of this update record, up to the start of
                 this size value.  (In other words, it's the WAL record's size -
                 5.)</td></tr>
-            <tr><td>1B</td><td>{@link WALRecordType#UPDATE_PAGE}<!-- + <i>PrevLSN Flags</i>--></td></tr>
+            <tr><td>1B</td><td>{@link edu.caltech.nanodb.storage.writeahead.WALRecordType#UPDATE_PAGE_REDO_ONLY}<!-- + <i>PrevLSN Flags</i>--></td></tr>
         </table>
     </dd>
 

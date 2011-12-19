@@ -18,39 +18,36 @@ import org.apache.commons.lang.ObjectUtils;
  *   <li>The offset within the page (range:  0..65535)</li>
  * </ul>
  */
-public class LogSequenceNumber implements Cloneable {
+public class LogSequenceNumber
+    implements Comparable<LogSequenceNumber>, Cloneable {
+
+    /** The number of the write-ahead log file that the record is stored in. */
     private int logFileNo;
 
-
-    private FilePointer filePointer;
+    /** The offset of the log record from the start of the file. */
+    private int fileOffset;
 
     
-    public LogSequenceNumber(int logFileNo, FilePointer fptr) {
+    public LogSequenceNumber(int logFileNo, int fileOffset) {
         if (logFileNo < 0 || logFileNo > WALManager.MAX_WAL_FILE_NUMBER) {
             throw new IllegalArgumentException(String.format(
                 "WAL file numbers must be in the range [0, %d]; got %d instead.",
                 WALManager.MAX_WAL_FILE_NUMBER, logFileNo));
         }
 
-        if (fptr == null)
-            throw new IllegalArgumentException("File pointer must be non-null");
+        if (fileOffset < 0)
+            throw new IllegalArgumentException("File offset must be nonnegative");
 
         this.logFileNo = logFileNo;
-        this.filePointer = fptr;
+        this.fileOffset = fileOffset;
     }
     
     
-    public LogSequenceNumber(int logFileNo, int pageNo, int offset) {
-        this(logFileNo, new FilePointer(pageNo, offset));
-    }
-
-
     @Override
     public boolean equals(Object obj) {
         if (obj instanceof LogSequenceNumber) {
             LogSequenceNumber lsn = (LogSequenceNumber) obj;
-            return lsn.logFileNo == logFileNo &&
-                ObjectUtils.equals(lsn.filePointer, filePointer);
+            return lsn.logFileNo == logFileNo && lsn.fileOffset == fileOffset;
         }
         return false;
     }
@@ -64,8 +61,7 @@ public class LogSequenceNumber implements Cloneable {
         // Follows pattern in Effective Java, Item 8, with different constants.
         hashCode = 37;
         hashCode = 53 * hashCode + logFileNo;
-        hashCode = 53 * hashCode +
-            (filePointer != null ? filePointer.hashCode() : 0);
+        hashCode = 53 * hashCode + fileOffset;
 
         return hashCode;
     }
@@ -76,8 +72,6 @@ public class LogSequenceNumber implements Cloneable {
         // file-pointer.
         try {
             LogSequenceNumber lsn = (LogSequenceNumber) super.clone();
-            lsn.filePointer = (FilePointer) filePointer.clone();
-
             return lsn;
         }
         catch (CloneNotSupportedException e) {
@@ -93,17 +87,22 @@ public class LogSequenceNumber implements Cloneable {
     }
 
     
-    public FilePointer getFilePointer() {
-        return filePointer;
+    public int getFileOffset() {
+        return fileOffset;
+    }
+
+
+    @Override
+    public int compareTo(LogSequenceNumber lsn) {
+        if (logFileNo != lsn.logFileNo)
+            return logFileNo - lsn.logFileNo;
+
+        return fileOffset - lsn.fileOffset;
     }
     
     
-    public int getPageNo() {
-        return filePointer.getPageNo();
-    }
-    
-    
-    public int getOffset() {
-        return filePointer.getOffset();
+    @Override
+    public String toString() {
+        return String.format("LSN[%06d:%08d]", logFileNo, fileOffset);
     }
 }

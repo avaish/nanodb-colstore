@@ -44,23 +44,29 @@ public class SharedServer {
         }
 
         public void run() {
-            ObjectInputStream ois = new ObjectInputStream(sock.getInputStream());
-            ObjectOutputStream oos = new ObjectOutputStream(sock.getOutputStream());
+            try {
+                ObjectInputStream ois = new ObjectInputStream(sock.getInputStream());
+                ObjectOutputStream oos = new ObjectOutputStream(sock.getOutputStream());
 
-            while (true) {
-                try {
-                    ois.readObject();
+                while (true) {
+                    try {
+                        ois.readObject();
+                    }
+                    catch (EOFException e) {
+                        logger.info(String.format("Client %d disconnected.\n", id));
+                        break;
+                    }
+                    catch (IOException e) {
+    
+                    }
+                    catch (ClassNotFoundException e) {
+    
+                    }
                 }
-                catch (EOFException e) {
-                    logger.info(String.format("Client %d disconnected.\n", id));
-                    break;
-                }
-                catch (IOException e) {
-
-                }
-                catch (ClassNotFoundException e) {
-
-                }
+            }
+            catch (IOException e) {
+                // TODO
+                // TODO
             }
         }
     }
@@ -99,8 +105,8 @@ public class SharedServer {
 
 
     public void shutdown() {
-        for (Thread t : clientThreads) {
-
+        for (Thread t : clientThreads.values()) {
+            // TODO:  Shut down the client thread.
         }
     }
 }

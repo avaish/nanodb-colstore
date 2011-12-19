@@ -103,7 +103,7 @@ public class FileManager {
      * @param filename the name of the database file to open
      * @return the successfully opened database file
      *
-     * @throws java.io.FileNotFoundException if the specified file doesn't exist.
+     * @throws FileNotFoundException if the specified file doesn't exist.
      * @throws IOException if a more general IO issue occurs.
      */
     public DBFile openDBFile(String filename)
