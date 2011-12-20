@@ -1,14 +1,17 @@
 package edu.caltech.nanodb.storage;
 
 
-import org.apache.log4j.Logger;
-
-import edu.caltech.nanodb.storage.heapfile.HeapFileTableManager;
-import edu.caltech.nanodb.storage.writeahead.WALManager;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
+
+import edu.caltech.nanodb.storage.btreeindex.BTreeIndexManager;
+import org.apache.log4j.Logger;
+
+import edu.caltech.nanodb.indexes.IndexFileInfo;
+import edu.caltech.nanodb.indexes.IndexManager;
+import edu.caltech.nanodb.storage.heapfile.HeapFileTableManager;
+import edu.caltech.nanodb.storage.writeahead.WALManager;
 
 
 /**
@@ -157,17 +160,12 @@ public class StorageManager {
     private FileManager fileManager;
 
 
-    private WALManager walManager;
-
-
     /**
-     * This mapping is used to keep track of the table manager used for each
+     * This mapping is used to keep track of the manager objects used for each
      * file-type we need to operate on.
-     *
-     * @todo this needs work.  not all file-types are table files.
      */
-    private HashMap<DBFileType, TableManager> tableManagers =
-        new HashMap<DBFileType, TableManager>();
+    private HashMap<DBFileType, Object> fileTypeManagers =
+        new HashMap<DBFileType, Object>();
 
 
     /**
@@ -178,6 +176,16 @@ public class StorageManager {
      */
     private HashMap<String, TableFileInfo> openTables =
         new HashMap<String, TableFileInfo>();
+
+
+    /**
+     * An internal cache of what indexes are currently open in the database.
+     * This keeps us from having to reload index details every time someone
+     * wants to access an index, and it also allows us to know what indexes
+     * need to be closed.
+     */
+    private HashMap<String, IndexFileInfo> openIndexes =
+        new HashMap<String, IndexFileInfo>();
 
 
     /**
@@ -212,7 +220,19 @@ public class StorageManager {
         fileManager = new FileManager(this);
         bufferManager = new BufferManager(fileManager);
 
-        walManager = new WALManager(this);
+        initFileTypeManagers();
+    }
+
+
+    private void initFileTypeManagers() {
+        fileTypeManagers.put(DBFileType.WRITE_AHEAD_LOG_FILE,
+            new WALManager(this));
+
+        fileTypeManagers.put(DBFileType.HEAP_DATA_FILE,
+            new HeapFileTableManager(this));
+
+        fileTypeManagers.put(DBFileType.BTREE_INDEX_FILE,
+            new BTreeIndexManager(this));
     }
 
 
@@ -258,30 +278,51 @@ public class StorageManager {
         if (type == null)
             throw new IllegalArgumentException("type cannot be null");
 
-        TableManager manager = tableManagers.get(type);
+        Object manager = fileTypeManagers.get(type);
         if (manager == null) {
-            // Initialize a new manager of the specified type!
-            logger.info("Initializing new file manager of type " + type);
-
-            switch (type) {
-            case HEAP_DATA_FILE:
-                manager = new HeapFileTableManager(this);
-                break;
-
-            default:
-                throw new IllegalArgumentException("Unsupported file type:  " +
-                    type);
-            }
-
-            tableManagers.put(type, manager);
+            throw new IllegalArgumentException(
+                "Unsupported table-file type:  " + type);
+        }
+        else if (!(manager instanceof TableManager)) {
+            throw new IllegalArgumentException("File type " + type +
+                " isn't a table-file type.");
         }
 
-        return manager;
+        return (TableManager) manager;
+    }
+
+
+    /**
+     * Returns the index-manager for the specified file type, initializing a new
+     * manager if one has not already been created.
+     *
+     * @param type the database file type to get the index manager for.
+     *
+     * @return the index-manager instance for the specified file type
+     *
+     * @throws IllegalArgumentException if the file-type is <tt>null</tt>, or if
+     *         the file-type is currently unsupported.
+     */
+    private IndexManager getIndexManager(DBFileType type) {
+        if (type == null)
+            throw new IllegalArgumentException("type cannot be null");
+
+        Object manager = fileTypeManagers.get(type);
+        if (manager == null) {
+            throw new IllegalArgumentException(
+                "Unsupported index-file type:  " + type);
+        }
+        else if (!(manager instanceof IndexManager)) {
+            throw new IllegalArgumentException("File type " + type +
+                " isn't an index-file type.");
+        }
+
+        return (IndexManager) manager;
     }
 
 
     public WALManager getWALManager() {
-        return walManager;
+        return (WALManager) fileTypeManagers.get(DBFileType.WRITE_AHEAD_LOG_FILE);
     }
 
 
@@ -569,4 +610,118 @@ public class StorageManager {
         String tblFileName = getTableFileName(tableName);
         fileManager.deleteDBFile(tblFileName);
     }
+
+
+    /*========================================================================
+     * CODE RELATED TO INDEX FILES
+     */
+
+
+    /**
+     * This method takes an index name and returns a filename string that
+     * specifies where the index's data is stored.
+     *
+     * @param indexName the name of the index to get the filename of
+     *
+     * @return the name of the file that holds the index's data
+     */
+    private String getIndexFileName(String indexName) {
+        return indexName + ".idx";
+    }
+
+
+    /**
+     * Creates a new index file with the index name, table name, and column list
+     * specified in the passed-in <tt>IndexFileInfo</tt> object.  Additional
+     * details such as the data file and the index manager are stored into the
+     * passed-in <tt>IndexFileInfo</tt> object upon successful creation of the
+     * new index.
+     *
+     * @param idxFileInfo This object is an in/out parameter.  It is used to
+     *        specify the name and details of the new index being created.  When
+     *        the index is successfully created, the object is updated with the
+     *        actual file that the index is stored in.
+     *
+     * @throws IOException if the file cannot be created, or if an error occurs
+     *         while storing the initial index data.
+     */
+    public void createIndex(IndexFileInfo idxFileInfo) throws IOException {
+
+        int pageSize = StorageManager.getCurrentPageSize();
+
+        String indexName = idxFileInfo.getTableName();
+        String idxFileName = getIndexFileName(indexName);
+
+        // TODO:  the file-type should be specified in the IndexFileInfo object
+        DBFileType type = DBFileType.BTREE_INDEX_FILE;
+        IndexManager idxManager = getIndexManager(type);
+
+        DBFile dbFile = fileManager.createDBFile(idxFileName, type, pageSize);
+        logger.debug("Created new DBFile for index " + indexName +
+            " at path " + dbFile.getDataFile());
+
+        // Cache this index since it's now considered "open".
+        openIndexes.put(idxFileInfo.getTableName(), idxFileInfo);
+
+        idxFileInfo.setDBFile(dbFile);
+        idxFileInfo.setIndexManager(idxManager);
+
+        idxManager.initIndexInfo(idxFileInfo);
+    }
+
+
+    /**
+     * This method opens the data file corresponding to the specified index
+     * name and reads in the index's details.  If the index is already open
+     * then the cached data is simply returned.
+     *
+     * @param indexName the name of the index to open.  Indexes are not
+     *        referenced directly except by CREATE/ALTER/DROP INDEX statements,
+     *        so these index names are stored in the table schema files, and are
+     *        generally opened when the optimizer needs to know what indexes are
+     *        available.
+     *
+     * @return an object representing the details of the open index
+     *
+     * @throws java.io.FileNotFoundException if no index-file exists for the
+     *         index; in other words, it doesn't yet exist.
+     *
+     * @throws IOException if an IO error occurs when attempting to open the
+     *         index.
+     */
+    public IndexFileInfo openIndex(String indexName) throws IOException {
+        IndexFileInfo idxFileInfo;
+
+        // If the index is already open, just return the cached information.
+        idxFileInfo = openIndexes.get(indexName);
+        if (idxFileInfo != null)
+            return idxFileInfo;
+
+        // Open the data file for the index; read out its type and page-size.
+
+        String idxFileName = getIndexFileName(indexName);
+        DBFile dbFile = openDBFile(idxFileName);
+        DBFileType type = dbFile.getType();
+        IndexManager idxManager = getIndexManager(type);
+
+        logger.debug(String.format("Opened DBFile for index %s at path %s.",
+            indexName, dbFile.getDataFile()));
+        logger.debug(String.format("Type is %s, page size is %d bytes.",
+            type, dbFile.getPageSize()));
+
+        idxFileInfo = new IndexFileInfo(indexName, null, dbFile);
+        idxFileInfo.setIndexManager(idxManager);
+
+        // Cache this table since it's now considered "open".
+        openIndexes.put(indexName, idxFileInfo);
+
+        // Defer to the appropriate index-manager to read in the remainder of
+        // the details.
+        idxManager.loadIndexInfo(idxFileInfo);
+
+        return idxFileInfo;
+    }
+
+
+
 }

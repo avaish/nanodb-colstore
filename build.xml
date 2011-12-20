@@ -6,7 +6,7 @@
     up by the "debug" target, which is a dependency of the "compile" target.
 
     To override and build a release build, run "ant release ..." where "..."
-    is the desired build target, e.g. "compile" or "test" or "dist".
+    is the desired build target, e.g. "compile" or "test" or "jar".
     </description>
 
     <!-- Global Properties -->
@@ -63,8 +63,8 @@
 
     <!-- Build Tasks -->
 
-    <target name="full" depends="test,dist,javadoc"
-            description="Runs test, dist, and javadoc targets in that order." />
+    <target name="full" depends="test,jar,javadoc"
+            description="Runs test, jar, and javadoc targets in that order." />
 
     <target name="-init">
         <tstamp/>
@@ -170,7 +170,7 @@
     </target>
 
 
-    <target name="dist" depends="compile"
+    <target name="jar" depends="compile"
           description="Create a distribution jar-file.">
 
         <!-- Put all of the classes into an appropriately-named JAR file. -->

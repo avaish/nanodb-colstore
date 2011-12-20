@@ -7,24 +7,36 @@ import java.io.RandomAccessFile;
 
 
 /**
+ * <p>
  * This class provides page-level access to a database file, which contains
- * some kind of data utilized in a database system.  The class provides no
- * caching whatsoever; page requests will always read the file, and page
- * writes are always written to the disk.  Furthermore, writes are always
- * synchronized to disk, so that the data on disk actually reflects the
- * contents of the file in memory.
- * <p>
- * Obviously, this class is not intended to provide an efficient interface to
- * the table data stored on disk.  That must be provided by higher-level
- * mechanisms layered on top of this class.
- * <p>
- * This class may be utilized for many different kinds of database files.
- * Here is an example of the kinds of data that might be stored in files:
+ * some kind of data utilized in a database system.  This class may be utilized
+ * for many different kinds of database files.  Here is an example of the kinds
+ * of data that might be stored in files:
+ * </p>
  * <ul>
  *   <li>Tuples in a database table.</li>
- *   <li>Table indexes in sequential, B-tree, or some other format.</li>
+ *   <li>Table indexes in a hashtable, tree, or some other format.</li>
  *   <li>Recovery logs.</li>
  *   <li>Checkpoint files.</li>
+ * </ul>
+ * <p>
+ * <tt>DBFile</tt>s are created by using the {@link StorageManager#openDBFile}
+ * method (or perhaps one of the wrapper methods such as
+ * {@link StorageManager#openTable} or {@link StorageManager#openWALFile(int)}).
+ * This allows the <tt>StorageManager</tt> to provide caching of opened
+ * <tt>DBFile</tt>s so that unnecessary IOs can be avoided.  (Internally, the
+ * <tt>StorageManager</tt> uses {@link FileManager#openDBFile} to open files,
+ * and the {@link BufferManager} to cache opened files and loaded pages.)
+ * </p>
+ * <p>
+ * For a file to be opened as a <tt>DBFile</tt>, it must have specific details
+ * stored in the first page of the file:
+ * </p>
+ * <ul>
+ *   <li><u>Byte 0:</u>  file type (unsigned byte) - value taken from
+ *       {@link DBFileType}</li>
+ *   <li><u>Byte 1:</u>  page size  <i>p</i> (unsigned byte) - file's page
+ *       size is <i>P</i> = 2<sup>p</sup></li>
  * </ul>
  *
  * @see RandomAccessFile

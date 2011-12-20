@@ -1,8 +1,9 @@
 package edu.caltech.nanodb.relations;
 
 
-import edu.caltech.nanodb.expressions.ColumnName;
 import org.apache.commons.lang.ObjectUtils;
+
+import edu.caltech.nanodb.expressions.ColumnName;
 
 
 /**

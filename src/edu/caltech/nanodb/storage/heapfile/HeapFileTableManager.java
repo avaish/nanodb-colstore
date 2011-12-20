@@ -113,6 +113,7 @@ public class HeapFileTableManager implements TableManager {
         // Write out the schema details now.
         logger.info("Writing table schema:  " + schema);
 
+        // Column details:
         hpWriter.writeByte(schema.numColumns());
         for (ColumnInfo colInfo : schema.getColumnInfos()) {
 
@@ -134,6 +135,10 @@ public class HeapFileTableManager implements TableManager {
             // Write the column name.
             hpWriter.writeVarString255(colInfo.getName());
         }
+
+        // Constraint details:
+        // hpWriter.writeByte(schema.numConstraints());
+        // for (...) {
 
         // Compute and store the schema's size.
         int schemaSize = hpWriter.getPosition() - HeaderPage.OFFSET_NCOLS;

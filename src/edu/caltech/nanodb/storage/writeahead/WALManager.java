@@ -1,12 +1,10 @@
 package edu.caltech.nanodb.storage.writeahead;
 
 
-import edu.caltech.nanodb.util.RegexFileFilter;
 import org.apache.log4j.Logger;
 
 import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileFilter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 
@@ -25,6 +23,7 @@ import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.transactions.TransactionState;
 import edu.caltech.nanodb.util.ArrayUtil;
 import edu.caltech.nanodb.util.NoCopyByteArrayOutputStream;
+import edu.caltech.nanodb.util.RegexFileFilter;
 
 
 /**
@@ -43,11 +42,12 @@ public class WALManager {
     /** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(WALManager.class);
 
-    
+
     /** Write-ahead log files follow this pattern. */
     public static final String WAL_FILENAME_PATTERN = "wal-%05d.log";
 
 
+    /** This is a regex pattern for write-ahead log filenames. */
     public static final String WAL_FILENAME_REGEX = "wal-(\\d)\\.log";
 
 
@@ -63,10 +63,6 @@ public class WALManager {
      * the next increasing file number.
      */
     public static final int MAX_WAL_FILE_SIZE = 10 * 1024 * 1024;
-
-
-    /** The current WAL file being logged to. */
-    DBFile walFile;
 
 
     /**
@@ -133,10 +129,20 @@ public class WALManager {
     /**
      * This function writes a transaction demarcation record
      * ({@link WALRecordType#START_TXN}, {@link WALRecordType#COMMIT_TXN}, or
-     * {@link WALRecordType#ABORT_TXN}) to the write-ahead log.
+     * {@link WALRecordType#ABORT_TXN}) to the write-ahead log.  The transaction
+     * state is retrieved from thread-local storage so that it doesn't need to
+     * be passed.
      *
-     * @param type
-     * @throws IOException
+     * @param type The type of the transaction demarcation to write, one of the
+     *        values {@link WALRecordType#START_TXN}, {@link WALRecordType#COMMIT_TXN},
+     *        or {@link WALRecordType#ABORT_TXN}.
+     *
+     * @throws IOException if the write-ahead log can't be updated for some
+     *         reason.
+     *
+     * @throws IllegalArgumentException if <tt>type</tt> is <tt>null</tt>, or if
+     *         it isn't one of the values {@link WALRecordType#START_TXN},
+     *         {@link WALRecordType#COMMIT_TXN}, or {@link WALRecordType#ABORT_TXN}.
      */
     public synchronized void writeTxnRecord(WALRecordType type)
         throws IOException {
@@ -441,6 +447,10 @@ public class WALManager {
                     "type %s while rolling back transaction %d.", type,
                     transactionID));
             }
+
+            // Go to the immediately preceding record in the logs for this
+            // transaction.
+            lsn = prevLSN;
         }
 
         // All done rolling back the transaction!  Record that it was aborted

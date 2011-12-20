@@ -17,13 +17,17 @@ import edu.caltech.nanodb.expressions.ColumnName;
 
 
 /**
+ * <p>
  * A schema is an ordered collection of column names and associated types.
+ * </p>
  * <p>
  * Many different entities in the database code can have schema associated with
- * them.  Both tables and tuples have schemas, for obvious reasons.  SELECT and
- * FROM clauses also have schemas, used by the database engine to verify the
- * semantics of database queries.  Finally, relational algebra plan nodes also
- * have schemas, which specify the kinds of tuples that they generate.
+ * them.  Both tables and tuples have schemas, for obvious reasons.
+ * <tt>SELECT</tt> and <tt>FROM</tt> clauses also have schemas, used by the
+ * database engine to verify the semantics of database queries.  Finally,
+ * relational algebra plan nodes also have schemas, which specify the kinds of
+ * tuples that they generate.
+ * </p>
  */
 public class Schema implements Iterable<ColumnInfo> {
 
@@ -54,6 +58,10 @@ public class Schema implements Iterable<ColumnInfo> {
     }
 
 
+    /**
+     * The collection of the column-info objects describing the columns in the
+     * schema.
+     */
     private ArrayList<ColumnInfo> columnInfos;
 
 
@@ -102,11 +110,25 @@ public class Schema implements Iterable<ColumnInfo> {
     }
 
 
+    /**
+     * Returns the number of columns in the schema.
+     *
+     * @return the number of columns in the schema.
+     */
     public int numColumns() {
         return columnInfos.size();
     }
 
 
+    /**
+     * Returns the <tt>ColumnInfo</tt> object describing the column at the
+     * specified index.  Column indexes are numbered from 0.
+     *
+     * @param i the index to retrieve the column-info for
+     *
+     * @return the <tt>ColumnInfo</tt> object describing the name and type of
+     *         the column
+     */
     public ColumnInfo getColumnInfo(int i) {
         return columnInfos.get(i);
     }
@@ -167,8 +189,8 @@ public class Schema implements Iterable<ColumnInfo> {
     /**
      * Append another schema to this schema.
      *
-     * @throws SchemaNameException if any of the input column-info objects overlap
-     *         the names of columns already in the schema.
+     * @throws SchemaNameException if any of the input column-info objects
+     *         overlap the names of columns already in the schema.
      */
     public void append(Schema s) throws SchemaNameException {
         for (ColumnInfo colInfo : s)
@@ -196,10 +218,21 @@ public class Schema implements Iterable<ColumnInfo> {
      * no table name specified!
      */
     public Set<String> getTableNames() {
-      return Collections.unmodifiableSet(colsHashedByTable.keySet());
+        return Collections.unmodifiableSet(colsHashedByTable.keySet());
     }
 
-    
+
+    /**
+     * This helper method returns the names of all tables that appear in both
+     * this schema and the specified schema.  Note that not all columns of a
+     * given table must be present for the table to be included in the result;
+     * there just has to be at least one column from the table in both schemas
+     * for it to be included in the result.
+     *
+     * @param s the other schema to compare this schema to
+     * @return a set containing the names of all tables that appear in both
+     *         schemas
+     */
     public Set<String> getCommonTableNames(Schema s) {
         HashSet<String> shared = new HashSet<String>(colsHashedByTable.keySet());
         shared.retainAll(s.getTableNames());
@@ -224,6 +257,14 @@ public class Schema implements Iterable<ColumnInfo> {
     }
 
 
+    /**
+     * Returns the number of columns that have the specified column name.  Note
+     * that multiple columns can have the same column name but different table
+     * names.
+     *
+     * @param colName the column name to return the count for
+     * @return the number of columns with the specified column name
+     */
     public int numColumnsWithName(String colName) {
         ArrayList<IndexedColumnInfo> list = colsHashedByColumn.get(colName);
         if (list != null)

@@ -387,6 +387,8 @@ create_index returns [CreateIndexCommand c]
     c = new CreateIndexCommand(idxName, tblName);
     c.setTable(tblName);
     c.setUnique(unique);
+
+    c.setIndexType(idxType);
   }
   LPAREN colName=dbobj_ident { c.addColumn(colName); }
          ( COMMA colName=dbobj_ident { c.addColumn(colName); } )* RPAREN

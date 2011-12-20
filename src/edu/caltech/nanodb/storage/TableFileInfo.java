@@ -2,7 +2,7 @@ package edu.caltech.nanodb.storage;
 
 
 import edu.caltech.nanodb.qeval.TableStats;
-import edu.caltech.nanodb.relations.Schema;
+import edu.caltech.nanodb.relations.TableSchema;
 
 
 /**
@@ -20,7 +20,7 @@ public class TableFileInfo {
 
 
     /** The schema of this table file. */
-    private Schema schema;
+    private TableSchema schema;
 
 
     /** The statistics stored in this table file. */
@@ -56,7 +56,7 @@ public class TableFileInfo {
         this.tableName = tableName;
         this.dbFile = dbFile;
 
-        schema = new Schema();
+        schema = new TableSchema();
         stats = new TableStats(schema.numColumns());
     }
 
@@ -132,7 +132,7 @@ public class TableFileInfo {
      *
      * @return the schema object describing this table's schema
      */
-    public Schema getSchema() {
+    public TableSchema getSchema() {
         return schema;
     }
 

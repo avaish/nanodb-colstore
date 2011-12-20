@@ -4,9 +4,13 @@ package edu.caltech.nanodb.commands;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import org.apache.log4j.Logger;
+
+import edu.caltech.nanodb.relations.TableConstraintType;
+import edu.caltech.nanodb.relations.TableSchema;
 
 import edu.caltech.nanodb.relations.ColumnInfo;
 
@@ -48,6 +52,9 @@ public class CreateTableCommand extends Command {
      * Create a new object representing a <tt>CREATE TABLE</tt> statement.
      *
      * @param tableName the name of the table to be created
+     * @param temporary true if the table is a temporary table, false otherwise
+     * @param ifNotExists If this flag is true, the table will only be created
+     *        if it doesn't already exist.
      */
     public CreateTableCommand(String tableName,
                               boolean temporary, boolean ifNotExists) {
@@ -122,9 +129,10 @@ public class CreateTableCommand extends Command {
         logger.debug("Creating a TableFileInfo object describing the new table " +
             tableName + ".");
         TableFileInfo tblFileInfo = new TableFileInfo(tableName);
+        TableSchema schema = tblFileInfo.getSchema();
         for (ColumnInfo colInfo : columnInfos) {
             try {
-                tblFileInfo.getSchema().addColumnInfo(colInfo);
+                schema.addColumnInfo(colInfo);
             }
             catch (IllegalArgumentException iae) {
                 throw new ExecutionException("Duplicate or invalid column \"" +
@@ -132,7 +140,70 @@ public class CreateTableCommand extends Command {
             }
         }
 
-        // TODO:  Add constraints to the table-file info.
+        // Open all tables referenced by foreign-key constraints, so that we can
+        // verify the constraints.
+        HashMap<String, TableSchema> referencedTables =
+            new HashMap<String, TableSchema>();
+        for (ConstraintDecl cd: constraints) {
+            if (cd.getType() == TableConstraintType.FOREIGN_KEY) {
+                String refTableName = cd.getRefTable();
+                try {
+                    TableFileInfo refTblFileInfo =
+                        storageManager.openTable(refTableName);
+                    referencedTables.put(refTableName, refTblFileInfo.getSchema());
+                }
+                catch (FileNotFoundException e) {
+                    throw new ExecutionException(String.format(
+                        "Referenced table %s doesn't exist.", refTableName), e);
+                }
+                catch (IOException e) {
+                    throw new ExecutionException(String.format(
+                        "Error while loading schema for referenced table %s.",
+                        refTableName), e);
+                }
+            }
+        }
+        
+        // Add constraints to the table's schema.
+        for (ConstraintDecl cd : constraints) {
+            switch (cd.getType()) {
+            case PRIMARY_KEY:
+                // Make a primary key constraint and put it on the schema.
+                schema.setPrimaryKey(schema.makeKey(cd.getColumnNames()));
+                break;
+
+            case UNIQUE:
+                // Make a unique key constraint and put it on the schema.
+                schema.addCandidateKey(schema.makeKey(cd.getColumnNames()));
+                break;
+
+            case FOREIGN_KEY:
+                // Make a foreign key constraint and put it on the schema.
+
+                // This should never be null since we already resolved all
+                // foreign-key table references earlier.
+                TableSchema refTableSchema = referencedTables.get(cd.getRefTable());
+
+                // TODO:  Make sure that the referenced columns are actually a
+                //        candidate key or primary key on the referenced table.
+
+                schema.addForeignKey(schema.makeForeignKey(cd.getColumnNames(),
+                    cd.getRefTable(), refTableSchema, cd.getRefColumnNames()));
+
+                break;
+
+            case NOT_NULL:
+                // TODO:  Record that the column cannot be set to NULL.
+                throw new UnsupportedOperationException(
+                    "NOT NULL not yet implemented");
+
+                // break;
+            
+            default:
+                throw new ExecutionException("Unexpected constraint type " +
+                    cd.getType());
+            }
+        }
 
         // Get the table manager and create the table.
 
@@ -150,6 +221,7 @@ public class CreateTableCommand extends Command {
     }
 
 
+    @Override
     public String toString() {
         return "CreateTable[" + tableName + "]";
     }
@@ -162,7 +234,7 @@ public class CreateTableCommand extends Command {
      * @return a detailed description of the table described by this command
      */
     public String toVerboseString() {
-        StringBuffer strBuf = new StringBuffer();
+        StringBuilder strBuf = new StringBuilder();
 
         strBuf.append(toString());
         strBuf.append('\n');
