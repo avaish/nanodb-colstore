@@ -2,6 +2,8 @@ package edu.caltech.nanodb.indexes;
 
 
 import edu.caltech.nanodb.storage.FilePointer;
+import edu.caltech.nanodb.storage.PageTuple;
+import edu.caltech.nanodb.storage.StorageManager;
 
 
 /**
@@ -14,5 +16,10 @@ import edu.caltech.nanodb.storage.FilePointer;
 public class IndexPointer extends FilePointer {
     public IndexPointer(int pageNo, int offset) {
         super(pageNo, offset);
+    }
+    
+    
+    public IndexPointer(FilePointer filePtr) {
+        this(filePtr.getPageNo(), filePtr.getOffset());
     }
 }

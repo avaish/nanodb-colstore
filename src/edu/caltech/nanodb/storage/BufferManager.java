@@ -191,10 +191,11 @@ public class BufferManager {
     }
     
     
-    public void addFile(String filename, DBFile dbFile) {
+    public void addFile(DBFile dbFile) {
         if (dbFile == null)
             throw new IllegalArgumentException("dbFile cannot be null");
 
+        String filename = dbFile.getDataFile().getName();
         if (cachedFiles.containsKey(filename)) {
             throw new IllegalStateException(
                 "File cache already contains file " + filename);
@@ -323,5 +324,12 @@ public class BufferManager {
             entries.remove();
             totalBytesCached -= oldPage.getPageSize();
         }
+    }
+    
+    
+    public void removeDBFile(DBFile dbFile) throws IOException {
+        logger.info("Removing DBFile " + dbFile + " from buffer manager");
+        flushDBFile(dbFile);
+        cachedFiles.remove(dbFile.getDataFile().getName());
     }
 }

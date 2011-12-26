@@ -27,6 +27,13 @@ import org.apache.log4j.Logger;
  *
  * @see PageReader
  * @see PageWriter
+ *
+ * @design (Donnie) It is very important that the page is marked dirty
+ *         <em>before</em> any changes are made, because this is the point when
+ *         the old version of the page data is copied before changes are made.
+ *         Additionally, the page's data must not be manipulated separately from
+ *         the methods provided by this class, or else the old version of the
+ *         page won't be recorded properly.
  */
 public class DBPage {
 
@@ -239,8 +246,8 @@ public class DBPage {
      * @param len the number of bytes to transfer from the source buffer
      */
     public void write(int position, byte[] b, int off, int len) {
-        System.arraycopy(b, off, pageData, position, len);
         setDirty(true);
+        System.arraycopy(b, off, pageData, position, len);
     }
 
 
@@ -256,6 +263,34 @@ public class DBPage {
         // Use the version of write() with extra args.
         write(position, b, 0, b.length);
     }
+
+
+    /**
+     * Move the specified data region in the page.
+     *
+     * @param srcPosition The source offset to copy data from.
+     * @param dstPosition The destination offset to copy data to.
+     * @param length The number of bytes of data to move.
+     */
+    public void moveDataRange(int srcPosition, int dstPosition, int length) {
+        setDirty(true);
+        System.arraycopy(pageData, srcPosition, pageData, dstPosition, length);
+    }
+
+
+    /**
+     * Write the specified alueMove the specified data region in the page.
+     *
+     * @param position The starting position to write the value to.
+     * @param length The number of bytes of data to set.
+     * @param value The byte-value to write to the entire range.
+     */
+    public void setDataRange(int position, int length, byte value) {
+        setDirty(true);
+        for (int i = 0; i < length; i++)
+            pageData[position + i] = value;
+    }
+    
 
 
     /**
@@ -282,8 +317,8 @@ public class DBPage {
      * @param value the Boolean value
      */
     public void writeBoolean(int position, boolean value) {
-        pageData[position] = (byte) (value ? 1 : 0);
         setDirty(true);
+        pageData[position] = (byte) (value ? 1 : 0);
     }
 
 
@@ -309,8 +344,8 @@ public class DBPage {
      * @param value the byte value
      */
     public void writeByte(int position, int value) {
-        pageData[position] = (byte) value;
         setDirty(true);
+        pageData[position] = (byte) value;
     }
 
 
@@ -373,10 +408,10 @@ public class DBPage {
      * @param value the byte value
      */
     public void writeShort(int position, int value) {
+        setDirty(true);
+
         pageData[position++] = (byte) (0xFF & (value >> 8));
         pageData[position  ] = (byte) (0xFF &  value);
-
-        setDirty(true);
     }
 
 
@@ -458,12 +493,12 @@ public class DBPage {
      * @param value the 4-byte integer value
      */
     public void writeInt(int position, int value) {
+        setDirty(true);
+
         pageData[position++] = (byte) (0xFF & (value >> 24));
         pageData[position++] = (byte) (0xFF & (value >> 16));
         pageData[position++] = (byte) (0xFF & (value >>  8));
         pageData[position  ] = (byte) (0xFF &  value);
-
-        setDirty(true);
     }
 
 
@@ -496,6 +531,8 @@ public class DBPage {
      * @param value the 8-byte long integer value
      */
     public void writeLong(int position, long value) {
+        setDirty(true);
+
         pageData[position++] = (byte) (0xFF & (value >> 56));
         pageData[position++] = (byte) (0xFF & (value >> 48));
         pageData[position++] = (byte) (0xFF & (value >> 40));
@@ -504,8 +541,6 @@ public class DBPage {
         pageData[position++] = (byte) (0xFF & (value >> 16));
         pageData[position++] = (byte) (0xFF & (value >>  8));
         pageData[position  ] = (byte) (0xFF &  value);
-
-        setDirty(true);
     }
 
 

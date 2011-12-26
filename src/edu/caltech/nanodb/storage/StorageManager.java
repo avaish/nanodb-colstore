@@ -4,7 +4,9 @@ package edu.caltech.nanodb.storage;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.Random;
 
+import edu.caltech.nanodb.relations.TableConstraintType;
 import edu.caltech.nanodb.storage.btreeindex.BTreeIndexManager;
 import org.apache.log4j.Logger;
 
@@ -188,6 +190,10 @@ public class StorageManager {
         new HashMap<String, IndexFileInfo>();
 
 
+    /** This is used for generating unique names for unnamed indexes. */
+    private Random random = new Random();
+
+
     /**
      * The constructor initalizes the storage manager based on the passed-in
      * arguments.  It is private because we only want a singleton instance of
@@ -250,16 +256,22 @@ public class StorageManager {
     public File getBaseDir() {
         return baseDir;
     }
-    
-    
+
+
     public DBFile openDBFile(String filename) throws IOException {
         DBFile dbFile = bufferManager.getFile(filename);
         if (dbFile == null) {
             dbFile = fileManager.openDBFile(filename);
-            bufferManager.addFile(filename, dbFile);
+            bufferManager.addFile(dbFile);
         }
 
         return dbFile;
+    }
+    
+    
+    private void closeDBFile(DBFile dbFile) throws IOException {
+        bufferManager.removeDBFile(dbFile);
+        fileManager.closeDBFile(dbFile);
     }
 
 
@@ -567,7 +579,7 @@ public class StorageManager {
         // the table.
         DBFileType type = dbFile.getType();
         getTableManager(type).beforeCloseTable(tblFileInfo);
-        fileManager.closeDBFile(dbFile);
+        closeDBFile(dbFile);
     }
 
 
@@ -589,7 +601,7 @@ public class StorageManager {
             DBFile dbFile = tblFileInfo.getDBFile();
             DBFileType type = dbFile.getType();
             getTableManager(type).beforeCloseTable(tblFileInfo);
-            fileManager.closeDBFile(dbFile);
+            closeDBFile(dbFile);
         }
 
         openTables.clear();
@@ -646,18 +658,66 @@ public class StorageManager {
      *         while storing the initial index data.
      */
     public void createIndex(IndexFileInfo idxFileInfo) throws IOException {
-
-        int pageSize = StorageManager.getCurrentPageSize();
-
         String indexName = idxFileInfo.getTableName();
         String idxFileName = getIndexFileName(indexName);
 
-        // TODO:  the file-type should be specified in the IndexFileInfo object
-        DBFileType type = DBFileType.BTREE_INDEX_FILE;
+        DBFileType type = idxFileInfo.getIndexType();
         IndexManager idxManager = getIndexManager(type);
+
+        int pageSize = StorageManager.getCurrentPageSize();
 
         DBFile dbFile = fileManager.createDBFile(idxFileName, type, pageSize);
         logger.debug("Created new DBFile for index " + indexName +
+            " at path " + dbFile.getDataFile());
+
+        // Cache this index since it's now considered "open".
+        openIndexes.put(idxFileInfo.getTableName(), idxFileInfo);
+
+        idxFileInfo.setDBFile(dbFile);
+        idxFileInfo.setIndexManager(idxManager);
+
+        idxManager.initIndexInfo(idxFileInfo);
+    }
+
+
+    public void createUnnamedIndex(IndexFileInfo idxFileInfo) throws IOException {
+        DBFileType type = idxFileInfo.getIndexType();
+        IndexManager idxManager = getIndexManager(type);
+
+        // Figure out an index name and filename for the unnamed index.  Primary
+        // keys are handled separately, since each table only has one primary
+        // key.  All other indexes are named by concatenating a prefix with a
+        // numeric value that makes the index's name unique.
+        File f;
+        String indexName, indexFilename;
+        String prefix = idxManager.getUnnamedIndexPrefix(idxFileInfo);
+        if (idxFileInfo.getIndexInfo().getConstraintType() ==
+            TableConstraintType.PRIMARY_KEY) {
+            
+            indexName = prefix;
+            indexFilename = getIndexFileName(indexName);
+            f = new File(baseDir, indexFilename);
+            if (!f.createNewFile()) {
+                throw new IOException("Couldn't create file " + f +
+                    " for primary-key index " + indexName);
+            }
+        }
+        else {
+            String pattern = prefix + "_%03d";
+            int i = 1;
+            do {
+                indexName = String.format(pattern, i);
+                indexFilename = getIndexFileName(indexName);
+                f = new File(baseDir, indexFilename);
+            }
+            while (!f.createNewFile());
+        }
+        idxFileInfo.setIndexName(indexName);
+
+        int pageSize = StorageManager.getCurrentPageSize();
+
+        DBFile dbFile = fileManager.initDBFile(f, type, pageSize);
+        logger.debug("Created new DBFile for unnamed index " + indexName +
             " at path " + dbFile.getDataFile());
 
         // Cache this index since it's now considered "open".
@@ -689,7 +749,9 @@ public class StorageManager {
      * @throws IOException if an IO error occurs when attempting to open the
      *         index.
      */
-    public IndexFileInfo openIndex(String indexName) throws IOException {
+    public IndexFileInfo openIndex(TableFileInfo tblFileInfo, String indexName)
+        throws IOException {
+
         IndexFileInfo idxFileInfo;
 
         // If the index is already open, just return the cached information.
@@ -721,7 +783,4 @@ public class StorageManager {
 
         return idxFileInfo;
     }
-
-
-
 }

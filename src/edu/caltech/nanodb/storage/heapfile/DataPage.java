@@ -328,12 +328,19 @@ public class DataPage {
 
 
     /**
-     * This static helper function inserts a sequence of bytes from the
-     * tuple data in the page, sliding tuple data below the offset down to
+     * <p>
+     * This static helper function creates a space in the data page of the
+     * specified size, sliding tuple data below the offset down to
      * create a gap.  Because tuples below the specified offset will actually
      * move, some of the slots in the page may also need to be modified.
-     * <p>
-     * The new space is initialized to all zero values.
+     * </p>
+     * <p>The new space is initialized to all zero values.</p>
+     *
+     * @param dbPage The table data-page to insert space into.
+     *
+     * @param off The offset in the page where the space will be added.
+     *
+     * @param len The number of bytes to insert.
      */
     public static void insertTupleDataRange(DBPage dbPage, int off, int len) {
 
@@ -354,22 +361,19 @@ public class DataPage {
                 getFreeSpaceInPage(dbPage) + " bytes).");
         }
 
-        byte[] pageData = dbPage.getPageData();
-
         // If off == tupDataStart then there's no need to move anything.
         if (off > tupDataStart) {
             // Move the data in the range [tupDataStart, off) to
             // [tupDataStart - len, off - len).  Thus there will be a gap in the
             // range [off - len, off) after the operation is completed.
 
-            System.arraycopy(pageData, tupDataStart,
-                             pageData, tupDataStart - len, off - tupDataStart);
+            dbPage.moveDataRange(tupDataStart, tupDataStart - len,
+                off - tupDataStart);
         }
 
         // Zero out the gap that was just created.
         int startOff = off - len;
-        for (int i = 0; i < len; i++)
-            pageData[startOff + i] = 0;
+        dbPage.setDataRange(startOff, len, (byte) 0);
 
         // Update affected slots; this includes all slots below the specified
         // offset.  The update is easy; slot values just move down by len bytes.
@@ -392,6 +396,12 @@ public class DataPage {
      * tuple data in the page, sliding tuple data below the offset forward to
      * fill in the gap.  Because tuples below the specified offset will actually
      * move, some of the slots in the page may also need to be modified.
+     *
+     * @param dbPage The table data-page to insert space into.
+     *
+     * @param off The offset in the page where the space will be removed.
+     *
+     * @param len The number of bytes to remove.
      */
     public static void deleteTupleDataRange(DBPage dbPage, int off, int len) {
         int tupDataStart = getTupleDataStart(dbPage);
@@ -422,9 +432,7 @@ public class DataPage {
             off - tupDataStart, tupDataStart, off,
             tupDataStart + len, off + len));
 
-        byte[] pageData = dbPage.getPageData();
-        System.arraycopy(pageData, tupDataStart,
-                         pageData, tupDataStart + len, off - tupDataStart);
+        dbPage.moveDataRange(tupDataStart, tupDataStart + len, off - tupDataStart);
 
         // Update affected slots; this includes all (non-empty) slots whose
         // offset is below the specified offset.  The update is easy; slot

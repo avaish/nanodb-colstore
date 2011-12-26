@@ -7,17 +7,23 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
 
+import org.apache.log4j.Logger;
+
 import edu.caltech.nanodb.qeval.ColumnStats;
 import edu.caltech.nanodb.qeval.ColumnStatsCollector;
-import edu.caltech.nanodb.storage.BlockedTableReader;
-import org.apache.log4j.Logger;
+import edu.caltech.nanodb.qeval.TableStats;
 
 import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.relations.ColumnType;
+import edu.caltech.nanodb.relations.ForeignKeyColumnIndexes;
+import edu.caltech.nanodb.relations.KeyColumnIndexes;
 import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.SQLDataType;
+import edu.caltech.nanodb.relations.TableConstraintType;
+import edu.caltech.nanodb.relations.TableSchema;
 import edu.caltech.nanodb.relations.Tuple;
 
+import edu.caltech.nanodb.storage.BlockedTableReader;
 import edu.caltech.nanodb.storage.DBFile;
 import edu.caltech.nanodb.storage.DBPage;
 import edu.caltech.nanodb.storage.FilePointer;
@@ -28,7 +34,6 @@ import edu.caltech.nanodb.storage.PageWriter;
 import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.storage.TableFileInfo;
 import edu.caltech.nanodb.storage.TableManager;
-import edu.caltech.nanodb.qeval.TableStats;
 
 
 /**
@@ -97,7 +102,7 @@ public class HeapFileTableManager implements TableManager {
 
         String tableName = tblFileInfo.getTableName();
         DBFile dbFile = tblFileInfo.getDBFile();
-        Schema schema = tblFileInfo.getSchema();
+        TableSchema schema = tblFileInfo.getSchema();
 
         logger.info(String.format(
             "Initializing new table %s with %d columns, stored at %s",
@@ -136,10 +141,30 @@ public class HeapFileTableManager implements TableManager {
             hpWriter.writeVarString255(colInfo.getName());
         }
 
-        // Constraint details:
-        // hpWriter.writeByte(schema.numConstraints());
-        // for (...) {
+        // Write all details of key constraints, foreign keys, and indexes:
 
+        int numConstraints = schema.numCandidateKeys() + schema.numForeignKeys();
+        KeyColumnIndexes pk = schema.getPrimaryKey();
+        if (pk != null)
+            numConstraints++;
+
+        logger.debug("Writing " + numConstraints + " constraints");
+        int constraintStartIndex = hpWriter.getPosition();
+        hpWriter.writeByte(numConstraints);
+
+        if (pk != null)
+            writeKey(hpWriter, TableConstraintType.PRIMARY_KEY, pk);
+
+        for (KeyColumnIndexes ck : schema.getCandidateKeys())
+            writeKey(hpWriter, TableConstraintType.UNIQUE, ck);
+
+        for (ForeignKeyColumnIndexes fk : schema.getForeignKeys())
+            writeForeignKey(hpWriter, fk);
+
+        logger.debug("Constraints occupy " +
+            (hpWriter.getPosition() - constraintStartIndex) +
+            " bytes in the schema");
+        
         // Compute and store the schema's size.
         int schemaSize = hpWriter.getPosition() - HeaderPage.OFFSET_NCOLS;
         HeaderPage.setSchemaSize(headerPage, schemaSize);
@@ -156,6 +181,77 @@ public class HeapFileTableManager implements TableManager {
         tblFileInfo.setStats(stats);
         HeaderPage.setTableStats(headerPage, tblFileInfo);
     }
+
+
+    /**
+     * This helper function writes a primary key or candidate key to the table's
+     * schema stored in the header page.
+     * 
+     * @param hpWriter the writer being used to write the table's schema to its
+     *        header page
+     *
+     * @param type the constraint type, either
+     *        {@link TableConstraintType#PRIMARY_KEY} or
+     *        {@link TableConstraintType#FOREIGN_KEY}.
+     *
+     * @param key a specification of what columns appear in the key
+     *            
+     * @throws IllegalArgumentException if the <tt>type</tt> argument is
+     *         <tt>null</tt>, or is not one of the accepted values
+     */
+    private void writeKey(PageWriter hpWriter, TableConstraintType type,
+                          KeyColumnIndexes key) {
+
+        if (type == TableConstraintType.PRIMARY_KEY) {
+            logger.debug(String.format(" * Primary key %s, enforced with index %s",
+                key, key.getIndexName()));
+        }
+        else if (type == TableConstraintType.UNIQUE) {
+            logger.debug(String.format(" * Candidate key %s, enforced with index %s",
+                key, key.getIndexName()));
+        }
+        else {
+            throw new IllegalArgumentException(
+                "Invalid TableConstraintType value " + type);
+        }
+
+        int typeVal = type.getTypeID();
+        String cName = key.getConstraintName();
+        if (cName != null)
+            typeVal |= 0x80;
+
+        hpWriter.writeByte(typeVal);
+        if (cName != null)
+            hpWriter.writeVarString255(cName);
+
+        hpWriter.writeByte(key.size());
+        for (int i = 0; i < key.size(); i++)
+            hpWriter.writeByte(key.getCol(i));
+
+        // This should always be specified.
+        hpWriter.writeVarString255(key.getIndexName());
+    }
+    
+    
+    private void writeForeignKey(PageWriter hpWriter, ForeignKeyColumnIndexes key) {
+        logger.debug(" * Foreign key " + key);
+
+        int type = TableConstraintType.FOREIGN_KEY.getTypeID();
+        if (key.getConstraintName() != null)
+            type |= 0x80;
+
+        hpWriter.writeByte(type);
+        if (key.getConstraintName() != null)
+            hpWriter.writeVarString255(key.getConstraintName());
+
+        hpWriter.writeVarString255(key.getRefTable());
+        hpWriter.writeByte(key.size());
+        for (int i = 0; i < key.size(); i++) {
+            hpWriter.writeByte(key.getCol(i));
+            hpWriter.writeByte(key.getRefCol(i));
+        }
+    }
+        
 
 
     /**
@@ -185,7 +281,7 @@ public class HeapFileTableManager implements TableManager {
         if (numCols == 0)
             throw new IOException("Table must have at least one column.");
 
-        Schema schema = tblFileInfo.getSchema();
+        TableSchema schema = tblFileInfo.getSchema();
         for (int iCol = 0; iCol < numCols; iCol++) {
             // Each column description consists of a type specification, a set
             // of flags (1 byte), and a string specifying the column's name.
@@ -240,9 +336,122 @@ public class HeapFileTableManager implements TableManager {
             schema.addColumnInfo(colInfo);
         }
 
+        // Read all details of key constraints, foreign keys, and indexes:
+
+        int numConstraints = hpReader.readUnsignedByte();
+        logger.debug("Reading " + numConstraints + " constraints");
+
+        for (int i = 0; i < numConstraints; i++) {
+            int cTypeID = hpReader.readUnsignedByte();
+            TableConstraintType cType =
+                TableConstraintType.findType((byte) (cTypeID & 0x7F));
+            if (cType == null)
+                throw new IOException("Unrecognized constraint-type value " + cTypeID);
+
+            switch (cType) {
+            case PRIMARY_KEY:
+                schema.setPrimaryKey(
+                    readKey(hpReader, cTypeID, TableConstraintType.PRIMARY_KEY));
+                break;
+
+            case UNIQUE:
+                schema.addCandidateKey(
+                    readKey(hpReader, cTypeID, TableConstraintType.UNIQUE));
+                break;
+
+            case FOREIGN_KEY:
+                schema.addForeignKey(readForeignKey(hpReader, cTypeID));
+                break;
+            
+            default:
+                throw new IOException(
+                    "Encountered unhandled constraint type " + cType);
+            }
+        }
+
         // Read in the table's statistics.
         tblFileInfo.setStats(HeaderPage.getTableStats(headerPage, tblFileInfo));
         logger.debug(tblFileInfo.getStats());
+    }
+
+
+    /**
+     * This helper function writes a primary key or candidate key to the table's
+     * schema stored in the header page.
+     *
+     * @param hpReader the writer being used to write the table's schema to its
+     *        header page
+     *
+     * @param typeID the unsigned-byte value read from the table's header page,
+     *        corresponding to this key's type.  Although this value is already
+     *        parsed before calling this method, it also contains flags that
+     *        this method handles, so it must be passed in as well.
+     *
+     * @param type the constraint type, either
+     *        {@link TableConstraintType#PRIMARY_KEY} or
+     *        {@link TableConstraintType#FOREIGN_KEY}.
+     *
+     * @return a specification of the key, including its name, what columns
+     *         appear in the key, and what index is used to enforce the key
+     *
+     * @throws IllegalArgumentException if the <tt>type</tt> argument is
+     *         <tt>null</tt>, or is not one of the accepted values
+     */
+    private KeyColumnIndexes readKey(PageReader hpReader, int typeID,
+                                     TableConstraintType type) {
+
+        if (type == TableConstraintType.PRIMARY_KEY) {
+            logger.debug(" * Reading primary key");
+        }
+        else if (type == TableConstraintType.UNIQUE) {
+            logger.debug(" * Reading candidate key");
+        }
+        else {
+            throw new IllegalArgumentException(
+                "Invalid TableConstraintType value " + type);
+        }
+
+        String constraintName = null;
+        if ((typeID & 0x80) != 0)
+            constraintName = hpReader.readVarString255();
+
+        int keySize = hpReader.readUnsignedByte();
+        int[] keyCols = new int[keySize];
+        for (int i = 0; i < keySize; i++)
+            keyCols[i] = hpReader.readUnsignedByte();
+
+        // This should always be specified.
+        String indexName = hpReader.readVarString255();
+        
+        KeyColumnIndexes key = new KeyColumnIndexes(keyCols, indexName);
+        key.setConstraintName(constraintName);
+        
+        return key;
+    }    
+
+
+    private ForeignKeyColumnIndexes readForeignKey(PageReader hpReader, int typeID) {
+        logger.debug(" * Reading foreign key");
+
+        String constraintName = null;
+        if ((typeID & 0x80) != 0)
+            constraintName = hpReader.readVarString255();
+
+        String refTableName = hpReader.readVarString255();
+        int keySize = hpReader.readUnsignedByte();
+
+        int[] keyCols = new int[keySize];
+        int[] refCols = new int[keySize];
+        for (int i = 0; i < keySize; i++) {
+            keyCols[i] = hpReader.readUnsignedByte();
+            refCols[i] = hpReader.readUnsignedByte();
+        }
+
+        ForeignKeyColumnIndexes fk = new ForeignKeyColumnIndexes(
+            keyCols, refTableName, refCols);
+        fk.setConstraintName(constraintName);
+
+        return fk;
     }
 
 
@@ -294,8 +503,9 @@ public class HeapFileTableManager implements TableManager {
                         continue;
 
                     // This is the first tuple in the file.  Build up the
-                    // PageTuple object and return it.
-                    return new PageTuple(tblFileInfo, dbPage, iSlot, offset);
+                    // HeapFilePageTuple object and return it.
+                    return new HeapFilePageTuple(tblFileInfo, dbPage, iSlot,
+                        offset);
                 }
             }
         }
@@ -354,7 +564,7 @@ public class HeapFileTableManager implements TableManager {
                 fptr.getPageNo() + " is empty.");
         }
 
-        return new PageTuple(tblFileInfo, dbPage, slot, offset);
+        return new HeapFilePageTuple(tblFileInfo, dbPage, slot, offset);
     }
 
 
@@ -375,11 +585,11 @@ public class HeapFileTableManager implements TableManager {
          *   4)  If we get to the end of the file, we return null.
          */
 
-        if (!(tup instanceof PageTuple)) {
+        if (!(tup instanceof HeapFilePageTuple)) {
             throw new IllegalArgumentException(
-                "Tuple must be of type PageTuple; got " + tup.getClass());
+                "Tuple must be of type HeapFilePageTuple; got " + tup.getClass());
         }
-        PageTuple ptup = (PageTuple) tup;
+        HeapFilePageTuple ptup = (HeapFilePageTuple) tup;
 
         DBPage dbPage = ptup.getDBPage();
         DBFile dbFile = dbPage.getDBFile();
@@ -390,8 +600,10 @@ public class HeapFileTableManager implements TableManager {
 
             while (nextSlot < numSlots) {
                 int nextOffset = DataPage.getSlotValue(dbPage, nextSlot);
-                if (nextOffset != DataPage.EMPTY_SLOT)
-                    return new PageTuple(tblFileInfo, dbPage, nextSlot, nextOffset);
+                if (nextOffset != DataPage.EMPTY_SLOT) {
+                    return new HeapFilePageTuple(tblFileInfo, dbPage, nextSlot,
+                        nextOffset);
+                }
 
                 nextSlot++;
             }
@@ -417,8 +629,8 @@ public class HeapFileTableManager implements TableManager {
 
 
     /**
-     * Adds the specified tuple into the table file.  A new <code>PageTuple</code>
-     * object corresponding to the tuple is returned.
+     * Adds the specified tuple into the table file.  A new
+     * <tt>HeapFilePageTuple</tt> object corresponding to the tuple is returned.
      *
      * @review (donnie) This could be made a little more space-efficient.
      *         Right now when computing the required space, we assume that we
@@ -508,8 +720,8 @@ public class HeapFileTableManager implements TableManager {
         logger.debug(String.format(
             "New tuple will reside on page %d, slot %d.", pageNo, slot));
 
-        PageTuple pageTup = PageTuple.storeNewTuple(tblFileInfo, dbPage,
-            slot, tupOffset, tup);
+        HeapFilePageTuple pageTup = HeapFilePageTuple.storeNewTuple(tblFileInfo,
+            dbPage, slot, tupOffset, tup);
 
         DataPage.sanityCheck(dbPage);
 
@@ -528,11 +740,11 @@ public class HeapFileTableManager implements TableManager {
     public void updateTuple(TableFileInfo tblFileInfo, Tuple tup,
                             Map<String, Object> newValues) throws IOException {
 
-        if (!(tup instanceof PageTuple)) {
+        if (!(tup instanceof HeapFilePageTuple)) {
             throw new IllegalArgumentException(
-                "Tuple must be of type PageTuple; got " + tup.getClass());
+                "Tuple must be of type HeapFilePageTuple; got " + tup.getClass());
         }
-        PageTuple ptup = (PageTuple) tup;
+        HeapFilePageTuple ptup = (HeapFilePageTuple) tup;
 
         Schema schema = tblFileInfo.getSchema();
 
@@ -551,11 +763,11 @@ public class HeapFileTableManager implements TableManager {
     public void deleteTuple(TableFileInfo tblFileInfo, Tuple tup)
         throws IOException {
 
-        if (!(tup instanceof PageTuple)) {
+        if (!(tup instanceof HeapFilePageTuple)) {
             throw new IllegalArgumentException(
-                "Tuple must be of type PageTuple; got " + tup.getClass());
+                "Tuple must be of type HeapFilePageTuple; got " + tup.getClass());
         }
-        PageTuple ptup = (PageTuple) tup;
+        HeapFilePageTuple ptup = (HeapFilePageTuple) tup;
 
         DBPage dbPage = ptup.getDBPage();
         DataPage.deleteTuple(dbPage, ptup.getSlot());
@@ -661,4 +873,3 @@ public class HeapFileTableManager implements TableManager {
         return blockedReader;
     }
 }
-

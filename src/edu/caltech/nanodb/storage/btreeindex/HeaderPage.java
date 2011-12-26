@@ -3,8 +3,6 @@ package edu.caltech.nanodb.storage.btreeindex;
 
 import edu.caltech.nanodb.storage.DBFileType;
 import edu.caltech.nanodb.storage.DBPage;
-import edu.caltech.nanodb.storage.PageReader;
-import edu.caltech.nanodb.storage.PageWriter;
 import org.apache.log4j.Logger;
 
 

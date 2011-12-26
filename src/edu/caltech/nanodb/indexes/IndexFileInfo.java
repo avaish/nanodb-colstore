@@ -1,10 +1,8 @@
 package edu.caltech.nanodb.indexes;
 
 
-import java.util.ArrayList;
-
-import edu.caltech.nanodb.relations.IndexInfo;
 import edu.caltech.nanodb.storage.DBFile;
+import edu.caltech.nanodb.storage.DBFileType;
 
 
 /**
@@ -26,6 +24,13 @@ public class IndexFileInfo {
     private IndexInfo indexInfo;
 
 
+    /**
+     * The type of index to create.  The default type is
+     * {@link DBFileType#BTREE_INDEX_FILE}.
+     */
+    private DBFileType indexType = DBFileType.BTREE_INDEX_FILE;
+
+
     /** The index manager used to access this index file. */
     private IndexManager indexManager;
 
@@ -38,8 +43,8 @@ public class IndexFileInfo {
 
 
     public IndexFileInfo(String indexName, String tableName, DBFile dbFile) {
-        if (indexName == null)
-            throw new IllegalArgumentException("indexName must be specified");
+        // if (indexName == null)
+        //     throw new IllegalArgumentException("indexName must be specified");
 
         if (tableName == null)
             throw new IllegalArgumentException("tableName must be specified");
@@ -60,10 +65,28 @@ public class IndexFileInfo {
      * @param indexName the name of the index that this object represents
      * @param tableName the name of the table that the index is built against
      */
-    public IndexFileInfo(String indexName, String tableName) {
-        this(indexName, tableName, null);
+    public IndexFileInfo(String indexName, String tableName, IndexInfo indexInfo) {
+        // if (indexName == null)
+        //     throw new IllegalArgumentException("indexName must be specified");
+
+        if (tableName == null)
+            throw new IllegalArgumentException("tableName must be specified");
+
+        this.indexName = indexName;
+        this.tableName = tableName;
+        this.indexInfo = indexInfo;
+    }
+    
+    
+    public DBFileType getIndexType() {
+        return indexType;
     }
 
+    
+    public IndexInfo getIndexInfo() {
+        return indexInfo;
+    }
+    
 
     /**
      * Returns the actual database file that holds this index's data.
@@ -104,6 +127,11 @@ public class IndexFileInfo {
         return indexName;
     }
 
+    
+    public void setIndexName(String indexName) {
+        this.indexName = indexName;
+    }
+    
 
     /**
      * Returns the associated table name.

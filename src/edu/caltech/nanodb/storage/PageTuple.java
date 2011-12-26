@@ -1,11 +1,9 @@
 package edu.caltech.nanodb.storage;
 
 
+import java.util.Collections;
 import java.util.List;
-import java.util.SortedMap;
-import java.util.TreeMap;
 
-import edu.caltech.nanodb.expressions.ColumnName;
 import edu.caltech.nanodb.expressions.TypeConverter;
 
 import edu.caltech.nanodb.relations.ColumnInfo;
@@ -14,25 +12,37 @@ import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.SQLDataType;
 import edu.caltech.nanodb.relations.Tuple;
 
-import edu.caltech.nanodb.storage.heapfile.DataPage;
-
 
 /**
- * This is a concrete implementation of the {@link Tuple} interface that
+ * <p>
+ * This class is a partial implementation of the {@link Tuple} interface that
  * handles reading and writing tuple data against a {@link DBPage} object.
- * This would be used to read and write tuples in a table file, or in a
- * temporary tuple storage file.  In addition, it could also be used to store
- * and manage tuples in memory, although it's generally faster to use an
- * optimized in-memory representation for tuples.
- *
- * @review (donnie) need to think about where this should live.  It is used by
- *         the heap file manager, but it is quite conceivable that it would be
- *         used by other storage formats if they also use a slotted-page format.
- *         However, a lot of the slotted-page implementation is also in the
- *         heap-file implementation, so clearly we need to reorganize some
- *         things.
+ * This can be used to read and write tuples in a table file, keys in an index
+ * file, etc.  It could also be used to store and manage tuples in memory,
+ * although it's generally much faster and simpler to use an optimized in-memory
+ * representation for tuples in memory.
+ * </p>
+ * <p>
+ * Each tuple is stored in a layout like this:
+ * </p>
+ * <ul>
+ *   <li>The first one or more bytes are dedicated to a <tt>NULL</tt>-bitmap,
+ *       which records columns that are currently <tt>NULL</tt>.</li>
+ *   <li>The remaining bytes are dedicated to storing the non-<tt>NULL</tt>
+ *       values for the columns in the tuple.</li>
+ * </ul>
+ * <p>
+ * In order to make this class' functionality generic, certain operations must
+ * be implemented by subclasses:  specifically, any operation that changes a
+ * tuple's size (e.g. writing a non-<tt>NULL</tt> value to a previously
+ * <tt>NULL</tt> column or vice versa, or changing the size of a variable-size
+ * column).  The issue with these operations is that they require page-level
+ * data management, which is beyond the scope of what this class can provide.
+ * Thus, concrete subclasses of this class can provide page-level data
+ * management as needed.
+ * </p>
  */
-public class PageTuple implements Tuple {
+public abstract class PageTuple implements Tuple {
 
     /**
      * This value is used in {@link #valueOffsets} when a column value is set to
@@ -44,25 +54,16 @@ public class PageTuple implements Tuple {
     /** The database page that contains the tuple's data. */
     private DBPage dbPage;
 
-    /**
-     * The slot that this tuple corresponds to.  The tuple doesn't actually
-     * manipulate the slot table directly; that is for the
-     * {@link edu.caltech.nanodb.storage.heapfile.HeapFileTableManager}
-     * to deal with.
-     */
-    private int slot;
-
 
     /** The offset in the page of the tuple's start. */
     private int pageOffset;
 
 
-    /** General information about the table this tuple is from. */
-    private TableFileInfo tblFileInfo;
-
-
-    /** The schema object from {@link #tblFileInfo}, since we use it so much. */
-    private Schema schema;
+    /**
+     * The columns that appear within the tuple.  We don't use a {@link Schema}
+     * object so that we can use this class in a wider range of contexts.
+     */
+    private List<ColumnInfo> colInfos;
 
 
     /**
@@ -75,49 +76,40 @@ public class PageTuple implements Tuple {
     private int[] valueOffsets;
 
 
-    /** The total size of the tuple in bytes. */
-    //private int tupleSize;
+    /**
+     * The offset in the page where the tuple's data ends.  Note that this value
+     * is <u>one byte past</u> the end of the tuple's data; as with most Java
+     * sequences, the starting offset is inclusive and the ending offset is
+     * exclusive.  Also, as a consequence, this value could be past the end of
+     * the byte-array that the tuple resides in, if the tuple is at the end of
+     * the byte-array.
+     */
+    private int endOffset;
 
 
     /**
      * Construct a new tuple object that is backed by the data in the database
      * page.  This tuple is able to be read from or written to.
      *
-     * @param tblFileInfo details of the table that this tuple is stored in
-     * 
      * @param dbPage the specific database page that holds the tuple
-     *
-     * @param slot the slot number of the tuple
-     *
      * @param pageOffset the offset of the tuple's actual data in the page
+     * @param colInfos the details of the columns that appear within the tuple
      */
-    public PageTuple(TableFileInfo tblFileInfo, DBPage dbPage, int slot,
-        int pageOffset) {
-
-        if (tblFileInfo == null)
-            throw new NullPointerException("tblFileInfo must be specified");
+    public PageTuple(DBPage dbPage, int pageOffset, List<ColumnInfo> colInfos) {
 
         if (dbPage == null)
             throw new NullPointerException("dbPage must be specified");
-
-        if (slot < 0) {
-            throw new IllegalArgumentException("slot must be nonnegative; got " +
-                slot);
-        }
 
         if (pageOffset < 0 || pageOffset >= dbPage.getPageSize()) {
             throw new IllegalArgumentException("pageOffset must be in range [0, " +
                 dbPage.getPageSize() + "); got " + pageOffset);
         }
 
-        this.tblFileInfo = tblFileInfo;
         this.dbPage = dbPage;
-        this.slot = slot;
         this.pageOffset = pageOffset;
+        this.colInfos = colInfos;
 
-        schema = tblFileInfo.getSchema();
-
-        valueOffsets = new int[schema.numColumns()];
+        valueOffsets = new int[colInfos.size()];
 
         computeValueOffsets();
     }
@@ -134,18 +126,28 @@ public class PageTuple implements Tuple {
     }
 
 
+    public FilePointer getFilePointer() {
+        return new FilePointer(dbPage.getPageNo(), pageOffset);
+    }
+
+
     public DBPage getDBPage() {
         return dbPage;
     }
 
 
-    public int getSlot() {
-        return slot;
+    public int getOffset() {
+        return pageOffset;
     }
 
 
-    public int getOffset() {
-        return pageOffset;
+    public int getEndOffset() {
+        return endOffset;
+    }
+
+
+    public List<ColumnInfo> getColumnInfos() {
+        return Collections.unmodifiableList(colInfos);
     }
 
 
@@ -159,9 +161,9 @@ public class PageTuple implements Tuple {
      *         index is out of range.
      */
     private void checkColumnIndex(int colIndex) {
-        if (colIndex < 0 || colIndex >= schema.numColumns()) {
+        if (colIndex < 0 || colIndex >= colInfos.size()) {
             throw new IllegalArgumentException("Column index must be in range [0," +
-                (schema.numColumns() - 1) + "], got " + colIndex);
+                (colInfos.size() - 1) + "], got " + colIndex);
         }
     }
 
@@ -171,7 +173,7 @@ public class PageTuple implements Tuple {
      * may be zero.
      */
     public int getColumnCount() {
-        return schema.numColumns();
+        return colInfos.size();
     }
 
 
@@ -241,7 +243,7 @@ public class PageTuple implements Tuple {
     private int getDataStartOffset() {
         // Compute how many bytes the NULL flags take, at the start of the
         // tuple data.
-        int nullFlagBytes = getNullFlagsSize(schema.numColumns());
+        int nullFlagBytes = getNullFlagsSize(colInfos.size());
         return pageOffset + nullFlagBytes;
     }
 
@@ -252,14 +254,13 @@ public class PageTuple implements Tuple {
      * {@link #NULL_OFFSET} is used for the offset.
      */
     private void computeValueOffsets() {
-        int numCols = schema.numColumns();
+        int numCols = colInfos.size();
 
         int valOffset = getDataStartOffset();
 
         for (int iCol = 0; iCol < numCols; iCol++) {
             if (getNullFlag(iCol)) {
                 // This column is marked as being NULL.
-                // TODO:  Verify that the column doesn't have a NOT NULL constraint.
                 valueOffsets[iCol] = NULL_OFFSET;
             }
             else {
@@ -267,10 +268,12 @@ public class PageTuple implements Tuple {
                 // move forward past this value's bytes.
                 valueOffsets[iCol] = valOffset;
 
-                ColumnType colType = schema.getColumnInfo(iCol).getType();
+                ColumnType colType = colInfos.get(iCol).getType();
                 valOffset += getColumnValueSize(colType, valOffset);
             }
         }
+        
+        endOffset = valOffset;
     }
 
 
@@ -333,7 +336,7 @@ public class PageTuple implements Tuple {
         if (!isNullValue(colIndex)) {
             int offset = valueOffsets[colIndex];
 
-            ColumnType colType = schema.getColumnInfo(colIndex).getType();
+            ColumnType colType = colInfos.get(colIndex).getType();
             switch (colType.getBaseType()) {
 
             case INTEGER:
@@ -420,15 +423,14 @@ public class PageTuple implements Tuple {
             // the tuple.  (The TableManager will also update other affected
             // tuples' slots.)
 
-            ColumnType colType = schema.getColumnInfo(iCol).getType();
+            ColumnType colType = colInfos.get(iCol).getType();
             int dataLength = 0;
             if (colType.getBaseType() == SQLDataType.VARCHAR)
             dataLength = dbPage.readUnsignedShort(valueOffsets[iCol]);
 
             int valueSize = getStorageSize(colType, dataLength);
 
-            DataPage.deleteTupleDataRange(dbPage,
-                valueOffsets[iCol], valueSize);
+            deleteTupleDataRange(valueOffsets[iCol], valueSize);
 
             // Update all affected value-offsets within this tuple.
 
@@ -462,7 +464,7 @@ public class PageTuple implements Tuple {
         if (value == null)
             throw new NullPointerException();
 
-        ColumnInfo colInfo = schema.getColumnInfo(colIndex);
+        ColumnInfo colInfo = colInfos.get(colIndex);
         ColumnType colType = colInfo.getType();
 
         int oldDataSize, newDataSize;
@@ -492,7 +494,7 @@ public class PageTuple implements Tuple {
                 // This value will be added after the previous non-NULL value
                 // that we just found.
                 int prevOffset = valueOffsets[prevCol];
-                ColumnType prevType = schema.getColumnInfo(prevCol).getType();
+                ColumnType prevType = colInfos.get(prevCol).getType();
                 offset = prevOffset + getColumnValueSize(prevType, prevOffset);
             }
 
@@ -515,14 +517,10 @@ public class PageTuple implements Tuple {
         }
         newDataSize = getStorageSize(colType, newDataLength);
 
-        if (newDataSize > oldDataSize) {
-            DataPage.insertTupleDataRange(dbPage, offset,
-                newDataSize - oldDataSize);
-        }
-        else {
-            DataPage.deleteTupleDataRange(dbPage, offset,
-                oldDataSize - newDataSize);
-        }
+        if (newDataSize > oldDataSize)
+            insertTupleDataRange(offset, newDataSize - oldDataSize);
+        else
+            deleteTupleDataRange(offset, oldDataSize - newDataSize);
 
         // Finally, write the value to the column!
 
@@ -671,20 +669,18 @@ public class PageTuple implements Tuple {
     }
 
 
-    public static PageTuple storeNewTuple(TableFileInfo tblInfo,
-        DBPage dbPage, int slot, int pageOffset, Tuple tuple) {
+    public static void storeTuple(DBPage dbPage, int pageOffset,
+                                  List<ColumnInfo> colInfos, Tuple tuple) {
 
-        List<ColumnInfo> columns = tblInfo.getSchema().getColumnInfos();
-
-        if (columns.size() != tuple.getColumnCount()) {
+        if (colInfos.size() != tuple.getColumnCount()) {
             throw new IllegalArgumentException(
             "Tuple has different arity than target schema.");
         }
 
         // Start writing data just past the NULL-flag bytes.
-        int currOffset = pageOffset + getNullFlagsSize(columns.size());
+        int currOffset = pageOffset + getNullFlagsSize(colInfos.size());
         int iCol = 0;
-        for (ColumnInfo colInfo : columns) {
+        for (ColumnInfo colInfo : colInfos) {
 
             ColumnType colType = colInfo.getType();
             Object value = tuple.getColumnValue(iCol);
@@ -704,8 +700,6 @@ public class PageTuple implements Tuple {
             currOffset += dataSize;
             iCol++;
         }
-
-        return new PageTuple(tblInfo, dbPage, slot, pageOffset);
     }
 
 
@@ -765,6 +759,12 @@ public class PageTuple implements Tuple {
         ColumnType colType, Object value) {
         return dbPage.writeObject(offset, colType, value);
     }
+
+
+    protected abstract void insertTupleDataRange(int off, int len);
+
+
+    protected abstract void deleteTupleDataRange(int off, int len);
 
 
     /**

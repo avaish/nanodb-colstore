@@ -373,22 +373,22 @@ create_view returns [CreateViewCommand c]
 create_index returns [CreateIndexCommand c]
   {
     c = null;
-    String idxType = "btree";
+    String idxType = null;
     boolean unique = false;
     String idxName = null;
     String tblName = null;
     String colName = null;
   }
   :
-  CREATE ( UNIQUE { unique = true; } )? INDEX idxName=dbobj_ident
+  CREATE ( UNIQUE { unique = true; } )? INDEX ( idxName=dbobj_ident )?
   ( USING idxType=dbobj_ident )?
   ON tblName=dbobj_ident
   {
-    c = new CreateIndexCommand(idxName, tblName);
-    c.setTable(tblName);
-    c.setUnique(unique);
+    c = new CreateIndexCommand(idxName, tblName, unique);
 
-    c.setIndexType(idxType);
+    if (idxType != null) {
+      c.setIndexType(idxType);
+    }
   }
   LPAREN colName=dbobj_ident { c.addColumn(colName); }
          ( COMMA colName=dbobj_ident { c.addColumn(colName); } )* RPAREN

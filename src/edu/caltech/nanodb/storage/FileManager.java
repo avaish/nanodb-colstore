@@ -79,8 +79,16 @@ public class FileManager {
         if (f.exists())
             throw new IOException("File " + f + " already exists!");
 
+        logger.debug("Creating new database file " + f + ".");
+        return initDBFile(f, type, pageSize);
+    }
+
+
+    public DBFile initDBFile(File f, DBFileType type, int pageSize)
+        throws IOException {
+
+        logger.debug("Initializing database file " + f + ".");
         DBFile dbFile = new DBFile(f, type, pageSize);
-        logger.debug("Created new database file " + f + ".");
 
         // Create the first page, and write the type and encoded page-size into
         // the first two bytes.  Then save it.

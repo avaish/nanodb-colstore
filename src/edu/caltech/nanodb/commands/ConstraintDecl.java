@@ -83,6 +83,11 @@ public class ConstraintDecl {
         this.columnConstraint = columnConstraint;
     }
 
+    
+    public String getName() {
+        return name;
+    }
+    
 
     /** Returns the type of this constraint. */
     public TableConstraintType getType() {
@@ -111,8 +116,12 @@ public class ConstraintDecl {
      * @throws IllegalStateException if this is a column-constraint and
      *         there is already one column specified
      *
-     * @todo Check column-names as they come in, so that we can ensure that none
-     *       are duplicates.
+     * @design (donnie) Column names are checked for existence and uniqueness
+     *         when initializing the corresponding objects for storage on the
+     *         table schema.  See
+     *         {@link edu.caltech.nanodb.relations.TableSchema#makeKey} and
+     *         {@link edu.caltech.nanodb.relations.TableSchema#makeForeignKey}
+     *         for details.
      */
     public void addColumn(String columnName) {
         if (columnName == null)
@@ -142,8 +151,8 @@ public class ConstraintDecl {
      * @throws IllegalStateException if this constraint is not a foreign-key
      *         constraint
      *
-     * @todo Check column-names as they come in, so that we can ensure that none
-     *       are duplicates.
+     * @design (donnie) Existence of the referenced table is checked in the
+     *         {@link CreateTableCommand#execute} method's operation.
      */
     public void setRefTable(String tableName) {
         if (type != TableConstraintType.FOREIGN_KEY) {
@@ -185,8 +194,12 @@ public class ConstraintDecl {
      *         constraint, or if this is a column-constraint and there is
      *         already one reference-column specified
      *
-     * @todo Check column-names as they come in, so that we can ensure that none
-     *       are duplicates.
+     * @design (donnie) Column names are checked for existence and uniqueness
+     *         when initializing the corresponding objects for storage on the
+     *         table schema.  See
+     *         {@link edu.caltech.nanodb.relations.TableSchema#makeKey} and
+     *         {@link edu.caltech.nanodb.relations.TableSchema#makeForeignKey}
+     *         for details.
      */
     public void addRefColumn(String columnName) {
         if (type != TableConstraintType.FOREIGN_KEY) {

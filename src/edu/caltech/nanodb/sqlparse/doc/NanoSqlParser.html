@@ -119,7 +119,11 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 
 
 <a name="analyze_stmt">analyze_stmt</a>
-	:	ANALYZE <a href="NanoSqlParser.html#dbobj_ident">dbobj_ident</a> ( COMMA <a href="NanoSqlParser.html#dbobj_ident">dbobj_ident</a> )* 
+	:	ANALYZE 
+		(	VERBOSE 
+		|	
+		) 
+		<a href="NanoSqlParser.html#dbobj_ident">dbobj_ident</a> ( COMMA <a href="NanoSqlParser.html#dbobj_ident">dbobj_ident</a> )* 
 	;
 
 
@@ -190,7 +194,10 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 		(	UNIQUE 
 		|	
 		) 
-		INDEX <a href="NanoSqlParser.html#dbobj_ident">dbobj_ident</a> 
+		INDEX 
+		(	<a href="NanoSqlParser.html#dbobj_ident">dbobj_ident</a> 
+		|	
+		) 
 		(	USING <a href="NanoSqlParser.html#dbobj_ident">dbobj_ident</a> 
 		|	
 		) 

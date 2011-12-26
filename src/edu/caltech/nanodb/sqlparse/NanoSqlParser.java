@@ -272,7 +272,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			e=expression();
 			uc.addValue(name, e);
 			{
-			_loop99:
+			_loop100:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -282,7 +282,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					uc.addValue(name, e);
 				}
 				else {
-					break _loop99;
+					break _loop100;
 				}
 				
 			} while (true);
@@ -473,15 +473,35 @@ public NanoSqlParser(ParserSharedInputState state) {
 		
 		
 		c = null;
+		boolean verbose = false;
 		String tblName = null;
 		
 		
 		try {      // for error handling
 			match(ANALYZE);
-			tblName=dbobj_ident();
-			c = new AnalyzeCommand(tblName);
 			{
-			_loop112:
+			switch ( LA(1)) {
+			case VERBOSE:
+			{
+				match(VERBOSE);
+				verbose = true;
+				break;
+			}
+			case IDENT:
+			case QUOTED_IDENT:
+			{
+				break;
+			}
+			default:
+			{
+				throw new NoViableAltException(LT(1), getFilename());
+			}
+			}
+			}
+			tblName=dbobj_ident();
+			c = new AnalyzeCommand(tblName, verbose);
+			{
+			_loop114:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -489,7 +509,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					c.addTable(tblName);
 				}
 				else {
-					break _loop112;
+					break _loop114;
 				}
 				
 			} while (true);
@@ -792,7 +812,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		
 		
 		c = null;
-		String idxType = "btree";
+		String idxType = null;
 		boolean unique = false;
 		String idxName = null;
 		String tblName = null;
@@ -820,7 +840,25 @@ public NanoSqlParser(ParserSharedInputState state) {
 			}
 			}
 			match(INDEX);
-			idxName=dbobj_ident();
+			{
+			switch ( LA(1)) {
+			case IDENT:
+			case QUOTED_IDENT:
+			{
+				idxName=dbobj_ident();
+				break;
+			}
+			case ON:
+			case USING:
+			{
+				break;
+			}
+			default:
+			{
+				throw new NoViableAltException(LT(1), getFilename());
+			}
+			}
+			}
 			{
 			switch ( LA(1)) {
 			case USING:
@@ -842,15 +880,17 @@ public NanoSqlParser(ParserSharedInputState state) {
 			match(ON);
 			tblName=dbobj_ident();
 			
-			c = new CreateIndexCommand(idxName, tblName);
-			c.setTable(tblName);
-			c.setUnique(unique);
+			c = new CreateIndexCommand(idxName, tblName, unique);
+			
+			if (idxType != null) {
+			c.setIndexType(idxType);
+			}
 			
 			match(LPAREN);
 			colName=dbobj_ident();
 			c.addColumn(colName);
 			{
-			_loop44:
+			_loop45:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -858,7 +898,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					c.addColumn(colName);
 				}
 				else {
-					break _loop44;
+					break _loop45;
 				}
 				
 			} while (true);
@@ -1497,7 +1537,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			sv=select_value();
 			sc.addSelectValue(sv);
 			{
-			_loop52:
+			_loop53:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -1505,7 +1545,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					sc.addSelectValue(sv);
 				}
 				else {
-					break _loop52;
+					break _loop53;
 				}
 				
 			} while (true);
@@ -1564,7 +1604,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 				e=expression();
 				sc.addGroupByExpr(e);
 				{
-				_loop57:
+				_loop58:
 				do {
 					if ((LA(1)==COMMA)) {
 						match(COMMA);
@@ -1572,7 +1612,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						sc.addGroupByExpr(e);
 					}
 					else {
-						break _loop57;
+						break _loop58;
 					}
 					
 				} while (true);
@@ -1647,7 +1687,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 				}
 				sc.addOrderByExpr(new OrderByExpression(e, ascending));
 				{
-				_loop63:
+				_loop64:
 				do {
 					if ((LA(1)==COMMA)) {
 						match(COMMA);
@@ -1681,7 +1721,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						sc.addOrderByExpr(new OrderByExpression(e, ascending));
 					}
 					else {
-						break _loop63;
+						break _loop64;
 					}
 					
 				} while (true);
@@ -1883,7 +1923,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			fc=join_expr();
 			{
-			_loop71:
+			_loop72:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -1891,7 +1931,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					fc = new FromClause(fc, next, JoinType.CROSS);
 				}
 				else {
-					break _loop71;
+					break _loop72;
 				}
 				
 			} while (true);
@@ -1945,7 +1985,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			fc=from_expr();
 			{
-			_loop83:
+			_loop84:
 			do {
 				if ((_tokenSet_13.member(LA(1)))) {
 					{
@@ -2090,7 +2130,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						fc.addUsingName(n);
 						
 						{
-						_loop82:
+						_loop83:
 						do {
 							if ((LA(1)==COMMA)) {
 								match(COMMA);
@@ -2098,7 +2138,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 								fc.addUsingName(n);
 							}
 							else {
-								break _loop82;
+								break _loop83;
 							}
 							
 						} while (true);
@@ -2131,7 +2171,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					}
 				}
 				else {
-					break _loop83;
+					break _loop84;
 				}
 				
 			} while (true);
@@ -2269,7 +2309,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 				name=dbobj_ident();
 				cols = new ArrayList<String>(); cols.add(name);
 				{
-				_loop93:
+				_loop94:
 				do {
 					if ((LA(1)==COMMA)) {
 						match(COMMA);
@@ -2277,7 +2317,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						cols.add(name);
 					}
 					else {
-						break _loop93;
+						break _loop94;
 					}
 					
 				} while (true);
@@ -2318,7 +2358,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			e=expression();
 			exprs.add(e);
 			{
-			_loop96:
+			_loop97:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -2326,7 +2366,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					exprs.add(e);
 				}
 				else {
-					break _loop96;
+					break _loop97;
 				}
 				
 			} while (true);
@@ -2352,7 +2392,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			e=logical_and_expr();
 			{
-			_loop122:
+			_loop124:
 			do {
 				if ((LA(1)==OR)) {
 					match(OR);
@@ -2372,7 +2412,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					
 				}
 				else {
-					break _loop122;
+					break _loop124;
 				}
 				
 			} while (true);
@@ -2416,7 +2456,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 				e=expression();
 				exprs.add(e);
 				{
-				_loop119:
+				_loop121:
 				do {
 					if ((LA(1)==COMMA)) {
 						match(COMMA);
@@ -2424,7 +2464,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						exprs.add(e);
 					}
 					else {
-						break _loop119;
+						break _loop121;
 					}
 					
 				} while (true);
@@ -2462,7 +2502,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			e=logical_not_expr();
 			{
-			_loop125:
+			_loop127:
 			do {
 				if ((LA(1)==AND)) {
 					match(AND);
@@ -2482,7 +2522,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					
 				}
 				else {
-					break _loop125;
+					break _loop127;
 				}
 				
 			} while (true);
@@ -2696,7 +2736,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			e=mult_expr();
 			{
-			_loop135:
+			_loop137:
 			do {
 				if ((LA(1)==PLUS||LA(1)==MINUS)) {
 					{
@@ -2723,7 +2763,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					e = new ArithmeticOperator(mathType, e, e2);
 				}
 				else {
-					break _loop135;
+					break _loop137;
 				}
 				
 			} while (true);
@@ -2752,7 +2792,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			e=unary_op_expr();
 			{
-			_loop139:
+			_loop141:
 			do {
 				if ((LA(1)==STAR||LA(1)==SLASH||LA(1)==PERCENT)) {
 					{
@@ -2785,7 +2825,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					e = new ArithmeticOperator(mathType, e, e2);
 				}
 				else {
-					break _loop139;
+					break _loop141;
 				}
 				
 			} while (true);
@@ -3142,6 +3182,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		"\"using\"",
 		"\"values\"",
 		"\"variance\"",
+		"\"verbose\"",
 		"\"view\"",
 		"\"where\"",
 		"\"work\"",
@@ -3197,22 +3238,22 @@ public NanoSqlParser(ParserSharedInputState state) {
 	};
 	
 	private static final long[] mk_tokenSet_0() {
-		long[] data = { 2L, 0L};
+		long[] data = { 2L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_0 = new BitSet(mk_tokenSet_0());
 	private static final long[] mk_tokenSet_1() {
-		long[] data = { 0L, 137438953472L, 0L, 0L};
+		long[] data = { 0L, 274877906944L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_1 = new BitSet(mk_tokenSet_1());
 	private static final long[] mk_tokenSet_2() {
-		long[] data = { 3755028072267517184L, 144114019844761088L, 0L, 0L};
+		long[] data = { 3755028072267517184L, 288228039689520640L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_2 = new BitSet(mk_tokenSet_2());
 	private static final long[] mk_tokenSet_3() {
-		long[] data = { 295137658540133632L, 144111752102027264L, 0L, 0L};
+		long[] data = { 295137658540133632L, 288223504204054528L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_3 = new BitSet(mk_tokenSet_3());
@@ -3222,57 +3263,57 @@ public NanoSqlParser(ParserSharedInputState state) {
 	}
 	public static final BitSet _tokenSet_4 = new BitSet(mk_tokenSet_4());
 	private static final long[] mk_tokenSet_5() {
-		long[] data = { 0L, 13194139533312L, 0L, 0L};
+		long[] data = { 0L, 26388279066624L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_5 = new BitSet(mk_tokenSet_5());
 	private static final long[] mk_tokenSet_6() {
-		long[] data = { 90353467524382720L, 13194139533376L, 0L, 0L};
+		long[] data = { 90353467524382720L, 26388279066688L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_6 = new BitSet(mk_tokenSet_6());
 	private static final long[] mk_tokenSet_7() {
-		long[] data = { 0L, 8933531975680L, 0L, 0L};
+		long[] data = { 0L, 17867063951360L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_7 = new BitSet(mk_tokenSet_7());
 	private static final long[] mk_tokenSet_8() {
-		long[] data = { 844426004398080L, 171139873921564704L, 0L, 0L};
+		long[] data = { 844426004398080L, 342279747843129376L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_8 = new BitSet(mk_tokenSet_8());
 	private static final long[] mk_tokenSet_9() {
-		long[] data = { 7599829740422400L, 288194087973036064L, 0L, 0L};
+		long[] data = { 7599829740422400L, 576388175946072096L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_9 = new BitSet(mk_tokenSet_9());
 	private static final long[] mk_tokenSet_10() {
-		long[] data = { 4503603922337792L, 30923764539392L, 0L, 0L};
+		long[] data = { 4503603922337792L, 61847529078784L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_10 = new BitSet(mk_tokenSet_10());
 	private static final long[] mk_tokenSet_11() {
-		long[] data = { 4503599627370496L, 26525718028288L, 0L, 0L};
+		long[] data = { 4503599627370496L, 53051436056576L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_11 = new BitSet(mk_tokenSet_11());
 	private static final long[] mk_tokenSet_12() {
-		long[] data = { 292885858726448128L, 66932770349056L, 0L, 0L};
+		long[] data = { 292885858726448128L, 133865540698112L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_12 = new BitSet(mk_tokenSet_12());
 	private static final long[] mk_tokenSet_13() {
-		long[] data = { 288382254787330048L, 0L};
+		long[] data = { 288382254787330048L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_13 = new BitSet(mk_tokenSet_13());
 	private static final long[] mk_tokenSet_14() {
-		long[] data = { 4503599627370496L, 30923764539392L, 0L, 0L};
+		long[] data = { 4503599627370496L, 61847529078784L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_14 = new BitSet(mk_tokenSet_14());
 	private static final long[] mk_tokenSet_15() {
-		long[] data = { 294011754321543168L, 30923764539904L, 0L, 0L};
+		long[] data = { 294011754321543168L, 61847529079296L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_15 = new BitSet(mk_tokenSet_15());
@@ -3282,27 +3323,27 @@ public NanoSqlParser(ParserSharedInputState state) {
 	}
 	public static final BitSet _tokenSet_16 = new BitSet(mk_tokenSet_16());
 	private static final long[] mk_tokenSet_17() {
-		long[] data = { 295137658540133376L, 66932770349056L, 0L, 0L};
+		long[] data = { 295137658540133376L, 133865540698112L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_17 = new BitSet(mk_tokenSet_17());
 	private static final long[] mk_tokenSet_18() {
-		long[] data = { 295137658540133632L, 66932770349056L, 0L, 0L};
+		long[] data = { 295137658540133632L, 133865540698112L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_18 = new BitSet(mk_tokenSet_18());
 	private static final long[] mk_tokenSet_19() {
-		long[] data = { 295137658540133632L, 8933394536734720L, 0L, 0L};
+		long[] data = { 295137658540133632L, 17866789073469440L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_19 = new BitSet(mk_tokenSet_19());
 	private static final long[] mk_tokenSet_20() {
-		long[] data = { 295137658540133632L, 35954992300957696L, 0L, 0L};
+		long[] data = { 295137658540133632L, 71909984601915392L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_20 = new BitSet(mk_tokenSet_20());
 	private static final long[] mk_tokenSet_21() {
-		long[] data = { 295137658540133632L, 144111820821504000L, 0L, 0L};
+		long[] data = { 295137658540133632L, 288223641643008000L, 0L, 0L};
 		return data;
 	}
 	public static final BitSet _tokenSet_21 = new BitSet(mk_tokenSet_21());

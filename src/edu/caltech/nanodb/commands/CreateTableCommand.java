@@ -5,14 +5,19 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 
+import edu.caltech.nanodb.indexes.IndexInfo;
 import org.apache.log4j.Logger;
 
-import edu.caltech.nanodb.relations.TableConstraintType;
-import edu.caltech.nanodb.relations.TableSchema;
+import edu.caltech.nanodb.indexes.IndexFileInfo;
 
 import edu.caltech.nanodb.relations.ColumnInfo;
+import edu.caltech.nanodb.relations.ForeignKeyColumnIndexes;
+import edu.caltech.nanodb.relations.KeyColumnIndexes;
+import edu.caltech.nanodb.relations.TableConstraintType;
+import edu.caltech.nanodb.relations.TableSchema;
 
 import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.storage.TableFileInfo;
@@ -163,53 +168,20 @@ public class CreateTableCommand extends Command {
                 }
             }
         }
-        
-        // Add constraints to the table's schema.
-        for (ConstraintDecl cd : constraints) {
-            switch (cd.getType()) {
-            case PRIMARY_KEY:
-                // Make a primary key constraint and put it on the schema.
-                schema.setPrimaryKey(schema.makeKey(cd.getColumnNames()));
-                break;
 
-            case UNIQUE:
-                // Make a unique key constraint and put it on the schema.
-                schema.addCandidateKey(schema.makeKey(cd.getColumnNames()));
-                break;
-
-            case FOREIGN_KEY:
-                // Make a foreign key constraint and put it on the schema.
-
-                // This should never be null since we already resolved all
-                // foreign-key table references earlier.
-                TableSchema refTableSchema = referencedTables.get(cd.getRefTable());
-
-                // TODO:  Make sure that the referenced columns are actually a
-                //        candidate key or primary key on the referenced table.
-
-                schema.addForeignKey(schema.makeForeignKey(cd.getColumnNames(),
-                    cd.getRefTable(), refTableSchema, cd.getRefColumnNames()));
-
-                break;
-
-            case NOT_NULL:
-                // TODO:  Record that the column cannot be set to NULL.
-                throw new UnsupportedOperationException(
-                    "NOT NULL not yet implemented");
-
-                // break;
-            
-            default:
-                throw new ExecutionException("Unexpected constraint type " +
-                    cd.getType());
-            }
+        try {
+            initTableConstraints(storageManager, schema, referencedTables);
+        }
+        catch (IOException e) {
+            throw new ExecutionException(
+                "Couldn't initialize all constraints on table " + tableName, e);
         }
 
         // Get the table manager and create the table.
 
         logger.debug("Creating the new table " + tableName + " on disk.");
         try {
-            StorageManager.getInstance().createTable(tblFileInfo);
+            storageManager.createTable(tblFileInfo);
         }
         catch (IOException ioe) {
             throw new ExecutionException("Could not create table \"" + tableName +
@@ -218,6 +190,92 @@ public class CreateTableCommand extends Command {
         logger.debug("New table " + tableName + " is created!");
 
         System.out.println("Created table:  " + tableName);
+    }
+    
+    
+    private void initTableConstraints(StorageManager storageManager,
+        TableSchema schema, HashMap<String, TableSchema> referencedTables)
+        throws ExecutionException, IOException {
+
+        // Add constraints to the table's schema, creating indexes where
+        // appropriate so that the constraints can be enforced.
+
+        HashSet<String> constraintNames = new HashSet<String>();
+
+        for (ConstraintDecl cd : constraints) {
+            // Make sure that if constraint names are specified, every
+            // constraint is actually uniquely named.
+            if (cd.getName() != null) {
+                if (!constraintNames.add(cd.getName())) {
+                    throw new ExecutionException("Constraint name " +
+                        cd.getName() + " appears multiple times.");
+                }
+            }
+
+            TableConstraintType type = cd.getType();
+            if (type == TableConstraintType.PRIMARY_KEY) {
+                // Make a primary key constraint and put it on the schema.
+                KeyColumnIndexes pk = schema.makeKey(cd.getColumnNames());
+                pk.setConstraintName(cd.getName());
+
+                // Make the index, then store the index name on the key object.
+
+                IndexInfo info = new IndexInfo(tableName, schema, pk, true);
+                info.setConstraintType(TableConstraintType.PRIMARY_KEY);
+
+                IndexFileInfo idxFileInfo = new IndexFileInfo(null, tableName, info);
+                storageManager.createUnnamedIndex(idxFileInfo);
+                logger.debug(String.format(
+                    "Created index %s on table %s to enforce primary key.",
+                    idxFileInfo.getIndexName(), idxFileInfo.getTableName()));
+
+                pk.setIndexName(idxFileInfo.getIndexName());
+                schema.setPrimaryKey(pk);
+            }
+            else if (type == TableConstraintType.UNIQUE) {
+                // Make a unique key constraint and put it on the schema.
+                KeyColumnIndexes ck = schema.makeKey(cd.getColumnNames());
+                ck.setConstraintName(cd.getName());
+
+                // Make the index, then store the index name on the key object.
+
+                IndexInfo info = new IndexInfo(tableName, schema, ck, true);
+                info.setConstraintType(TableConstraintType.UNIQUE);
+
+                IndexFileInfo idxFileInfo = new IndexFileInfo(null, tableName, info);
+                storageManager.createUnnamedIndex(idxFileInfo);
+                logger.debug(String.format(
+                    "Created index %s on table %s to enforce candidate key.",
+                    idxFileInfo.getIndexName(), idxFileInfo.getTableName()));
+
+                ck.setIndexName(idxFileInfo.getIndexName());
+                schema.addCandidateKey(ck);
+            }
+            else if (type == TableConstraintType.FOREIGN_KEY) {
+                // Make a foreign key constraint and put it on the schema.
+
+                // This should never be null since we already resolved all
+                // foreign-key table references earlier.
+                TableSchema refTableSchema = referencedTables.get(cd.getRefTable());
+
+                // The makeForeignKey() method ensures that the referenced
+                // columns are also a candidate key (or primary key) on the
+                // referenced table.
+                ForeignKeyColumnIndexes fk = schema.makeForeignKey(cd.getColumnNames(),
+                    cd.getRefTable(), refTableSchema, cd.getRefColumnNames());
+                fk.setConstraintName(cd.getName());
+                schema.addForeignKey(fk);
+            }
+            else if (type == TableConstraintType.NOT_NULL) {
+                // TODO:  Record that the column cannot be set to NULL.
+                throw new UnsupportedOperationException(
+                    "NOT NULL not yet implemented");
+            }
+            else {
+                throw new ExecutionException("Unexpected constraint type " +
+                    cd.getType());
+            }
+        }
     }
 
 

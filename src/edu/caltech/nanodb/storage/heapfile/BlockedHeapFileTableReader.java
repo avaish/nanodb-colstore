@@ -108,7 +108,7 @@ public class BlockedHeapFileTableReader implements BlockedTableReader {
         while (slot < numSlots) {
             int nextOffset = DataPage.getSlotValue(dbPage, slot);
             if (nextOffset != DataPage.EMPTY_SLOT)
-                return new PageTuple(tblFileInfo, dbPage, slot, nextOffset);
+                return new HeapFilePageTuple(tblFileInfo, dbPage, slot, nextOffset);
 
             slot++;
         }
@@ -125,14 +125,16 @@ public class BlockedHeapFileTableReader implements BlockedTableReader {
             throw new IllegalArgumentException(
                 "Tuple must be of type PageTuple; got " + tup.getClass());
         }
-        PageTuple ptup = (PageTuple) tup;
+        HeapFilePageTuple ptup = (HeapFilePageTuple) tup;
 
         int nextSlot = ptup.getSlot() + 1;
         int numSlots = DataPage.getNumSlots(dbPage);
         while (nextSlot < numSlots) {
             int nextOffset = DataPage.getSlotValue(dbPage, nextSlot);
-            if (nextOffset != DataPage.EMPTY_SLOT)
-                return new PageTuple(tblFileInfo, dbPage, nextSlot, nextOffset);
+            if (nextOffset != DataPage.EMPTY_SLOT) {
+                return new HeapFilePageTuple(tblFileInfo, dbPage, nextSlot,
+                    nextOffset);
+            }
 
             nextSlot++;
         }

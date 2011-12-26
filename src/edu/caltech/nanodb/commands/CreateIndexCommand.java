@@ -1,9 +1,8 @@
 package edu.caltech.nanodb.commands;
 
 import edu.caltech.nanodb.indexes.IndexFileInfo;
-import edu.caltech.nanodb.relations.ColumnInfo;
-import edu.caltech.nanodb.relations.Schema;
-import edu.caltech.nanodb.relations.SchemaNameException;
+import edu.caltech.nanodb.indexes.IndexInfo;
+import edu.caltech.nanodb.relations.TableSchema;
 import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.storage.TableFileInfo;
 import org.apache.log4j.Logger;
@@ -11,7 +10,6 @@ import org.apache.log4j.Logger;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
 
 /**
  * This command-class represents the <tt>CREATE INDEX</tt> DDL command.
@@ -22,6 +20,7 @@ public class CreateIndexCommand extends Command {
 
 
     private String indexName;
+
 
     private String indexType;
 
@@ -46,27 +45,21 @@ public class CreateIndexCommand extends Command {
 
 
 
-    public CreateIndexCommand(String indexName, String indexType) {
+    public CreateIndexCommand(String indexName, String tableName,
+                              boolean unique) {
         super(Type.DDL);
 
-        if (indexName == null)
-            throw new IllegalArgumentException("indexName cannot be null");
-
-        if (indexType == null)
-            throw new IllegalArgumentException("indexType cannot be null");
+        if (tableName == null)
+            throw new IllegalArgumentException("tableName cannot be null");
 
         this.indexName = indexName;
-        this.indexType = indexType;
-    }
-
-
-    public void setTable(String tableName) {
         this.tableName = tableName;
+        this.unique = unique;
     }
 
 
-    public void setUnique(boolean unique) {
-        this.unique = unique;
+    public void setIndexType(String indexType) {
+        this.indexType = indexType;
     }
 
 
@@ -81,8 +74,8 @@ public class CreateIndexCommand extends Command {
 
 
     public void execute() throws ExecutionException {
-        StorageManager storageManager = StorageManager.getInstance();
         // Set up the index-file info based on the command details.
+        StorageManager storageManager = StorageManager.getInstance();
 
         // Open the table and get the schema for the table.
         logger.debug(String.format("Opening table %s to retrieve schema",
@@ -101,48 +94,45 @@ public class CreateIndexCommand extends Command {
         }
 
         // Look up each column mentioned in the index.
-        Schema schema = tblFileInfo.getSchema();
-        ArrayList<ColumnInfo> colInfos = new ArrayList<ColumnInfo>();
-        HashSet<String> colNameSet = new HashSet<String>();
-        for (String colName : columnNames) {
-            // Make sure we haven't already seen this column!
-            if (colNameSet.contains(colName)) {
-                throw new ExecutionException(String.format(
-                    "Column %s was specified multiple times!", colName));
-            }
-
-            try {
-                ColumnInfo colInfo = schema.getColumnInfo(colName);
-                colInfos.add(colInfo);
-            }
-            catch (SchemaNameException e) {
-                throw new ExecutionException(
-                    String.format("Column %s doesn't exist", colName), e);
-            }
-
-            colNameSet.add(colName);
-        }
+        TableSchema schema = tblFileInfo.getSchema();
 
         logger.debug(String.format("Creating an IndexFileInfo object " +
             "describing the new index %s on table %s.", indexName, tableName));
-
         IndexFileInfo idxFileInfo =
-            new IndexFileInfo(indexName, tableName, null);
+            new IndexFileInfo(indexName, tableName, (IndexInfo) null);
 
-        // Get the index manager and create the index.
+        if (indexName == null) {
+            // This is an unnamed index.
 
-        logger.debug("Creating the new index " + indexName + " on disk.");
-        try {
-            StorageManager.getInstance().createIndex(idxFileInfo);
+            logger.debug("Creating the new unnamed index on disk.");
+            try {
+                storageManager.createUnnamedIndex(idxFileInfo);
+            }
+            catch (IOException e) {
+                throw new ExecutionException(String.format(
+                    "Could not create unnamed index on table \"%s\".  See " +
+                        "nested exception for details.", tableName), e);
+            }
         }
-        catch (IOException ioe) {
-            throw new ExecutionException(String.format(
-                "Could not create index \"%s\" on table \"%s\".  See nested " +
-                "exception for details.", indexName, tableName), ioe);
+        else {
+            // This is a named index.
+
+            logger.debug("Creating the new index " + indexName + " on disk.");
+            try {
+                storageManager.createIndex(idxFileInfo);
+            }
+            catch (IOException e) {
+                throw new ExecutionException(String.format(
+                    "Could not create index \"%s\" on table \"%s\".  See " +
+                        "nested exception for details.", indexName, tableName), e);
+            }
         }
+
+        indexName = idxFileInfo.getIndexName();
         logger.debug(String.format("New index %s on table %s is created!",
             indexName, tableName));
 
-        System.out.println("Created index:  " + indexName);
+        System.out.printf("Created index %s on table %s.\n",
+            indexName, tableName);
     }
 }
