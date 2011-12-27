@@ -16,61 +16,56 @@ import edu.caltech.nanodb.storage.*;
  * {@link edu.caltech.nanodb.storage.DBPage} class.
  **/
 @Test
-public class TestDBPage {
+public class TestDBPage extends StorageTestCase {
 
 	
-	/**
-	 * Keeps an instance of dbPage to be accessed by each test method after
-	 * setup. A new dbPage will be created before each test method.
+    /**
+	 * This is the filename used for the tests in this class.
 	 */
-	private DBPage dbPage;
+	private final String TEST_FILE_NAME = "TestDBPage_TestFile";
 
 	
-	/**
-	 * dbFile is instantiated once for the class.
-	 */
-	private DBFile dbFile;
+	/** This is the file-manager instance used for the tests in this class. */
+	private FileManager fileMgr;
 
-	
-	/**
-	 * A file with this name will be temporarily created under ./datafiles
-	 * directory.
-	 */
-	private final String TEST_FILE_NAME = "DBPageTestFile";
 
-	
-	/**
-	 * Keeps an instance of filemanager to remove dbFile at the end of the 
-	 * class.
-	 */
-	private FileManager filemanager;
+    /**
+     * Instances of <tt>DBPage</tt> must be associated with a <tt>DBFile</tt>,
+     * so this is the file used for testing.  It is created and cleaned up by
+     * this class.
+     */
+    private DBFile dbFile;
 
-	
+
+    /**
+     * This is the <tt>DBPage</tt> object that all tests run against.  Since we
+     * are simply writing various values to the data page, we can use a single
+     * object for all the different tests.
+     */
+    private DBPage dbPage;
+
+
 	/**
-	 * Initiate DBFile dbFile.
+	 * This set-up method initializes the file manager, data-file, and page that
+     * all tests will run against.
 	 */
 	@BeforeClass
 	public void beforeClass() throws IOException {
 
-		// Initiate an instance of StorageManager; get an instance of FileManager
-		try {
-			StorageManager.init();
-		} catch (IllegalStateException e2) {
-			// StorageManger is already created.
-		}
-		
-		StorageManager stmgr = StorageManager.getInstance();
-		filemanager = new FileManager(stmgr);
+		fileMgr = new FileManager(testBaseDir);
 
         // Get DBFile
 		DBFileType type = DBFileType.HEAP_DATA_FILE;
 		
 		try {
 			int pageSize = DBFile.DEFAULT_PAGESIZE; // 8k
-			dbFile = filemanager.createDBFile(TEST_FILE_NAME, type, pageSize);
-		} catch(IOException e) {
+			dbFile = fileMgr.createDBFile(TEST_FILE_NAME, type, pageSize);
+		}
+        catch (IOException e) {
 			// The file is already created
 		}
+
+        dbPage = new DBPage(dbFile, 0);
 	}
 
 	
@@ -81,27 +76,7 @@ public class TestDBPage {
 	 */
 	@AfterClass
 	public void afterClass() throws IOException {
-		filemanager.deleteDBFile(dbFile);
-	}
-
-	
-	/**
-	 * Create new dbPage on the same dbFile will effectively erase all data on
-	 * dbFile.
-	 * 
-	 * @throws IOException
-	 */
-	@BeforeMethod
-	public void beforeMethod() throws IOException {
-		// Create DBPage
-		int pageNo = 1; // Since we only need one page, any integer will do.
-		dbPage = new DBPage(dbFile, pageNo);
-		assert dbPage != null : "dbPage fails to create.";
-	}
-
-	@AfterMethod
-	public void afterMethod() {
-		// no tearDown is necessary. @AfterClass tear down will suffice.
+		fileMgr.deleteDBFile(dbFile);
 	}
 
 	

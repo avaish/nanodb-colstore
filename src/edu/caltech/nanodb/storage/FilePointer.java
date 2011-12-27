@@ -16,12 +16,6 @@ package edu.caltech.nanodb.storage;
  * </ul>
  */
 public class FilePointer implements Comparable<FilePointer>, Cloneable {
-    /**
-     * This constant can be used for a "null" file-pointer; that is, a
-     * file-pointer that points to nothing.
-     */
-    public static final FilePointer NULL_FPTR = new FilePointer(-1, 0);
-
 
     /** The page number in the table file.  This value is nonnegative. */
     private int pageNo;

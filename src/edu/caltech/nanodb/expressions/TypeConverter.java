@@ -136,7 +136,7 @@ public class TypeConverter {
             //        log warnings about them!
 
             Number num = (Number) obj;
-            result = new Byte(num.byteValue());
+            result = Byte.valueOf(num.byteValue());
         }
         else if (obj instanceof String) {
             try {
@@ -184,7 +184,7 @@ public class TypeConverter {
             //        warnings about them!
 
             Number num = (Number) obj;
-            result = new Short(num.shortValue());
+            result = Short.valueOf(num.shortValue());
         }
         else if (obj instanceof String) {
             try {
@@ -232,7 +232,7 @@ public class TypeConverter {
             //        warnings about them!
 
             Number num = (Number) obj;
-            result = new Integer(num.intValue());
+            result = Integer.valueOf(num.intValue());
         }
         else if (obj instanceof String) {
             try {
@@ -280,7 +280,7 @@ public class TypeConverter {
             //        warnings about them!
 
             Number num = (Number) obj;
-            result = new Long(num.longValue());
+            result = Long.valueOf(num.longValue());
         }
         else if (obj instanceof String) {
             try {
@@ -328,7 +328,7 @@ public class TypeConverter {
             //        warnings about them!
 
             Number num = (Number) obj;
-            result = new Float(num.floatValue());
+            result = Float.valueOf(num.floatValue());
         }
         else if (obj instanceof String) {
             try {
@@ -376,7 +376,7 @@ public class TypeConverter {
             // truncating or overflowing, AFAIK.
 
             Number num = (Number) obj;
-            result = new Double(num.doubleValue());
+            result = Double.valueOf(num.doubleValue());
         }
         else if (obj instanceof String) {
             try {

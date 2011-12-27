@@ -3,16 +3,16 @@ package edu.caltech.nanodb.commands;
 
 import java.io.IOException;
 
-import edu.caltech.nanodb.relations.ColumnInfo;
 import org.apache.log4j.Logger;
 
+import edu.caltech.nanodb.client.SessionState;
+import edu.caltech.nanodb.qeval.TuplePrinter;
+
 import edu.caltech.nanodb.qeval.DPJoinPlanner;
-import edu.caltech.nanodb.qeval.Planner;
 import edu.caltech.nanodb.qeval.TupleProcessor;
 
 import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.SchemaNameException;
-import edu.caltech.nanodb.relations.Tuple;
 
 
 /**
@@ -30,56 +30,13 @@ public class SelectCommand extends QueryCommand {
 
 
     /**
-     * This implementation of the tuple-processor interface simply prints out
-     * the schema and tuples produced by the <tt>SELECT</tt> statement.
-     */
-    private static class TuplePrinter implements TupleProcessor {
-
-        public void setSchema(Schema schema) {
-            // TODO:  Print the schema.  Not like this.
-            System.out.print("schema:  ");
-            for (ColumnInfo colInfo : schema) {
-                System.out.print(" | ");
-
-                String colName = colInfo.getName();
-                String tblName = colInfo.getTableName();
-
-                // TODO:  To only print out table-names when the column-name is
-                //        ambiguous by itself, uncomment the first part and
-                //        then comment out the next part.
-
-                // Only print out the table name if there are multiple columns
-                // with this column name.
-                // if (schema.numColumnsWithName(colName) > 1 && tblName != null)
-                //     System.out.print(tblName + '.');
-
-                // If table name is specified, always print it out.
-                if (tblName != null)
-                    System.out.print(tblName + '.');
-
-                System.out.print(colName);
-            }
-            System.out.println(" |");
-        }
-
-        public void process(Tuple tuple) {
-            // TODO:  Print the tuple data.  Not like this.
-            System.out.print("tuple:  ");
-            for (int i = 0; i < tuple.getColumnCount(); i++) {
-                System.out.print(" | ");
-                System.out.print(tuple.getColumnValue(i));
-            }
-            System.out.println(" |");
-
-        }
-    }
-
-
-    /**
      * This object contains all the details of the top-level select clause,
      * including any subqueries, that is going to be evaluated.
      */
     private SelectClause selClause;
+
+
+    private TupleProcessor tupleProcessor;
 
 
     public SelectCommand(SelectClause selClause) {
@@ -116,10 +73,18 @@ public class SelectCommand extends QueryCommand {
         DPJoinPlanner planner = new DPJoinPlanner();
         plan = planner.makePlan(selClause);
     }
+    
+    
+    public void setTupleProcessor(TupleProcessor tupleProcessor) {
+        this.tupleProcessor = tupleProcessor;
+    }
 
 
     protected TupleProcessor getTupleProcessor() {
-        return new TuplePrinter();
+        if (tupleProcessor == null)
+            tupleProcessor = new TuplePrinter(SessionState.get().getOutputStream());
+
+        return tupleProcessor;
     }
 
 

@@ -748,8 +748,9 @@ public class HeapFileTableManager implements TableManager {
 
         Schema schema = tblFileInfo.getSchema();
 
-        for (String colName : newValues.keySet()) {
-            Object value = newValues.get(colName);
+        for (Map.Entry<String, Object> entry : newValues.entrySet()) {
+            String colName = entry.getKey();
+            Object value = entry.getValue();
 
             int colIndex = schema.getColumnIndex(colName);
             ptup.setColumnValue(colIndex, value);

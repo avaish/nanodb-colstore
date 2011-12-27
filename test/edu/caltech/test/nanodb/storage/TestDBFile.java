@@ -1,9 +1,14 @@
 package edu.caltech.test.nanodb.storage;
 
 
+import edu.caltech.nanodb.storage.DBFileType;
 import org.testng.annotations.Test;
 
 import edu.caltech.nanodb.storage.DBFile;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 
 
 /**
@@ -16,15 +21,17 @@ public class TestDBFile {
     public void testIsValidPageSize() {
         // This is too small.
         assert !DBFile.isValidPageSize(256);
+
+        // This is too large.
+        assert !DBFile.isValidPageSize(131072);
+
+        // These are not a power of 2.
         assert !DBFile.isValidPageSize(511);
-
-        assert DBFile.isValidPageSize(512);
-        assert DBFile.isValidPageSize(1024);
-        assert DBFile.isValidPageSize(2048);
-        assert DBFile.isValidPageSize(4096);
-        assert DBFile.isValidPageSize(8192);
-        assert DBFile.isValidPageSize(65536);
-
+        assert !DBFile.isValidPageSize(513);
+        assert !DBFile.isValidPageSize(1023);
+        assert !DBFile.isValidPageSize(1025);
+        assert !DBFile.isValidPageSize(6144);
+        assert !DBFile.isValidPageSize(65537);
         assert !DBFile.isValidPageSize(515);
         assert !DBFile.isValidPageSize(1063);
         assert !DBFile.isValidPageSize(3072);
@@ -32,9 +39,13 @@ public class TestDBFile {
         assert !DBFile.isValidPageSize(10000);
         assert !DBFile.isValidPageSize(65535);
 
-        // This is too large.
-        assert !DBFile.isValidPageSize(65537);
-        assert !DBFile.isValidPageSize(131072);
+        // These are valid sizes.
+        assert DBFile.isValidPageSize(512);
+        assert DBFile.isValidPageSize(1024);
+        assert DBFile.isValidPageSize(2048);
+        assert DBFile.isValidPageSize(4096);
+        assert DBFile.isValidPageSize(8192);
+        assert DBFile.isValidPageSize(65536);
     }
 
 
@@ -91,6 +102,37 @@ public class TestDBFile {
         assert DBFile.decodePageSize(15) == 32768;
         assert DBFile.decodePageSize(16) == 65536;
     }
-    
 
+
+    private File getTempFile() throws IOException {
+        File tmp = File.createTempFile("tmp", null);
+        tmp.deleteOnExit();
+
+        return tmp;
+    }
+
+
+    public void testEqualsHashCode() throws IOException {
+        File f1 = getTempFile();
+        File f2 = getTempFile();
+
+        DBFile dbf1 = new DBFile(f1, DBFileType.HEAP_DATA_FILE,
+            DBFile.DEFAULT_PAGESIZE);
+
+        DBFile dbf2 = new DBFile(f2, DBFileType.HEAP_DATA_FILE,
+            DBFile.DEFAULT_PAGESIZE);
+
+        DBFile dbf3 = new DBFile(f1, DBFileType.HEAP_DATA_FILE,
+            DBFile.DEFAULT_PAGESIZE);
+        
+        assert !dbf1.equals(dbf2);
+        assert !dbf2.equals(dbf1);
+
+        assert dbf1.equals(dbf3);
+        assert dbf3.equals(dbf1);
+        
+        assert dbf1.hashCode() == dbf3.hashCode();
+        assert dbf1.hashCode() != dbf2.hashCode();
+        assert dbf2.hashCode() != dbf3.hashCode();
+    }
 }

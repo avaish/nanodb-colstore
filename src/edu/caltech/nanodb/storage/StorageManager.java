@@ -4,14 +4,15 @@ package edu.caltech.nanodb.storage;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.Random;
 
-import edu.caltech.nanodb.relations.TableConstraintType;
-import edu.caltech.nanodb.storage.btreeindex.BTreeIndexManager;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.indexes.IndexFileInfo;
 import edu.caltech.nanodb.indexes.IndexManager;
+
+import edu.caltech.nanodb.relations.TableConstraintType;
+
+import edu.caltech.nanodb.storage.btreeindex.BTreeIndexManager;
 import edu.caltech.nanodb.storage.heapfile.HeapFileTableManager;
 import edu.caltech.nanodb.storage.writeahead.WALManager;
 
@@ -190,10 +191,6 @@ public class StorageManager {
         new HashMap<String, IndexFileInfo>();
 
 
-    /** This is used for generating unique names for unnamed indexes. */
-    private Random random = new Random();
-
-
     /**
      * The constructor initalizes the storage manager based on the passed-in
      * arguments.  It is private because we only want a singleton instance of
@@ -223,7 +220,7 @@ public class StorageManager {
 
         this.baseDir = baseDir;
 
-        fileManager = new FileManager(this);
+        fileManager = new FileManager(baseDir);
         bufferManager = new BufferManager(fileManager);
 
         initFileTypeManagers();
@@ -734,6 +731,8 @@ public class StorageManager {
      * This method opens the data file corresponding to the specified index
      * name and reads in the index's details.  If the index is already open
      * then the cached data is simply returned.
+     *
+     * @param tblFileInfo the table that the index is defined on
      *
      * @param indexName the name of the index to open.  Indexes are not
      *        referenced directly except by CREATE/ALTER/DROP INDEX statements,

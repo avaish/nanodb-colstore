@@ -1,7 +1,9 @@
 package edu.caltech.nanodb.client;
 
+import edu.caltech.nanodb.storage.StorageManager;
 import org.apache.log4j.Logger;
 
+import javax.swing.plaf.basic.BasicInternalFrameTitlePane;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,47 +36,12 @@ public class SharedServer {
         new HashMap<Integer, Thread>();
 
 
-    private static class ClientHandler implements Runnable {
-        private int id;
-        private Socket sock;
+    public void startup() throws IOException {
+        logger.info("Starting shared database server.");
 
-        public ClientHandler(int id, Socket sock) {
-            this.id = id;
-            this.sock = sock;
-        }
-
-        public void run() {
-            try {
-                ObjectInputStream ois = new ObjectInputStream(sock.getInputStream());
-                ObjectOutputStream oos = new ObjectOutputStream(sock.getOutputStream());
-
-                while (true) {
-                    try {
-                        ois.readObject();
-                    }
-                    catch (EOFException e) {
-                        logger.info(String.format("Client %d disconnected.\n", id));
-                        break;
-                    }
-                    catch (IOException e) {
-    
-                    }
-                    catch (ClassNotFoundException e) {
-    
-                    }
-                }
-            }
-            catch (IOException e) {
-                // TODO
-                // TODO
-            }
-        }
-    }
-
-
-
-    public void start() throws IOException {
-        // TODO:  Start up the database by doing the appropriate startup processing.
+        // Start up the database by doing the appropriate startup processing.
+        logger.info("Initializing storage manager.");
+        StorageManager.init();
 
         // Register a shutdown hook so we can shut down the database cleanly.
         Runtime rt = Runtime.getRuntime();
@@ -89,7 +56,9 @@ public class SharedServer {
         // handle requests from that client.
         int clientID = 1;
         while (true) {
+            logger.info("Waiting for client connection.");
             Socket sock = serverSocket.accept();
+            logger.info("Received client connection.");
             ClientHandler clientHandler = new ClientHandler(clientID, sock);
             Thread t = new Thread(clientHandler);
 
@@ -107,6 +76,25 @@ public class SharedServer {
     public void shutdown() {
         for (Thread t : clientThreads.values()) {
             // TODO:  Shut down the client thread.
+        }
+        
+        try {
+            StorageManager.shutdown();
+        }
+        catch (IOException e) {
+            logger.error("Couldn't cleanly shut down the Storage Manager!", e);
+        }
+    }
+    
+    
+    public static void main(String[] args) {
+        SharedServer server = new SharedServer();
+        try {
+            server.startup();
+        }
+        catch (IOException e) {
+            System.out.println("Couldn't start shared server:  " + e.getMessage());
+            e.printStackTrace(System.out);
         }
     }
 }

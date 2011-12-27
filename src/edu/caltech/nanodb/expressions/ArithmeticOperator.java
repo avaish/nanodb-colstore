@@ -211,7 +211,7 @@ public class ArithmeticOperator extends Expression {
             throw new ExpressionException("Unrecognized arithmetic type " + type);
         }
 
-        return new Double(result);
+        return Double.valueOf(result);
     }
 
 
@@ -259,7 +259,7 @@ public class ArithmeticOperator extends Expression {
             throw new ExpressionException("Unrecognized arithmetic type " + type);
         }
 
-        return new Float(result);
+        return Float.valueOf(result);
     }
 
 
@@ -311,7 +311,7 @@ public class ArithmeticOperator extends Expression {
             throw new ExpressionException("Unrecognized arithmetic type " + type);
         }
 
-        return new Long(result);
+        return Long.valueOf(result);
     }
 
 
@@ -363,7 +363,7 @@ public class ArithmeticOperator extends Expression {
             throw new ExpressionException("Unrecognized arithmetic type " + type);
         }
 
-        return new Integer(result);
+        return Integer.valueOf(result);
     }
 
 

@@ -228,6 +228,9 @@ public class CompareOperator extends Expression {
             case LESS_OR_EQUAL:
                 type = CompareOperator.Type.GREATER_OR_EQUAL;
                 break;
+
+            default:
+                // No changes needed.
             }
         }
     }

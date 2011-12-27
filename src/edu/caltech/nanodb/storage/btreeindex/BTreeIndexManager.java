@@ -2,27 +2,28 @@ package edu.caltech.nanodb.storage.btreeindex;
 
 
 import java.io.IOException;
-import java.util.Comparator;
+
 import java.util.List;
 
-import edu.caltech.nanodb.expressions.TupleLiteral;
-import edu.caltech.nanodb.indexes.IndexInfo;
-import edu.caltech.nanodb.indexes.IndexPointer;
-import edu.caltech.nanodb.relations.ColumnIndexes;
-import edu.caltech.nanodb.relations.ColumnInfo;
-import edu.caltech.nanodb.relations.TableSchema;
-import edu.caltech.nanodb.relations.Tuple;
-import edu.caltech.nanodb.storage.FilePointer;
-import edu.caltech.nanodb.storage.PageTuple;
 import org.apache.log4j.Logger;
 
-import edu.caltech.nanodb.indexes.IndexFileInfo;
-import edu.caltech.nanodb.indexes.IndexManager;
+import edu.caltech.nanodb.expressions.TupleLiteral;
 
+import edu.caltech.nanodb.indexes.IndexFileInfo;
+import edu.caltech.nanodb.indexes.IndexInfo;
+import edu.caltech.nanodb.indexes.IndexManager;
+import edu.caltech.nanodb.indexes.IndexPointer;
+
+import edu.caltech.nanodb.relations.ColumnIndexes;
+import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.relations.TableConstraintType;
+import edu.caltech.nanodb.relations.TableSchema;
+import edu.caltech.nanodb.relations.Tuple;
 
 import edu.caltech.nanodb.storage.DBFile;
 import edu.caltech.nanodb.storage.DBPage;
+import edu.caltech.nanodb.storage.FilePointer;
+import edu.caltech.nanodb.storage.PageTuple;
 import edu.caltech.nanodb.storage.PageWriter;
 import edu.caltech.nanodb.storage.StorageManager;
 
@@ -168,7 +169,7 @@ public class BTreeIndexManager implements IndexManager {
     @Override
     public IndexPointer addTuple(IndexFileInfo idxFileInfo, TableSchema schema,
         ColumnIndexes colIndexes, PageTuple tup) throws IOException {
-        
+
         // Get the schema of the index so that we can interpret the key-values.
         List<ColumnInfo> colInfos = schema.getColumnInfos(colIndexes);
 

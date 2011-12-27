@@ -102,8 +102,8 @@ public abstract class QueryCommand extends Command {
 
                 // Print out the evaluation statistics.
 
-                System.out.println(queryType + " took " +
-                    stats.getElapsedTimeSecs() + " sec to evaluate.");
+                out.printf("%s took %f sec to evaluate.%n", queryType,
+                    stats.getElapsedTimeSecs());
 
                 String desc;
                 switch (queryType) {
@@ -126,18 +126,18 @@ public abstract class QueryCommand extends Command {
                 default:
                     desc = "(UNKNOWN) ";
                 }
-                System.out.println(desc + stats.getRowsProduced() + " rows.");
+                out.println(desc + stats.getRowsProduced() + " rows.");
             }
             else {
-                System.out.println("Explain Plan:");
-                plan.printNodeTree(System.out, true, "    ");
+                out.println("Explain Plan:");
+                plan.printNodeTree(out, true, "    ");
 
-                System.out.println();
+                out.println();
 
                 PlanCost cost = plan.getCost();
-                System.out.println("Estimated " + cost.numTuples +
-                    " tuples with average size " + cost.tupleSize);
-                System.out.println("Estimated number of block IOs:  " +
+                out.printf("Estimated %f tuples with average size %f%n",
+                    cost.numTuples, cost.tupleSize);
+                out.println("Estimated number of block IOs:  " +
                     cost.numBlockIOs);
                 logger.debug("Estimated CPU cost:  " + cost.cpuCost);
             }

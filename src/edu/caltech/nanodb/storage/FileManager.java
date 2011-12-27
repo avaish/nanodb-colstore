@@ -1,5 +1,6 @@
 package edu.caltech.nanodb.storage;
 
+
 import org.apache.log4j.Logger;
 
 import java.io.EOFException;
@@ -27,14 +28,31 @@ public class FileManager {
     private static Logger logger = Logger.getLogger(FileManager.class);
 
 
-    private StorageManager storageManager;
+    /**
+     * The base directory that the file-manager should use for creating and
+     * opening files.
+     */
+    private File baseDir;
 
 
-    public FileManager(StorageManager storageManager) {
-        this.storageManager = storageManager;
+    /**
+     * Create a file-manager instance that uses the specified base directory.
+     * 
+     * @param baseDir the base-directory that the file-manager should use
+     */
+    public FileManager(File baseDir) {
+        if (baseDir == null)
+            throw new IllegalArgumentException("baseDir cannot be null");
+
+        if (!baseDir.isDirectory()) {
+            throw new IllegalArgumentException("baseDir value " + baseDir +
+               " is not a directory");
+        }
+
+        this.baseDir = baseDir;
     }
-
-
+    
+    
 
     /**
      * This helper function calculates the file-position of the specified page.
@@ -75,7 +93,7 @@ public class FileManager {
     public DBFile createDBFile(String filename, DBFileType type, int pageSize)
         throws IOException {
 
-        File f = new File(storageManager.getBaseDir(), filename);
+        File f = new File(baseDir, filename);
         if (f.exists())
             throw new IOException("File " + f + " already exists!");
 
@@ -114,10 +132,9 @@ public class FileManager {
      * @throws FileNotFoundException if the specified file doesn't exist.
      * @throws IOException if a more general IO issue occurs.
      */
-    public DBFile openDBFile(String filename)
-        throws FileNotFoundException, IOException {
+    public DBFile openDBFile(String filename) throws IOException {
 
-        File f = new File(storageManager.getBaseDir(), filename);
+        File f = new File(baseDir, filename);
         if (!f.isFile())
             throw new FileNotFoundException("File " + f + " doesn't exist.");
 
@@ -261,6 +278,9 @@ public class FileManager {
      * Note that the data might not actually be written to disk until a sync
      * operation is performed.
      *
+     * @param page the page to write back to the data file
+     *
+     * @throws IOException if an error occurs while writing the page to disk
      */
     public void saveDBPage(DBPage page) throws IOException {
         if (page == null)
@@ -321,7 +341,7 @@ public class FileManager {
      */
     public void deleteDBFile(String filename) throws IOException {
 
-        File f = new File(storageManager.getBaseDir(), filename);
+        File f = new File(baseDir, filename);
         deleteDBFile(f);
     }
 

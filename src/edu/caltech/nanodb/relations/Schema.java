@@ -1,6 +1,7 @@
 package edu.caltech.nanodb.relations;
 
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -29,13 +30,13 @@ import edu.caltech.nanodb.expressions.ColumnName;
  * tuples that they generate.
  * </p>
  */
-public class Schema implements Iterable<ColumnInfo> {
+public class Schema implements Serializable, Iterable<ColumnInfo> {
 
     /**
      * This helper class is used for the internal hashed column structure, so
      * that we can do fast lookups based on table names and column names.
      */
-    private static class IndexedColumnInfo {
+    private static class IndexedColumnInfo implements Serializable {
         /** The index in the schema that the column appears at. */
         public int colIndex;
 

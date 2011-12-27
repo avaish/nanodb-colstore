@@ -66,7 +66,7 @@ public class ConstraintDecl {
      * <p>
      * For any other constraint type, this will be set to <code>null</code>.
      */
-    private List<String> refColumnNames = null;
+    private List<String> refColumnNames = new ArrayList<String>();
 
 
     /** Create a new unnamed constraint for a table or a table-column. */

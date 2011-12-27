@@ -340,27 +340,27 @@ public abstract class PageTuple implements Tuple {
             switch (colType.getBaseType()) {
 
             case INTEGER:
-                value = new Integer(dbPage.readInt(offset));
+                value = Integer.valueOf(dbPage.readInt(offset));
                 break;
 
             case SMALLINT:
-                value = new Short(dbPage.readShort(offset));
+                value = Short.valueOf(dbPage.readShort(offset));
                 break;
 
             case BIGINT:
-                value = new Long(dbPage.readLong(offset));
+                value = Long.valueOf(dbPage.readLong(offset));
                 break;
 
             case TINYINT:
-                value = new Byte(dbPage.readByte(offset));
+                value = Byte.valueOf(dbPage.readByte(offset));
                 break;
 
             case FLOAT:
-                value = new Float(dbPage.readFloat(offset));
+                value = Float.valueOf(dbPage.readFloat(offset));
                 break;
 
             case DOUBLE:
-                value = new Double(dbPage.readDouble(offset));
+                value = Double.valueOf(dbPage.readDouble(offset));
                 break;
 
             case CHAR:

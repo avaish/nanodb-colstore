@@ -12,7 +12,7 @@ import java.util.HashSet;
 public class CountAggregate extends AggregateFunction {
     private int count;
 
-    private HashSet<Object> valuesSeen;
+    private HashSet<Object> valuesSeen = new HashSet<Object>();
 
     private Object lastValueSeen;
 
@@ -73,6 +73,6 @@ public class CountAggregate extends AggregateFunction {
 
     public Object getResult() {
         // A value of -1 indicates a NULL result.
-        return (count == -1 ? null : new Integer(count));
+        return (count == -1 ? null : Integer.valueOf(count));
     }
 }

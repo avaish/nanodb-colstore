@@ -4,7 +4,6 @@ package edu.caltech.nanodb.commands;
 import java.io.IOException;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 
 import edu.caltech.nanodb.storage.StorageManager;
@@ -31,8 +30,12 @@ public class AnalyzeCommand extends Command {
 
 
     /**
-     * Construct a new ANALYZE command with an empty table list.  Tables can be
-     * added to the internal list using the {@link #addTable} method.
+     * Construct a new <tt>ANALYZE</tt> command with an empty table list.
+     * Tables can be added to the internal list using the {@link #addTable}
+     * method.
+     *
+     * @param verbose a flag indicating whether this command should produce
+     *        verbose output
      */
     public AnalyzeCommand(boolean verbose) {
         super(Command.Type.UTILITY);
@@ -43,22 +46,30 @@ public class AnalyzeCommand extends Command {
 
 
     /**
-     * Construct a new ANALYZE command with an empty table list.  Tables can be
-     * added to the internal list using the {@link #addTable} method.
+     * Construct a new <tt>ANALYZE</tt> command with an empty table list.
+     * Tables can be added to the internal list using the {@link #addTable}
+     * method.
      */
     public AnalyzeCommand() {
         this(false);
     }
 
-    
+
+    /**
+     * Construct a new <tt>ANALYZE</tt> command to analyze the specified table.
+     *
+     * @param tableName the name of the table to analyze.
+     */
     public AnalyzeCommand(String tableName) {
         this(tableName, false);
     }
 
     /**
-     * Construct a new ANALYZE command to analyze the specified table.
+     * Construct a new <tt>ANALYZE</tt> command to analyze the specified table.
      *
      * @param tableName the name of the table to analyze.
+     * @param verbose a flag indicating whether this command should produce
+     *        verbose output
      */
     public AnalyzeCommand(String tableName, boolean verbose) {
         this(verbose);
@@ -99,7 +110,7 @@ public class AnalyzeCommand extends Command {
 
         for (TableFileInfo tblFileInfo : tblInfos) {
             try {
-                System.out.println("Analyzing table " + tblFileInfo.getTableName());
+                out.println("Analyzing table " + tblFileInfo.getTableName());
                 TableManager tableMgr = tblFileInfo.getTableManager();
                 tableMgr.analyzeTable(tblFileInfo);
             }
@@ -108,7 +119,7 @@ public class AnalyzeCommand extends Command {
                     tblFileInfo.getTableName(), ioe);
             }
         }
-        System.out.println("Analysis complete.");
+        out.println("Analysis complete.");
     }
 
 

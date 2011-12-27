@@ -1,7 +1,7 @@
 package edu.caltech.nanodb.relations;
 
-import java.util.HashMap;
 
+import java.io.Serializable;
 
 /**
  * The type of a single column in a relation.  The type is composed of two
@@ -13,7 +13,7 @@ import java.util.HashMap;
  * This second part is included as values in this class.  The two parts together
  * represent the type of a particular attribute.
  */
-public class ColumnType {
+public class ColumnType implements Serializable {
 
     /** The base SQL data-type for the attribute. */
     private SQLDataType baseType;
@@ -94,6 +94,31 @@ public class ColumnType {
             }
         }
         return false;
+    }
+
+
+    @Override
+    public int hashCode() {
+        int hash = 97;
+        hash = 37 * hash + baseType.hashCode();
+
+        switch (baseType) {
+
+        case NUMERIC:
+            hash = 37 * hash + scale;
+            hash = 37 * hash + precision;
+            break;
+
+        case CHAR:
+        case VARCHAR:
+            hash = 37 * hash + length;
+            break;
+
+        default:
+            // No other types have additional values to check.
+        }
+        
+        return hash;
     }
 
 

@@ -72,8 +72,8 @@ public class DropTableCommand extends Command {
             }
             catch (FileNotFoundException e) {
                 // Table already doesn't exist!  Skip the operation.
-                System.out.println("Table " + tableName +
-                    " already doesn't exist; skipping drop-table.");
+                out.printf("Table %s already doesn't exist; skipping drop-table.%n",
+                    tableName);
                 return;
             }
             catch (IOException e) {

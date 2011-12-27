@@ -1,6 +1,7 @@
 package edu.caltech.nanodb.client;
 
 
+import java.io.PrintStream;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import edu.caltech.nanodb.transactions.TransactionState;
@@ -64,12 +65,25 @@ public class SessionState {
     private int sessionID;
 
 
+    /**
+     * This is the output stream for the current client.  If there are multiple
+     * clients, writing to this stream will go to the client associated with
+     * this session.
+     */
+    private PrintStream outputStream;
+
+
     /** The transaction state of this session. */
     private TransactionState txnState;
 
 
     private SessionState(int sessionID) {
         this.sessionID = sessionID;
+
+        // By default, we'll use the standard output stream for the session's
+        // output stream, but this will be overridden when clients connect over
+        // a socket.
+        setOutputStream(System.out);
     }
 
 
@@ -80,6 +94,19 @@ public class SessionState {
      */
     public int getSessionID() {
         return sessionID;
+    }
+
+
+    public PrintStream getOutputStream() {
+        return outputStream;
+    }
+    
+    
+    public void setOutputStream(PrintStream out) {
+        if (out == null)
+            throw new IllegalArgumentException("out cannot be null");
+
+        outputStream = out;
     }
 
 

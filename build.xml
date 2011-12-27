@@ -15,6 +15,9 @@
     <property name="libDir"  location="lib"/>
     <property name="resDir"  location="res"/>
 
+    <property name="findbugsHomeDir" location="findbugs-2.0.0" />
+    <property name="findbugsLibDir"  location="${findbugsHomeDir}/lib" />
+
     <!--
       Relative path to SQL parser code (and in Javadocs, it's the relative path
       to the docs for the classes).
@@ -33,6 +36,9 @@
     <property name="testSrcDir" location="test" />
     <property name="testBuildDir" location="${buildDir}/tests" />
     <property name="testResultsDir" location="${buildDir}/results" />
+
+    <!-- This is the temporary directory that storage-related test cases use. -->
+    <property name="testTempDir" location="test_datafiles" />
 
     <property name="distJarFile" value="nanodb.jar" />
     <property name="mainClassName" value="edu.caltech.nanodb.client.ExclusiveClient" />
@@ -56,10 +62,22 @@
             <include name="testng-5.8-jdk15.jar" />
         </fileset>
     </path>
+    
+    <path id="findbugs.path">
+        <path refid="libs.path" />
+
+        <fileset dir="${findbugsLibDir}">
+            <include name="findbugs.jar" />
+            <include name="findbugs-ant.jar" />
+        </fileset>
+    </path>
 
     <!-- Custom Task Definitions -->
 
     <taskdef resource="testngtasks" classpathref="test.path" />
+
+    <taskdef name="findbugs" classname="edu.umd.cs.findbugs.anttask.FindBugsTask"
+             classpathref="findbugs.path" />
 
     <!-- Build Tasks -->
 
@@ -157,6 +175,7 @@
 
 
     <target name="test" depends="compiletests">
+        <delete dir="${testTempDir}" />
         <mkdir dir="${testResultsDir}" />
 
         <testng suitename="nanodb-tests" outputdir="${testResultsDir}">
@@ -212,5 +231,24 @@
 
     <target name="clean" description="Clean up all build artifacts.">
         <delete dir="${buildDir}"/>
+    </target>
+
+
+    <target name="findbugs" depends="jar"
+            description="Run FindBugs static code-analysis tool">
+        <findbugs home="${findbugsHomeDir}" effort="max"
+                  output="html" outputFile="${buildDir}/nanodb-fb.html"
+                  excludefilter="fb-excl.xml">
+            <auxclasspath>
+                <fileset dir="${libDir}">
+                    <include name="antlr-3.2.jar" />
+                    <include name="log4j-1.2.13.jar" />
+                    <include name="commons-lang-2.4.jar" />
+                </fileset>
+            </auxclasspath>
+
+            <sourcepath path="${srcDir}" />
+            <class location="${buildDir}/${distJarFile}" />
+        </findbugs>
     </target>
 </project>

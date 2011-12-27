@@ -17,8 +17,10 @@ public interface TupleProcessor {
      * This method is called once by the query evaluator before any tuples are
      * passed to the {@link #process} method, so that the tuple-processor knows
      * what the expected tuple-schema will be.
+     *
+     * @throws Exception if any errors occur during this operation.
      */
-    public void setSchema(Schema schema);
+    public void setSchema(Schema schema) throws Exception;
 
 
     /**

@@ -5,6 +5,8 @@ import org.apache.commons.lang.ObjectUtils;
 
 import edu.caltech.nanodb.expressions.ColumnName;
 
+import java.io.Serializable;
+
 
 /**
  * Basic information about a table column, including its name and SQL type.
@@ -19,7 +21,7 @@ import edu.caltech.nanodb.expressions.ColumnName;
  *         {@link edu.caltech.nanodb.plans.ProjectNode} class, which sometimes
  *         need to generate names for their results.
  */
-public class ColumnInfo {
+public class ColumnInfo implements Serializable {
 
     /** The name of the attribute. */
     private String name;

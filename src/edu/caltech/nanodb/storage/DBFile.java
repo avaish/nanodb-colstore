@@ -197,11 +197,6 @@ public class DBFile {
         this.pageSize = pageSize;
         this.fileContents = fileContents;
 
-        // TODO:  Verify that the file's stored page-size and type match the
-        //        values we were passed!  (It's not that critical to verify,
-        //        and generally these values are passed in directly from
-        //        reading the datafile anyway.)
-
         // Check to make sure the file contains a whole number of pages.
         long fileSize = fileContents.length();
         if (fileSize % (long) pageSize != 0) {
@@ -211,6 +206,11 @@ public class DBFile {
             throw new IllegalStateException("Data file " + dataFile +
                 " ends with a partial page!");
         }
+
+        // TODO:  Verify that the file's stored page-size and type match the
+        //        values we were passed!  (It's not that critical to verify,
+        //        and generally these values are passed in directly from
+        //        reading the datafile anyway.)
     }
 
 

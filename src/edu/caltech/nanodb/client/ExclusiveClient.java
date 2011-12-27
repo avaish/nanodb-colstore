@@ -38,12 +38,6 @@ public class ExclusiveClient {
     public static final String CMDPROMPT_NEXT = "   > ";
 
 
-    /**
-     * Because this class is the entry-point of the database system, the logger
-     * instance must be initialized <i>after</i> the logging system has been
-     * initialized.  Thus we set this value to <code>null</code> initially, and
-     * then initialize it later.
-     */
     private static Logger logger = Logger.getLogger(ExclusiveClient.class);
 
 
@@ -144,9 +138,6 @@ public class ExclusiveClient {
 
 
     public static boolean startup() {
-        // Initialize logging output first, since everything else uses logging!
-        //PropertyConfigurator.configure(LOGGING_CONF_FILE);
-
         System.out.println("Initializing storage manager.");
         try {
             StorageManager.init();

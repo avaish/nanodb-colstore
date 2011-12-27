@@ -155,7 +155,7 @@ public class InsertCommand extends QueryCommand {
             if (!explain)
                 insertSingleRow();
             else
-                System.out.println("Nothing to explain about INSERT ... VALUES");
+                out.println("Nothing to explain about INSERT ... VALUES");
         }
         else {
             // Inserting the results of a SELECT query.

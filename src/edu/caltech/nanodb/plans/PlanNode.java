@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -399,12 +400,19 @@ public abstract class PlanNode implements Cloneable {
     public static String printNodeTreeToString(PlanNode plan,
                                                boolean includeCosts) {
 
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        PrintStream ps = new PrintStream(baos);
-        plan.printNodeTree(ps, includeCosts);
-        ps.flush();
-        
-        return baos.toString();
+        // The character-encoding "US-ASCII" is defined to be supported
+        // on all Java implementations, so this should never throw.
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            PrintStream ps = new PrintStream(baos, false, "US-ASCII");
+            plan.printNodeTree(ps, includeCosts);
+            ps.flush();
+
+            return baos.toString("US-ASCII");
+        }
+        catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
+        }
     }
 
 

@@ -132,7 +132,7 @@ public class CreateIndexCommand extends Command {
         logger.debug(String.format("New index %s on table %s is created!",
             indexName, tableName));
 
-        System.out.printf("Created index %s on table %s.\n",
+        System.out.printf("Created index %s on table %s.%n",
             indexName, tableName);
     }
 }

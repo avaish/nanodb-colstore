@@ -3,7 +3,6 @@ package edu.caltech.test.nanodb.storage.heapfile;
 import java.io.IOException;
 
 import org.testng.annotations.AfterClass;
-import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -12,9 +11,10 @@ import edu.caltech.nanodb.storage.DBFile;
 import edu.caltech.nanodb.storage.DBFileType;
 import edu.caltech.nanodb.storage.DBPage;
 import edu.caltech.nanodb.storage.FileManager;
-import edu.caltech.nanodb.storage.StorageManager;
 
 import edu.caltech.nanodb.storage.heapfile.DataPage;
+
+import edu.caltech.test.nanodb.storage.StorageTestCase;
 
 
 /**
@@ -22,7 +22,7 @@ import edu.caltech.nanodb.storage.heapfile.DataPage;
  * class.
  */
 @Test
-public class TestDataPage {
+public class TestDataPage extends StorageTestCase {
 	
 	/**
 	 * Keeps an instance of dbPage to be accessed by each test method after
@@ -41,42 +41,35 @@ public class TestDataPage {
 	 * A file with this name will be temporarily created under ./datafiles
 	 * directory.
 	 */
-	private final String TEST_FILE_NAME = "DBPageTestFile";
+	private final String TEST_FILE_NAME = "TestDataPage_TestFile";
 
-	
-	/**
-	 * Keeps an instance of filemanager to remove dbFile at the end of the 
-	 * class.
-	 */
-	private FileManager filemanager;
-	
-	
-	/**
-	 * Initiate DBFile dbFile.
-	 */
-	@BeforeClass
-	public void beforeClass() throws IOException {
 
-		// Initiate an instance of StorageManager; get an instance of FileManager
-		try {
-			StorageManager.init();
-		} catch (IllegalStateException e2) {
-			// StorageManger is already created.
-		}
-		
-		StorageManager stmgr = StorageManager.getInstance();
-		filemanager = new FileManager(stmgr);
+    /** This is the file-manager instance used for the tests in this class. */
+    private FileManager fileMgr;
+
+
+    /**
+     * This set-up method initializes the file manager, data-file, and page that
+     * all tests will run against.
+     */
+    @BeforeClass
+    public void beforeClass() throws IOException {
+
+        fileMgr = new FileManager(testBaseDir);
 
         // Get DBFile
-		DBFileType type = DBFileType.HEAP_DATA_FILE;
-		
-		try {
-			int pageSize = DBFile.DEFAULT_PAGESIZE; // 8k
-			dbFile = filemanager.createDBFile(TEST_FILE_NAME, type, pageSize);
-		} catch(IOException e) {
-			// The file is already created
-		}
-	}
+        DBFileType type = DBFileType.HEAP_DATA_FILE;
+
+        try {
+            int pageSize = DBFile.DEFAULT_PAGESIZE; // 8k
+            dbFile = fileMgr.createDBFile(TEST_FILE_NAME, type, pageSize);
+        }
+        catch (IOException e) {
+            // The file is already created
+        }
+
+        dbPage = new DBPage(dbFile, 0);
+    }
 	
 	
 	/**
@@ -86,7 +79,7 @@ public class TestDataPage {
 	 */
 	@AfterClass
 	public void afterClass() throws IOException {
-		filemanager.deleteDBFile(dbFile);
+		fileMgr.deleteDBFile(dbFile);
 	}
 	
 	
@@ -98,19 +91,9 @@ public class TestDataPage {
 	 */
 	@BeforeMethod
 	public void beforeMethod() throws IOException {
-		// Create DBPage
-		int pageNo = 1; // Since we only need one page, any integer will do.
-		dbPage = new DBPage(dbFile, pageNo);
-		assert dbPage != null : "dbPage fails to create.";
-		
 		DataPage.initNewPage(dbPage);
 	}
 
-	@AfterMethod
-	public void afterMethod() {
-		// no tearDown is necessary. @AfterClass tear down will suffice.
-	}
-	
 	
 	/**
 	 * Test DataPage.insertTupleDataRange().
@@ -272,5 +255,4 @@ public class TestDataPage {
         assert dbPage.readInt(newCanary1Index) == canary1;
       	
 	}
-	
 }

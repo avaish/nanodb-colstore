@@ -828,27 +828,27 @@ public class DBPage {
         switch (colType.getBaseType()) {
 
         case INTEGER:
-            value = new Integer(readInt(position));
+            value = Integer.valueOf(readInt(position));
             break;
 
         case SMALLINT:
-            value = new Short(readShort(position));
+            value = Short.valueOf(readShort(position));
             break;
 
         case BIGINT:
-            value = new Long(readLong(position));
+            value = Long.valueOf(readLong(position));
             break;
 
         case TINYINT:
-            value = new Byte(readByte(position));
+            value = Byte.valueOf(readByte(position));
             break;
 
         case FLOAT:
-            value = new Float(readFloat(position));
+            value = Float.valueOf(readFloat(position));
             break;
 
         case DOUBLE:
-            value = new Double(readDouble(position));
+            value = Double.valueOf(readDouble(position));
             break;
 
         case CHAR:

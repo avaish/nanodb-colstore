@@ -1,6 +1,10 @@
 package edu.caltech.nanodb.commands;
 
 
+import edu.caltech.nanodb.client.SessionState;
+
+import java.io.PrintStream;
+
 /**
  * Abstract base-class for all commands that NanoDB supports.  Command classes
  * contain both the arguments and configuration details for the command being
@@ -36,6 +40,13 @@ public abstract class Command {
 
 
     /**
+     * This is the output stream for the current session, so that command
+     * output goes to the appropriate client.
+     */
+    protected PrintStream out;
+
+
+    /**
      * Create a new command instance, of the specified command-type.  The
      * constructor is protected, but that is redundant with the fact that the
      * class is abstract anyways, so this class cannot be constructed directly.
@@ -44,6 +55,8 @@ public abstract class Command {
      */
     protected Command(Type cmdType) {
         this.cmdType = cmdType;
+        
+        this.out = SessionState.get().getOutputStream();
     }
 
 

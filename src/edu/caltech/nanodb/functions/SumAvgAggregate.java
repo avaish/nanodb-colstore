@@ -57,7 +57,7 @@ public class SumAvgAggregate extends AggregateFunction {
         else if (computeAverage) {
             // Compute average from the sum and count.
             Object avg = ArithmeticOperator.evalObjects(
-                ArithmeticOperator.Type.DIVIDE, sum, new Integer(count));
+                ArithmeticOperator.Type.DIVIDE, sum, Integer.valueOf(count));
 
             return avg;
         }
