@@ -1,6 +1,10 @@
 package edu.caltech.nanodb.commands;
 
 
+import edu.caltech.nanodb.transactions.TransactionException;
+import edu.caltech.nanodb.transactions.TransactionManager;
+
+
 /**
  * This class represents a command that starts a transaction, such as
  * <tt>BEGIN</tt>, <tt>BEGIN WORK</tt>, or <tt>START TRANSACTION</tt>.
@@ -11,7 +15,17 @@ public class BeginTransactionCommand extends Command {
     }
 
 
-    public void execute() {
-        // TODO:  Begin a transaction.
+    public void execute() throws ExecutionException {
+        // Begin a transaction.
+        TransactionManager txnMgr = TransactionManager.getInstance();
+        
+        try {
+            // Pass true for the "user-started transaction" flag, since the
+            // user issued the command to do it!
+            txnMgr.startTransaction(true);
+        }
+        catch (TransactionException e) {
+            throw new ExecutionException(e);
+        }
     }
 }

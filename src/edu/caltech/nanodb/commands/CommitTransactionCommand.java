@@ -1,6 +1,10 @@
 package edu.caltech.nanodb.commands;
 
 
+import edu.caltech.nanodb.transactions.TransactionException;
+import edu.caltech.nanodb.transactions.TransactionManager;
+
+
 /**
  * This class represents a command that commits a transaction, such as
  * <tt>COMMIT</tt> or <tt>COMMIT WORK</tt>.
@@ -11,7 +15,14 @@ public class CommitTransactionCommand extends Command {
     }
 
 
-    public void execute() {
-        // TODO:  Commit the transaction.
+    public void execute() throws ExecutionException {
+        // Commit the transaction.
+        TransactionManager txnMgr = TransactionManager.getInstance();
+        try {
+            txnMgr.commitTransaction();
+        }
+        catch (TransactionException e) {
+            throw new ExecutionException(e);
+        }
     }
 }

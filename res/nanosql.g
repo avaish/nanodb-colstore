@@ -622,14 +622,17 @@ begin_txn_stmt returns [BeginTransactionCommand c] { c = null; } :
     START TRANSACTION
   | BEGIN ( WORK )?
   )
+  { c = new BeginTransactionCommand(); }
   ;
 
 commit_txn_stmt returns [CommitTransactionCommand c] { c = null; } :
   COMMIT ( WORK )?
+  { c = new CommitTransactionCommand(); }
   ;
 
 rollback_txn_stmt returns [RollbackTransactionCommand c] { c = null; } :
   ROLLBACK ( WORK )?
+  { c = new RollbackTransactionCommand(); }
   ;
 
 

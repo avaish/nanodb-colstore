@@ -79,6 +79,7 @@ public class SessionState {
 
     private SessionState(int sessionID) {
         this.sessionID = sessionID;
+        txnState = new TransactionState();
 
         // By default, we'll use the standard output stream for the session's
         // output stream, but this will be overridden when clients connect over

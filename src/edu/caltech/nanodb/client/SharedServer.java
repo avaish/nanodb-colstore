@@ -1,25 +1,18 @@
 package edu.caltech.nanodb.client;
 
-import edu.caltech.nanodb.storage.StorageManager;
-import org.apache.log4j.Logger;
 
-import javax.swing.plaf.basic.BasicInternalFrameTitlePane;
-import java.io.EOFException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.HashMap;
 
+import org.apache.log4j.Logger;
+
+import edu.caltech.nanodb.storage.StorageManager;
+import edu.caltech.nanodb.transactions.TransactionManager;
+
+
 /**
- * Created by IntelliJ IDEA.
- * User: donnie
- * Date: 12/15/11
- * Time: 12:16 PM
- * To change this template use File | Settings | File Templates.
  */
 public class SharedServer {
     /** A logging object for reporting anything interesting that happens. */
@@ -40,8 +33,12 @@ public class SharedServer {
         logger.info("Starting shared database server.");
 
         // Start up the database by doing the appropriate startup processing.
+
         logger.info("Initializing storage manager.");
         StorageManager.init();
+
+        logger.info("Initializing transaction manager.");
+        TransactionManager.init();
 
         // Register a shutdown hook so we can shut down the database cleanly.
         Runtime rt = Runtime.getRuntime();

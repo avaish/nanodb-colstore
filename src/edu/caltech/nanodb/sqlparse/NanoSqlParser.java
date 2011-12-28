@@ -396,6 +396,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			}
 			}
 			}
+			c = new BeginTransactionCommand();
 		}
 		catch (RecognitionException ex) {
 			reportError(ex);
@@ -428,6 +429,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			}
 			}
 			}
+			c = new CommitTransactionCommand();
 		}
 		catch (RecognitionException ex) {
 			reportError(ex);
@@ -460,6 +462,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			}
 			}
 			}
+			c = new RollbackTransactionCommand();
 		}
 		catch (RecognitionException ex) {
 			reportError(ex);
