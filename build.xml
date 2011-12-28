@@ -157,6 +157,8 @@
                source="1.6" target="1.6" includeantruntime="no"
                debug="${java.debug}" optimize="${java.opt}" deprecation="on">
 
+            <compilerarg value="-Xlint:unchecked,cast" />
+
             <src path="${srcDir}" />
         </javac>
     </target>
@@ -204,10 +206,9 @@
     <target name="javadoc" depends="-init" description="Generate JavaDocs.">
         <mkdir dir="${javaDocDir}" />
 
-        <javadoc packagenames="*"
-                 destdir="${javaDocDir}" classpathref="libs.path"
-                 access="private" windowtitle="NanoDB"
-                 useexternalfile="yes">
+        <javadoc packagenames="*" destdir="${javaDocDir}" classpathref="libs.path"
+                 windowtitle="NanoDB" overview="${srcDir}/overview.html"
+                 access="private" useexternalfile="yes">
 
             <sourcepath>
                 <pathelement location="${srcDir}" />

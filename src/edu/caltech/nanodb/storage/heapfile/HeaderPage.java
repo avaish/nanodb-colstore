@@ -1,6 +1,10 @@
 package edu.caltech.nanodb.storage.heapfile;
 
 
+import java.util.ArrayList;
+
+import org.apache.log4j.Logger;
+
 import edu.caltech.nanodb.qeval.ColumnStats;
 import edu.caltech.nanodb.qeval.TableStats;
 import edu.caltech.nanodb.relations.ColumnInfo;
@@ -9,18 +13,14 @@ import edu.caltech.nanodb.storage.DBPage;
 import edu.caltech.nanodb.storage.PageReader;
 import edu.caltech.nanodb.storage.PageWriter;
 import edu.caltech.nanodb.storage.TableFileInfo;
-import org.apache.log4j.Logger;
-
-import java.util.ArrayList;
 
 
 /**
- * This class contains some constants for where different values live in
- * the header page of a table file.  <b>Note that the data file's page
- * size is always the first two bytes of the first page in the data
- * file!</b>  Thus, we don't get to tinker with the
- *
- * @todo INCORRECT COMMENT!
+ * This class contains constants and basic functionality for accessing and
+ * manipulating the contents of the header page of a heap table-file.  <b>Note
+ * that the first two bytes of the first page is always devoted to the type and
+ * page-size of the data file.</b>  (See {@link edu.caltech.nanodb.storage.DBFile}
+ * for details.)  All other values must follow the first two bytes.
  */
 public class HeaderPage {
     /** A logging object for reporting anything interesting that happens. */
@@ -46,6 +46,7 @@ public class HeaderPage {
      * This value is an unsigned byte.
      */
     public static final int OFFSET_NCOLS = 6;
+
 
     /**
      * The offset in the header page where the column descriptions start.
@@ -272,7 +273,7 @@ public class HeaderPage {
         int offset = getStatsOffset(dbPage) + RELOFF_NUM_TUPLES;
         // Casting long to int here is fine, since we are writing an
         // unsigned int.
-        dbPage.writeInt(offset, (int) numTuples);
+        dbPage.writeInt(offset, numTuples);
     }
 
 

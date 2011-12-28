@@ -26,6 +26,14 @@ Terence Parr, <a href="http://www.magelang.com">MageLang Institute</a>
 Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 
 
+<a name="commands">commands</a>
+	:	<a href="NanoSqlParser.html#command">command</a> ( SEMICOLON 
+			(	<a href="NanoSqlParser.html#command">command</a> 
+			|	
+			) )* 
+	;
+
+
 <a name="command">command</a>
 	:	(	<a href="NanoSqlParser.html#create_stmt">create_stmt</a> 
 		|	<a href="NanoSqlParser.html#drop_stmt">drop_stmt</a> 
@@ -40,7 +48,6 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 		|	<a href="NanoSqlParser.html#explain_stmt">explain_stmt</a> 
 		|	<a href="NanoSqlParser.html#exit_stmt">exit_stmt</a> 
 		) 
-		SEMICOLON 
 	;
 
 
@@ -364,14 +371,6 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 		|	
 		) 
 		
-	|	LPAREN <a href="NanoSqlParser.html#select_clause">select_clause</a> RPAREN 
-		(	(	AS 
-			|	
-			) 
-			<a href="NanoSqlParser.html#dbobj_ident">dbobj_ident</a> 
-		|	
-		) 
-		
 	;
 
 
@@ -471,7 +470,10 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 	:	(	NOT 
 		|	
 		) 
-		<a href="NanoSqlParser.html#relational_expr">relational_expr</a> 
+		(	<a href="NanoSqlParser.html#relational_expr">relational_expr</a> 
+		|	<a href="NanoSqlParser.html#exists_expr">exists_expr</a> 
+		) 
+		
 	;
 
 
@@ -482,22 +484,36 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
  *       other alternatives.  :(  Work out a solution...
  **/
 <a name="relational_expr">relational_expr</a>
-	:	<a href="NanoSqlParser.html#like_expr">like_expr</a> 
-		(	(	EQUALS 
-			|	NOT_EQUALS 
-			|	GRTR_THAN 
-			|	LESS_THAN 
-			|	GRTR_EQUAL 
-			|	LESS_EQUAL 
+	:	<a href="NanoSqlParser.html#additive_expr">additive_expr</a> 
+		(	( (	EQUALS 
+				|	NOT_EQUALS 
+				|	GRTR_THAN 
+				|	LESS_THAN 
+				|	GRTR_EQUAL 
+				|	LESS_EQUAL 
+				) 
+				<a href="NanoSqlParser.html#additive_expr">additive_expr</a> ) 
+		|	(	(	NOT 
+				|	
+				) 
+				( (	LIKE 
+					|	SIMILAR TO 
+					) 
+					<a href="NanoSqlParser.html#additive_expr">additive_expr</a> ) 
+			|	( BETWEEN <a href="NanoSqlParser.html#additive_expr">additive_expr</a> AND <a href="NanoSqlParser.html#additive_expr">additive_expr</a> ) 
+			|	( IN 
+					(	<a href="NanoSqlParser.html#param_list">param_list</a> 
+					|	LPAREN <a href="NanoSqlParser.html#select_clause">select_clause</a> RPAREN 
+					) ) 
 			) 
-			<a href="NanoSqlParser.html#like_expr">like_expr</a> 
+			
 		|	
 		) 
 	;
 
 
-<a name="like_expr">like_expr</a>
-	:	<a href="NanoSqlParser.html#additive_expr">additive_expr</a> 
+<a name="exists_expr">exists_expr</a>
+	:	EXISTS LPAREN <a href="NanoSqlParser.html#select_clause">select_clause</a> RPAREN 
 	;
 
 
@@ -544,7 +560,11 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 	|	STRING_LITERAL 
 	|	<a href="NanoSqlParser.html#column_name">column_name</a> 
 	|	<a href="NanoSqlParser.html#function_call">function_call</a> 
-	|	LPAREN <a href="NanoSqlParser.html#logical_or_expr">logical_or_expr</a> RPAREN 
+	|	LPAREN 
+		(	<a href="NanoSqlParser.html#logical_or_expr">logical_or_expr</a> 
+		|	<a href="NanoSqlParser.html#select_clause">select_clause</a> 
+		) 
+		RPAREN 
 	;
 
 

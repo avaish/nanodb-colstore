@@ -85,6 +85,7 @@ tokens {
   ROLLBACK    = "rollback";
   SELECT      = "select";
   SET         = "set";
+  SIMILAR     = "similar";
   SOME        = "some";
   START       = "start";
   STDDEV      = "stddev";
@@ -145,6 +146,7 @@ tokens {
 /* A list of one or more statements, separated by semicolons.  Multiple
  * semicolons without statements are fine, as is a single statement with
  * a semicolon and no subsequent statement.
+ */
 commands returns [List<Command> cmds]
   {
     cmds = new ArrayList<Command>();
@@ -152,7 +154,6 @@ commands returns [List<Command> cmds]
   }
   : c1=command { cmds.add(c1); }
     (SEMICOLON (ci=command { cmds.add(ci); } )? )* ;
- */
 
 /* A single statement, which could be one of many possible options. */
 command returns [Command c] { c = null; } :
@@ -161,7 +162,6 @@ command returns [Command c] { c = null; } :
   | c=begin_txn_stmt | c=commit_txn_stmt | c=rollback_txn_stmt     // Transactions
   | c=analyze_stmt | c=explain_stmt | c=exit_stmt                  // Utility
   )
-  SEMICOLON
   ;
 
 
@@ -354,10 +354,6 @@ table_constraint returns [ConstraintDecl c]
   ) ;
 
 
-
-
-
-
 create_view returns [CreateViewCommand c]
   {
     c = null;
@@ -477,7 +473,10 @@ select_value returns [SelectValue sv]
 //  TODO:  Nondeterminism warning.
 //  | n=dbobj_ident PERIOD STAR { sv = new SelectValue(new ColumnName(n, null)); }
   | e=expression ( (AS)? n=dbobj_ident )? { sv = new SelectValue(e, n); }
-  | LPAREN sc=select_clause RPAREN ( (AS)? n=dbobj_ident )? { sv = new SelectValue(sc, n); }
+// TODO:  This should no longer be necessary, since we have scalar subqueries
+//        now as expressions.  Also, we need to support scalar subqueries in the
+//        WHERE clause anyway.
+//  | LPAREN sc=select_clause RPAREN ( (AS)? n=dbobj_ident )? { sv = new SelectValue(sc, n); }
   ;
 
 
@@ -739,7 +738,7 @@ logical_not_expr returns [Expression e]
     BooleanOperator boolExpr = null;
   } :
   (NOT { notExpr = true; } )?
-  e=relational_expr
+  ( e=relational_expr | e=exists_expr )
   {
     if (notExpr) {
       boolExpr = new BooleanOperator(BooleanOperator.Type.NOT_EXPR);
@@ -747,6 +746,13 @@ logical_not_expr returns [Expression e]
       e = boolExpr;
     }
   }
+  ;
+
+
+exists_expr returns [Expression e]
+  { e = null; SelectClause sc = null; } :
+  EXISTS LPAREN sc=select_clause RPAREN
+  { e = new ExistsOperator(sc); }
   ;
 
 
@@ -759,28 +765,57 @@ logical_not_expr returns [Expression e]
 relational_expr returns [Expression e]
   {
     e = null;
-    Expression e2 = null;
+    Expression e2 = null, e3 = null;
+
     CompareOperator.Type cmpType = null;
+
+    boolean invert = false;
+    StringMatchOperator.Type matchType = null;
+
+    ArrayList<Expression> values = null;
+    SelectClause sc = null;
   } :
-  e=like_expr
-  ( ( EQUALS     { cmpType = CompareOperator.Type.EQUALS;           }
-    | NOT_EQUALS { cmpType = CompareOperator.Type.NOT_EQUALS;       }
-    | GRTR_THAN  { cmpType = CompareOperator.Type.GREATER_THAN;     }
-    | LESS_THAN  { cmpType = CompareOperator.Type.LESS_THAN;        }
-    | GRTR_EQUAL { cmpType = CompareOperator.Type.GREATER_OR_EQUAL; }
-    | LESS_EQUAL { cmpType = CompareOperator.Type.LESS_OR_EQUAL;    }
+  e=additive_expr
+  (
+    (
+      ( EQUALS     { cmpType = CompareOperator.Type.EQUALS;           }
+      | NOT_EQUALS { cmpType = CompareOperator.Type.NOT_EQUALS;       }
+      | GRTR_THAN  { cmpType = CompareOperator.Type.GREATER_THAN;     }
+      | LESS_THAN  { cmpType = CompareOperator.Type.LESS_THAN;        }
+      | GRTR_EQUAL { cmpType = CompareOperator.Type.GREATER_OR_EQUAL; }
+      | LESS_EQUAL { cmpType = CompareOperator.Type.LESS_OR_EQUAL;    } )
+      e2=additive_expr { e = new CompareOperator(cmpType, e, e2); }
     )
-    e2=like_expr { e = new CompareOperator(cmpType, e, e2); } )?
+  | (
+      ( NOT { invert = true; } )?
+      (
+        ( LIKE       { matchType = StringMatchOperator.Type.LIKE;  }
+        | SIMILAR TO { matchType = StringMatchOperator.Type.REGEX; } )
+        e2=additive_expr { e = new StringMatchOperator(matchType, e, e2); } )
+      | ( BETWEEN e2=additive_expr AND e3=additive_expr
+          {
+            BooleanOperator b = new BooleanOperator(BooleanOperator.Type.AND_EXPR);
+            b.addTerm(new CompareOperator(CompareOperator.Type.GREATER_OR_EQUAL, e, e2));
+            b.addTerm(new CompareOperator(CompareOperator.Type.LESS_OR_EQUAL, e, e3));
+            e = b;
+          }
+        )
+      | ( IN
+          ( values=param_list { e = new InSetOperator(e, values); }
+          | LPAREN sc=select_clause RPAREN { e = new InSetOperator(e, sc); } ) )
+    )
+    {
+      if (invert) {
+        // Wrap the comparison in a NOT expression.
+        BooleanOperator b = new BooleanOperator(BooleanOperator.Type.NOT_EXPR);
+        b.addTerm(e);
+        e = b;
+      }
+    }
+  )?
   ;
 
-like_expr returns [Expression e] { e = null; } :
-  e=additive_expr ;
-
 /*
-like_expr : between_expr ( LIKE STRING_LITERAL );
-
-between_expr : in_expr ( BETWEEN in_expr AND in_expr );
-
 in_expr : is_expr (NOT)? IN ( param_list | LPAREN select_stmt RPAREN ) ;
 
 is_expr : additive_expr ( IS ( TRUE | FALSE | UNKNOWN | (NOT)? NULL ) )? ;
@@ -839,6 +874,7 @@ base_expr returns [Expression e]
   {
     e = null;
     ColumnName cn = null;
+    SelectClause sc = null;
   }
   :
     NULL  { e = new LiteralValue(null);          }
@@ -851,7 +887,9 @@ base_expr returns [Expression e]
   | sval:STRING_LITERAL { e = new LiteralValue(sval.getText()); }
   | cn=column_name      { e = new ColumnValue(cn); }
   | e=function_call
-  | LPAREN e=logical_or_expr RPAREN
+  | LPAREN
+    ( e=logical_or_expr | sc=select_clause { e = new ScalarSubquery(sc); } )
+    RPAREN
   ;
 
 
@@ -880,6 +918,9 @@ function_call returns [FunctionCall f]
   ;
 
 
+// I have to wrap the comment for the lexer in curly-braces so that we can
+// include the SuppressWarnings annotation as well.  Otherwise, ANTLR chokes.
+{
 /**
  * A lexer for tokenizing SQL commands into various tokens necessary for
  * parsing.  As is true for most lexers generated by ANTLR, this one primarily
@@ -891,6 +932,8 @@ function_call returns [FunctionCall f]
  * All of the SQL-specific keywords are actually declared in the parser, so that
  * keeps the lexer definition pretty short and sweet.
  */
+@SuppressWarnings({"unchecked", "cast"})
+}
 class NanoSqlLexer extends Lexer;
 options {
   k = 2;

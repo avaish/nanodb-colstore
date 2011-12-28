@@ -9,6 +9,7 @@ import edu.caltech.nanodb.expressions.ExpressionException;
 import edu.caltech.nanodb.expressions.TupleLiteral;
 
 import edu.caltech.nanodb.qeval.Planner;
+import edu.caltech.nanodb.qeval.SimplePlanner;
 import edu.caltech.nanodb.qeval.TupleProcessor;
 import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.SchemaNameException;
@@ -213,7 +214,7 @@ public class InsertCommand extends QueryCommand {
         Schema resultSchema = selClause.computeSchema();
 
         // Create a plan for executing the SQL query.
-        Planner planner = new Planner();
+        Planner planner = new SimplePlanner();
         plan = planner.makePlan(selClause);
     }
 

@@ -64,7 +64,23 @@ public class TupleComparator implements Comparator<Tuple> {
     }
 
 
+    /**
+     * Performs the comparison of two tuples based on the configuration of this
+     * tuple-comparator object.
+     *
+     * @design (Donnie) We have to suppress "unchecked operation" warnings on
+     *         this code, since {@link Comparable} is a generic (and thus allows
+     *         us to specify the type of object being compared), but we want to
+     *         use it without specifying any types.
+     *
+     * @param a the first tuple to compare.
+     * @param b the second tuple to compare.
+     * @return a negative, zero, or positive value, corresponding to whether
+     *         tuple <tt>a</tt> is less than, equal to, or greater than tuple
+     *         <tt>b</tt>.
+     */
     @Override
+    @SuppressWarnings("unchecked")
     public int compare(Tuple a, Tuple b) {
 
         // Set up the environments for evaluating the order-by specifications.

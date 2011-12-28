@@ -22,8 +22,10 @@ import edu.caltech.nanodb.relations.SchemaNameException;
  * </ul>
  */
 public class CompareOperator extends Expression {
-
-    /** This enumeration specifies the kind of comparison being performed. */
+    /**
+     * This enumeration specifies the types of comparisons that can be
+     * performed.
+     */
     public enum Type {
         EQUALS("=="),
         NOT_EQUALS("!="),
@@ -35,12 +37,20 @@ public class CompareOperator extends Expression {
         /** The string representation for each operator.  Used for printing. */
         private final String stringRep;
 
-        /** Construct a Type enum with the specified string representation. */
+        /**
+         * Construct a Type enum with the specified string representation.
+         *
+         * @param rep the string representation of the comparison type
+         */
         Type(String rep) {
             stringRep = rep;
         }
 
-        /** Accessor for the operator type's string representation. */
+        /**
+         * Accessor for the operator type's string representation.
+         *
+         * @return the string representation of the comparison type
+         */
         public String stringRep() {
             return stringRep;
         }
@@ -82,7 +92,13 @@ public class CompareOperator extends Expression {
      * either the left-hand or right-hand expression evaluates to
      * <code>null</code> (representing the SQL <tt>NULL</tt> value), then the
      * expression's result is always <code>FALSE</code>.
+     *
+     * @design (Donnie) We have to suppress "unchecked operation" warnings on
+     *         this code, since {@link Comparable} is a generic (and thus allows
+     *         us to specify the type of object being compared), but we want to
+     *         use it without specifying any types.
      */
+    @SuppressWarnings("unchecked")
     public Object evaluate(Environment env) throws ExpressionException {
 
         // Evaluate the left and right subexpressions.
@@ -238,7 +254,7 @@ public class CompareOperator extends Expression {
   
     /**
      * Checks if the argument is an expression with the same structure, but not
-     * necesarily the same references.
+     * necessarily the same references.
      *
      * @param obj the object to which we are comparing
      */
@@ -255,8 +271,8 @@ public class CompareOperator extends Expression {
 
         return false;
     }
-  
-  
+
+
     /**
      * Computes the hashcode of an Expression.  This method is used to see if
      * two expressions might be equal.
@@ -278,7 +294,7 @@ public class CompareOperator extends Expression {
      */
     @Override
     protected Object clone() throws CloneNotSupportedException {
-        CompareOperator expr = (CompareOperator)super.clone();
+        CompareOperator expr = (CompareOperator) super.clone();
     
         // Type is immutable; copy it.
         expr.type = type;

@@ -118,13 +118,19 @@ public enum SQLDataType {
      * Construct a new SQLDataType instance with the specified type ID.  Each
      * data-type should have a unique ID.  Note that this constructor is private,
      * since this is the only place where SQL data-types should be declared.
+     *
+     * @param typeID the unique numeric ID for this SQL data type
      */
     private SQLDataType(byte typeID) {
-        this.typeID = (byte) typeID;
+        this.typeID = typeID;
     }
 
 
-    /** Returns this SQL data-type's unique ID. */
+    /**
+     * Returns this SQL data-type's unique ID.
+     *
+     * @return this SQL data type's unique ID.
+     */
     public byte getTypeID() {
         return typeID;
     }
@@ -134,6 +140,11 @@ public enum SQLDataType {
      * Given the specified ID, this method returns the corresponding SQL data
      * type enum value, or it returns <code>null</code> if the type value
      * doesn't signify any SQL data type in this enumeration.
+     *
+     * @param typeID the ID of the type to search for
+     * @return the <tt>SQLDataType</tt> value corresponding to the specified
+     *         type ID, or <tt>null</tt> if no corresponding value could be
+     *         found.
      */
     public static SQLDataType findType(byte typeID) {
         for (SQLDataType s : SQLDataType.values()) {

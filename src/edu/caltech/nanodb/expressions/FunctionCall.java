@@ -4,6 +4,7 @@ package edu.caltech.nanodb.expressions;
 import java.util.ArrayList;
 import java.util.Collection;
 
+import edu.caltech.nanodb.functions.Function;
 import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.SchemaNameException;
@@ -22,6 +23,8 @@ public class FunctionCall extends Expression {
     /** The list of one or more arguments for the function call. */
     private ArrayList<Expression> args;
 
+    private Function function;
+
 
     public FunctionCall(String funcName, ArrayList<Expression> args) {
         if (funcName == null || args == null)
@@ -29,6 +32,7 @@ public class FunctionCall extends Expression {
 
         this.funcName = funcName;
         this.args = args;
+        function = Function.fromName(funcName);
     }
 
     public ColumnInfo getColumnInfo(Schema schema) throws SchemaNameException {
@@ -36,7 +40,7 @@ public class FunctionCall extends Expression {
     }
 
     public Object evaluate(Environment env) throws ExpressionException {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return function.evaluate(env, args);
     }
 
     public boolean hasSymbols() {

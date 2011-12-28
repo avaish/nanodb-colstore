@@ -3,6 +3,7 @@ package edu.caltech.nanodb.commands;
 
 import java.io.IOException;
 
+import edu.caltech.nanodb.qeval.Planner;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.client.SessionState;
@@ -70,7 +71,7 @@ public class SelectCommand extends QueryCommand {
         logger.debug("Result schema:  " + resultSchema);
 
         // Create a plan for executing the SQL query.
-        DPJoinPlanner planner = new DPJoinPlanner();
+        Planner planner = new DPJoinPlanner();
         plan = planner.makePlan(selClause);
     }
     

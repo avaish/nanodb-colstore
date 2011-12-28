@@ -6,6 +6,7 @@ import java.io.IOException;
 import edu.caltech.nanodb.expressions.Expression;
 
 import edu.caltech.nanodb.qeval.Planner;
+import edu.caltech.nanodb.qeval.SimplePlanner;
 import edu.caltech.nanodb.qeval.TupleProcessor;
 
 import edu.caltech.nanodb.relations.Schema;
@@ -102,8 +103,8 @@ public class DeleteCommand extends QueryCommand {
         tblFileInfo = StorageManager.getInstance().openTable(tableName);
 
         // Create a plan for executing the SQL query.
-        Planner planner = new Planner();
-        plan = planner.makeLeafSelect(tableName, whereExpr);
+        Planner planner = new SimplePlanner();
+        plan = planner.makeSimpleSelect(tableName, whereExpr);
         plan.prepare();
     }
 

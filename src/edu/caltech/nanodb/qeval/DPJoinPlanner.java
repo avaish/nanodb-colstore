@@ -43,7 +43,7 @@ import org.apache.log4j.Logger;
  * <tt>SELECT</tt>-<tt>FROM</tt>-<tt>WHERE</tt> subqueries; optimizations don't
  * currently span multiple subqueries.
  */
-public class DPJoinPlanner {
+public class DPJoinPlanner implements Planner {
 
     /** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(DPJoinPlanner.class);
@@ -702,7 +702,7 @@ public class DPJoinPlanner {
      *   <li>
      *     {@link edu.caltech.nanodb.commands.FromClause.ClauseType#BASE_TABLE} -
      *     the clause is a simple table reference, so a simple select operation
-     *     is constructed via {@link #makeLeafSelect}.
+     *     is constructed via {@link #makeSimpleSelect}.
      *   </li>
      *   <li>
      *     {@link edu.caltech.nanodb.commands.FromClause.ClauseType#SELECT_SUBQUERY} -
@@ -746,7 +746,7 @@ public class DPJoinPlanner {
             else {
                 // This clause is a base-table, so we just generate a file-scan
                 // plan node for the table.
-                plan = makeLeafSelect(fromClause.getTableName(), null);
+                plan = makeSimpleSelect(fromClause.getTableName(), null);
             }
 
             // If the FROM-clause renames the result, apply the renaming here.
@@ -785,8 +785,8 @@ public class DPJoinPlanner {
      * @throws IOException if an error occurs when loading necessary table
      *         information.
      */
-    public SelectNode makeLeafSelect(String tableName,
-        Expression predicate) throws IOException {
+    public SelectNode makeSimpleSelect(String tableName,
+                                       Expression predicate) throws IOException {
 
         // Open the table.
         TableFileInfo tableInfo = StorageManager.getInstance().openTable(tableName);

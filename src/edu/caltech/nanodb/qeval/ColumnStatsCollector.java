@@ -73,7 +73,13 @@ public class ColumnStatsCollector {
      * statistics for the column.
      *
      * @param value the value from the column being analyzed.
+     *
+     * @design (Donnie) We have to suppress "unchecked operation" warnings on
+     *         this code, since {@link Comparable} is a generic (and thus allows
+     *         us to specify the type of object being compared), but we want to
+     *         use it without specifying any types.
      */
+    @SuppressWarnings("unchecked")
     public void addValue(Object value) {
         if (value == null) {
             numNullValues++;
