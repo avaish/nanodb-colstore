@@ -93,6 +93,10 @@ public class ArithmeticOperator extends Expression {
 
 
     private SQLDataType getSQLResultType(SQLDataType lType, SQLDataType rType) {
+        // In case of division, we always return a double-precision result.
+        if (type == Type.DIVIDE)
+            return SQLDataType.DOUBLE;
+
         // This array specifies the type-conversion sequence.  If at least one of
         // the arguments is type typeOrder[i], then both arguments are coerced to
         // that type.  (This is not entirely accurate at the moment, but is

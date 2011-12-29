@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 
 import edu.caltech.nanodb.functions.Function;
+import edu.caltech.nanodb.functions.FunctionDirectory;
 import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.relations.SchemaNameException;
@@ -32,7 +33,7 @@ public class FunctionCall extends Expression {
 
         this.funcName = funcName;
         this.args = args;
-        function = Function.fromName(funcName);
+        function = FunctionDirectory.getInstance().getFunction(funcName);
     }
 
     public ColumnInfo getColumnInfo(Schema schema) throws SchemaNameException {

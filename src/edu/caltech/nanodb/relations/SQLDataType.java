@@ -15,8 +15,8 @@ package edu.caltech.nanodb.relations;
  * format in the data-dictionary.
  * <p>
  * The type-ID values currently fall in ranges so that similar types can be
- * grouped together.  The only real reason for this is simply aesthetics.  Here
- * is the current breakdown:
+ * grouped together.  Besides aesthetics, this also allows us to easily tell if
+ * a type is a number, or a string, etc.  Here is the current breakdown:
  * <ul>
  *   <li>Number types:  1..20</li>
  *   <li>Character types:  21..30</li>
@@ -134,8 +134,8 @@ public enum SQLDataType {
     public byte getTypeID() {
         return typeID;
     }
-
-
+    
+    
     /**
      * Given the specified ID, this method returns the corresponding SQL data
      * type enum value, or it returns <code>null</code> if the type value
@@ -153,4 +153,15 @@ public enum SQLDataType {
         }
         return null;
     }
+
+
+    public static boolean isNumber(SQLDataType type) {
+        return (type.typeID >= 1 && type.typeID <= 20);
+    }
+
+
+    public static boolean isString(SQLDataType type) {
+        return (type.typeID >= 21 && type.typeID <= 23);
+    }
+
 }
