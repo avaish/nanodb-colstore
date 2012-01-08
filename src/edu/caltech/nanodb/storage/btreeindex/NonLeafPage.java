@@ -103,6 +103,7 @@ public class NonLeafPage {
 
     /**
      */
+    @SuppressWarnings("unchecked")
     public static int compareToKey(Tuple keyA, FilePointer tuplePtrA,
                                    Tuple keyB, FilePointer tuplePtrB) {
 

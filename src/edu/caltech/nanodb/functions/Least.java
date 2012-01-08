@@ -29,6 +29,7 @@ public class Least extends Function {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public Object evaluate(Environment env, List<Expression> args) {
         if (args.size() < 2) {
             throw new ExpressionException("Cannot call GREATEST on " +

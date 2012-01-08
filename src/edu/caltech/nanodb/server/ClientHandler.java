@@ -1,4 +1,4 @@
-package edu.caltech.nanodb.client;
+package edu.caltech.nanodb.server;
 
 
 import java.io.ByteArrayOutputStream;
@@ -11,13 +11,10 @@ import java.io.StringReader;
 
 import java.net.Socket;
 
+import edu.caltech.nanodb.client.SessionState;
 import org.apache.log4j.Logger;
 
-import antlr.RecognitionException;
-import antlr.TokenStreamException;
-
 import edu.caltech.nanodb.commands.Command;
-import edu.caltech.nanodb.commands.ExecutionException;
 import edu.caltech.nanodb.commands.ExitCommand;
 import edu.caltech.nanodb.commands.SelectCommand;
 

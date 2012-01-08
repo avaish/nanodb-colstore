@@ -476,6 +476,7 @@ public class BooleanOperator extends Expression {
      * Creates a copy of expression.
      */
     @Override
+    @SuppressWarnings("unchecked")
     protected Object clone() throws CloneNotSupportedException {
         BooleanOperator expr = (BooleanOperator) super.clone();
 

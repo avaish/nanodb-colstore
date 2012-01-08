@@ -174,6 +174,7 @@ public class LeafPage {
      * @return a negative, positive, or zero value indicating the ordering of
      *         the two inputs
      */
+    @SuppressWarnings("unchecked")
     public static int compareToKey(Tuple keyA, FilePointer tuplePtrA,
                                    Tuple keyB, FilePointer tuplePtrB) {
 

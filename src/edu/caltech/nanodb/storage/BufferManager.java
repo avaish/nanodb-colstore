@@ -71,7 +71,7 @@ public class BufferManager {
     /** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(BufferManager.class);
 
-    
+
     private FileManager fileManager;
 
 

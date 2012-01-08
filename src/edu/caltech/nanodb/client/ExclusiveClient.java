@@ -11,6 +11,7 @@ import antlr.LexerSharedInputState;
 import antlr.RecognitionException;
 import antlr.TokenStreamException;
 
+import edu.caltech.nanodb.server.NanoDBServer;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.commands.Command;
@@ -28,6 +29,9 @@ import edu.caltech.nanodb.storage.StorageManager;
  * only a single client interacts directly with the database system.
  */
 public class ExclusiveClient {
+    private static Logger logger = Logger.getLogger(ExclusiveClient.class);
+
+
 
     public static final String LOGGING_CONF_FILE = "logging.conf";
 
@@ -36,9 +40,6 @@ public class ExclusiveClient {
 
 
     public static final String CMDPROMPT_NEXT = "   > ";
-
-
-    private static Logger logger = Logger.getLogger(ExclusiveClient.class);
 
 
     /**
@@ -72,8 +73,12 @@ public class ExclusiveClient {
 
     public static void main(String args[]) {
         // Start up the various database subsystems that require initialization.
-        if (!startup()) {
-            System.out.println("DATABASE STARTUP FAILED.");
+        try {
+            NanoDBServer.startup();
+        }
+        catch (IOException e) {
+            System.out.println("DATABASE STARTUP FAILED:");
+            e.printStackTrace(System.out);
             System.exit(1);
         }
 
@@ -130,40 +135,9 @@ public class ExclusiveClient {
         }
 
         // Shut down the various database subsystems that require cleanup.
-        if (!shutdown()) {
+        if (!NanoDBServer.shutdown()) {
             System.out.println("DATABASE SHUTDOWN FAILED.");
             System.exit(2);
         }
-    }
-
-
-    public static boolean startup() {
-        System.out.println("Initializing storage manager.");
-        try {
-            StorageManager.init();
-        }
-        catch (IOException ioe) {
-            System.out.println("FAILED:");
-            ioe.printStackTrace(System.out);
-            return false;
-        }
-
-        // If we got here then everything initialized successfully.
-        return true;
-    }
-
-
-    private static boolean shutdown() {
-        System.out.println("Shutting down storage manager.");
-        try {
-            StorageManager.shutdown();
-        }
-        catch (IOException ioe) {
-            System.out.println("FAILED:");
-            ioe.printStackTrace(System.out);
-            return false;
-        }
-
-        return true;
     }
 }

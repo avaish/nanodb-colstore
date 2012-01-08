@@ -35,6 +35,7 @@ public class MinMaxAggregate extends AggregateFunction {
     }
 
 
+    @SuppressWarnings("unchecked")
     public void addValue(Object value) {
         // NULL values are ignored by aggregate functions.
         if (value == null)

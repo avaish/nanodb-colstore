@@ -1,4 +1,4 @@
-package edu.caltech.nanodb.client;
+package edu.caltech.nanodb.server;
 
 
 import java.io.IOException;

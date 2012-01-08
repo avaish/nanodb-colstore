@@ -2847,13 +2847,13 @@ public NanoSqlParser(ParserSharedInputState state) {
 					{
 					if ((LA(1)==LPAREN) && (_tokenSet_17.member(LA(2)))) {
 						values=param_list();
-						e = new InSetOperator(e, values);
+						e = new InOperator(e, values);
 					}
 					else if ((LA(1)==LPAREN) && (LA(2)==SELECT)) {
 						match(LPAREN);
 						sc=select_clause();
 						match(RPAREN);
-						e = new InSetOperator(e, sc);
+						e = new InOperator(e, sc);
 					}
 					else {
 						throw new NoViableAltException(LT(1), getFilename());

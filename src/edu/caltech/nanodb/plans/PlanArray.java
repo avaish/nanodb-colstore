@@ -34,7 +34,7 @@ public class PlanArray implements Iterable<PlanNode> {
             throw new NullPointerException("plan cannot be null");
 
         boolean added = plans.add(plan);
-        if (added)
+        if (!added)
             redundantPlans++;
 
         return added;
@@ -43,6 +43,8 @@ public class PlanArray implements Iterable<PlanNode> {
 
     /**
      * Returns the number of unique plans in the set.
+     *
+     * @return the number of unique plans in the set.
      */
     public int size() {
         return plans.size();
@@ -59,6 +61,8 @@ public class PlanArray implements Iterable<PlanNode> {
 
     /**
      * Returns the number of redundant plans that the set has rejected.
+     *
+     * @return the number of redundant plans that the set has rejected.
      */
     public int countRedundantPlans() {
         return redundantPlans;

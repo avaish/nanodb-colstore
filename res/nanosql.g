@@ -801,8 +801,8 @@ relational_expr returns [Expression e]
           }
         )
       | ( IN
-          ( values=param_list { e = new InSetOperator(e, values); }
-          | LPAREN sc=select_clause RPAREN { e = new InSetOperator(e, sc); } ) )
+          ( values=param_list { e = new InOperator(e, values); }
+          | LPAREN sc=select_clause RPAREN { e = new InOperator(e, sc); } ) )
     )
     {
       if (invert) {

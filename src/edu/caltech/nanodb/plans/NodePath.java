@@ -37,6 +37,7 @@ public class NodePath {
      *
      * @param nodePath the path to copy.
      */
+    @SuppressWarnings("unchecked")
     public NodePath(NodePath nodePath) {
         this.path = (ArrayList<Direction>) nodePath.path.clone();
     }

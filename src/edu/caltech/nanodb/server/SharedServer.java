@@ -1,4 +1,4 @@
-package edu.caltech.nanodb.client;
+package edu.caltech.nanodb.server;
 
 
 import java.io.IOException;
@@ -7,9 +7,6 @@ import java.net.Socket;
 import java.util.HashMap;
 
 import org.apache.log4j.Logger;
-
-import edu.caltech.nanodb.storage.StorageManager;
-import edu.caltech.nanodb.transactions.TransactionManager;
 
 
 /**
@@ -31,14 +28,7 @@ public class SharedServer {
 
     public void startup() throws IOException {
         logger.info("Starting shared database server.");
-
-        // Start up the database by doing the appropriate startup processing.
-
-        logger.info("Initializing storage manager.");
-        StorageManager.init();
-
-        logger.info("Initializing transaction manager.");
-        TransactionManager.init();
+        NanoDBServer.startup();
 
         // Register a shutdown hook so we can shut down the database cleanly.
         Runtime rt = Runtime.getRuntime();
@@ -74,13 +64,8 @@ public class SharedServer {
         for (Thread t : clientThreads.values()) {
             // TODO:  Shut down the client thread.
         }
-        
-        try {
-            StorageManager.shutdown();
-        }
-        catch (IOException e) {
-            logger.error("Couldn't cleanly shut down the Storage Manager!", e);
-        }
+
+        NanoDBServer.shutdown();
     }
     
     

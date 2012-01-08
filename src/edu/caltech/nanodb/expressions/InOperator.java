@@ -22,7 +22,7 @@ import java.util.Collection;
  * (...))</tt> by the parser.
  * </p>
  */
-public class InSetOperator extends Expression {
+public class InOperator extends Expression {
     /**
      * The expression to check against the set on the righthand side of the
      * <tt>IN</tt> operator.
@@ -44,7 +44,7 @@ public class InSetOperator extends Expression {
     SelectClause subquery;
 
 
-    public InSetOperator(Expression expr, ArrayList<Expression> values) {
+    public InOperator(Expression expr, ArrayList<Expression> values) {
         if (expr == null)
             throw new IllegalArgumentException("expr must be specified");
 
@@ -59,7 +59,7 @@ public class InSetOperator extends Expression {
     }
 
 
-    public InSetOperator(Expression expr, SelectClause subquery) {
+    public InOperator(Expression expr, SelectClause subquery) {
         if (expr == null)
             throw new IllegalArgumentException("expr must be specified");
 
@@ -214,8 +214,8 @@ public class InSetOperator extends Expression {
     @Override
     public boolean equals(Object obj) {
 
-        if (obj instanceof InSetOperator) {
-            InSetOperator other = (InSetOperator) obj;
+        if (obj instanceof InOperator) {
+            InOperator other = (InOperator) obj;
 
             if (!expr.equals(other.expr))
                 return false;
@@ -262,8 +262,9 @@ public class InSetOperator extends Expression {
      * tree.
      */
     @Override
+    @SuppressWarnings("unchecked")
     protected Object clone() throws CloneNotSupportedException {
-        InSetOperator op = (InSetOperator) super.clone();
+        InOperator op = (InOperator) super.clone();
 
         // Clone the subexpressions.  Don't clone the subquery if there is one,
         // since subqueries currently aren't cloneable.
