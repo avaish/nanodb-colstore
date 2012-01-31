@@ -486,8 +486,8 @@ tryAgain:
 		int _saveIndex;
 		
 		{
-		int _cnt175=0;
-		_loop175:
+		int _cnt176=0;
+		_loop176:
 		do {
 			switch ( LA(1)) {
 			case ' ':
@@ -502,10 +502,10 @@ tryAgain:
 			}
 			default:
 			{
-				if ( _cnt175>=1 ) { break _loop175; } else {throw new NoViableAltForCharException((char)LA(1), getFilename(), getLine(), getColumn());}
+				if ( _cnt176>=1 ) { break _loop176; } else {throw new NoViableAltForCharException((char)LA(1), getFilename(), getLine(), getColumn());}
 			}
 			}
-			_cnt175++;
+			_cnt176++;
 		} while (true);
 		}
 		_ttype = Token.SKIP;
@@ -531,15 +531,15 @@ tryAgain:
 		match('-');
 		match('-');
 		{
-		_loop179:
+		_loop180:
 		do {
 			// nongreedy exit test
-			if ((LA(1)=='\n') && (true)) break _loop179;
+			if ((LA(1)=='\n') && (true)) break _loop180;
 			if (((LA(1) >= '\u0000' && LA(1) <= '\u007f')) && ((LA(2) >= '\u0000' && LA(2) <= '\u007f'))) {
 				matchNot(EOF_CHAR);
 			}
 			else {
-				break _loop179;
+				break _loop180;
 			}
 			
 		} while (true);
@@ -678,7 +678,7 @@ tryAgain:
 		}
 		}
 		{
-		_loop189:
+		_loop190:
 		do {
 			switch ( LA(1)) {
 			case 'A':  case 'B':  case 'C':  case 'D':
@@ -717,7 +717,7 @@ tryAgain:
 			}
 			default:
 			{
-				break _loop189;
+				break _loop190;
 			}
 			}
 		} while (true);
@@ -775,7 +775,7 @@ tryAgain:
 		}
 		}
 		{
-		_loop193:
+		_loop194:
 		do {
 			switch ( LA(1)) {
 			case 'A':  case 'B':  case 'C':  case 'D':
@@ -814,7 +814,7 @@ tryAgain:
 			}
 			default:
 			{
-				break _loop193;
+				break _loop194;
 			}
 			}
 		} while (true);
@@ -836,7 +836,7 @@ tryAgain:
  * <p>
  * Note that these numbers are <i>unsigned</i>.  Signed numbers have to be
  * processed separately.
- **/
+ */
 	public final void mNUM_LITERAL_OR_SYMBOL(boolean _createToken) throws RecognitionException, CharStreamException, TokenStreamException {
 		int _ttype; Token _token=null; int _begin=text.length();
 		_ttype = NUM_LITERAL_OR_SYMBOL;
@@ -848,17 +848,17 @@ tryAgain:
 		case '8':  case '9':
 		{
 			{
-			int _cnt196=0;
-			_loop196:
+			int _cnt197=0;
+			_loop197:
 			do {
 				if (((LA(1) >= '0' && LA(1) <= '9'))) {
 					matchRange('0','9');
 				}
 				else {
-					if ( _cnt196>=1 ) { break _loop196; } else {throw new NoViableAltForCharException((char)LA(1), getFilename(), getLine(), getColumn());}
+					if ( _cnt197>=1 ) { break _loop197; } else {throw new NoViableAltForCharException((char)LA(1), getFilename(), getLine(), getColumn());}
 				}
 				
-				_cnt196++;
+				_cnt197++;
 			} while (true);
 			}
 			_ttype = INT_LITERAL;
@@ -880,13 +880,13 @@ tryAgain:
 				match('.');
 				_ttype = DEC_LITERAL;
 				{
-				_loop201:
+				_loop202:
 				do {
 					if (((LA(1) >= '0' && LA(1) <= '9'))) {
 						matchRange('0','9');
 					}
 					else {
-						break _loop201;
+						break _loop202;
 					}
 					
 				} while (true);
@@ -942,13 +942,13 @@ tryAgain:
 				}
 				_ttype = DEC_LITERAL;
 				{
-				_loop207:
+				_loop208:
 				do {
 					if (((LA(1) >= '0' && LA(1) <= '9'))) {
 						matchRange('0','9');
 					}
 					else {
-						break _loop207;
+						break _loop208;
 					}
 					
 				} while (true);
@@ -1011,7 +1011,7 @@ tryAgain:
 		match('\'');
 		text.setLength(_saveIndex);
 		{
-		_loop213:
+		_loop214:
 		do {
 			if ((_tokenSet_0.member(LA(1)))) {
 				{
@@ -1019,7 +1019,7 @@ tryAgain:
 				}
 			}
 			else {
-				break _loop213;
+				break _loop214;
 			}
 			
 		} while (true);

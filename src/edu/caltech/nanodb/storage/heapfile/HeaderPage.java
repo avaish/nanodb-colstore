@@ -16,11 +16,40 @@ import edu.caltech.nanodb.storage.TableFileInfo;
 
 
 /**
+ * <p>
  * This class contains constants and basic functionality for accessing and
  * manipulating the contents of the header page of a heap table-file.  <b>Note
  * that the first two bytes of the first page is always devoted to the type and
  * page-size of the data file.</b>  (See {@link edu.caltech.nanodb.storage.DBFile}
  * for details.)  All other values must follow the first two bytes.
+ * </p>
+ * <p>
+ * Heap table-file header pages are laid out as follows:
+ * </p>
+ * <ul>
+ *   <li>As with all <tt>DBFile</tt>s, the first two bytes are the file type
+ *       and page size, as always.</li>
+ *   <li>After this come several values specifying the sizes of various areas in
+ *       the header page, including the size of the table's schema specification,
+ *       the statistics for the table, and the number of columns.</li>
+ *   <li>Next the table's schema is recorded in the header page.  See the
+ *       {@link HeapFileTableManager#initTableInfo} and
+ *       {@link HeapFileTableManager#loadTableInfo} methods for details on how
+ *       these values are stored.</li>
+ *   <li>Finally, the table's statistics are stored.</li>
+ * </ul>
+ * <p>
+ * Even with all this information, usually only a few hundred bytes are required
+ * for storing the details of most tables.
+ * </p>
+ *
+ * @design (Donnie) Why is this class a static class, instead of a wrapper class
+ *         around the {@link DBPage}?  No particular reason, really.  The class
+ *         is used relatively briefly when a table is being accessed, and there
+ *         is no real need for it to manage its own object-state, so it was just
+ *         as convenient to provide all functionality as static methods.  This
+ *         avoids the (small) overhead of instantiating an object as well.  But
+ *         really, these are not particularly serious concerns.
  */
 public class HeaderPage {
     /** A logging object for reporting anything interesting that happens. */

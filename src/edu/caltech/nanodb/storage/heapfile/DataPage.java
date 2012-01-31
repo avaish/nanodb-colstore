@@ -13,6 +13,14 @@ import edu.caltech.nanodb.storage.DBPage;
  * at indexes <em>i</em> and <em>j</em>, where <em>i</em> &lt; <em>j</em>, the
  * start of <em>i</em>'s tuple data will be <u>after</u> <em>j</em>'s tuple
  * data.
+ *
+ * @design (Donnie) Why is this class a static class, instead of a wrapper class
+ *         around the {@link DBPage}?  No particular reason, really.  The class
+ *         is used relatively briefly when a table is being accessed, and there
+ *         is no real need for it to manage its own object-state, so it was just
+ *         as convenient to provide all functionality as static methods.  This
+ *         avoids the (small) overhead of instantiating an object as well.  But
+ *         really, these are not particularly serious concerns.
  */
 public class DataPage {
     /** A logging object for reporting anything interesting that happens. */
@@ -566,8 +574,8 @@ public class DataPage {
     public static void deleteTuple(DBPage dbPage, int slot) {
 
         if (slot < 0) {
-            throw new IllegalArgumentException("Slot must be nonnegative; got " +
-                slot);
+            throw new IllegalArgumentException(
+                "Slot must be nonnegative; got " + slot);
         }
 
         int numSlots = getNumSlots(dbPage);

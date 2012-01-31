@@ -32,7 +32,6 @@ public class ExclusiveClient {
     private static Logger logger = Logger.getLogger(ExclusiveClient.class);
 
 
-
     public static final String LOGGING_CONF_FILE = "logging.conf";
 
 
@@ -98,7 +97,7 @@ public class ExclusiveClient {
                     lexer.ignoreNextNewline();
 
                 System.out.print(CMDPROMPT_FIRST);
-                Command cmd = parser.command();
+                Command cmd = parser.command_semicolon();
                 logger.debug("Parsed command:  " + cmd);
 
                 if (cmd == null || cmd instanceof ExitCommand)
@@ -141,3 +140,4 @@ public class ExclusiveClient {
         }
     }
 }
+

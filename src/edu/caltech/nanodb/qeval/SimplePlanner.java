@@ -207,6 +207,14 @@ public class SimplePlanner implements Planner {
             plan = new NestedLoopsJoinNode(leftChild, rightChild,
                 fromClause.getJoinType(), joinPredicate);
 
+            // If it's a NATURAL join, or a join with a USING clause, project
+            // out the duplicate column names.
+            List<SelectValue> selectValues =
+                fromClause.getPreparedSelectValues();
+
+            if (selectValues != null)
+                plan = new ProjectNode(plan, selectValues);
+
             break;
 
         default:

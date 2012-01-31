@@ -26,9 +26,6 @@ public class NestedLoopsJoinNode extends ThetaJoinNode {
     /** Most recently retrieved tuple of the right relation. */
     private Tuple rightTuple;
 
-    /** Most recently joined tuple. */
-    protected Tuple joinedTuple;
-
 
     /** Set to true when we have exhausted all tuples from our subplans. */
     private boolean done;
@@ -152,37 +149,8 @@ public class NestedLoopsJoinNode extends ThetaJoinNode {
         // Use the parent class' helper-function to prepare the schema.
         prepareSchemaStats();
 
-        PlanCost leftCost = leftChild.getCost();
-        ArrayList<ColumnStats> leftStats = leftChild.getStats();
-
-        PlanCost rightCost = rightChild.getCost();
-        ArrayList<ColumnStats> rightStats = rightChild.getStats();
-
-        float selectivity = 1.0f;
-        if (predicate != null) {
-            selectivity = SelectivityEstimator.estimateSelectivity(predicate,
-                schema, stats);
-        }
-
-        if (leftCost != null && rightCost != null) {
-            // Number of tuples in the plain cartesian product is left*right.
-            // Multiplying this by the selectivity of the join condition we get
-            float numTuples = leftCost.numTuples * rightCost.numTuples *
-                selectivity;
-
-            // Since tuple schemas are concatenated, we add the tuple sizes.
-            float tupleSize = leftCost.tupleSize + rightCost.tupleSize;
-
-            // In a nested loops join, the right table must be fully read once for
-            // each row in the left table.  Thus, we have the left cost, plus the
-            // right cost times the number of tuples on the left.
-
-            float cpuCost = leftCost.cpuCost + leftCost.numTuples * rightCost.cpuCost;
-            long numBlockIOs = leftCost.numBlockIOs +
-                (long) Math.ceil(leftCost.numTuples) * rightCost.numBlockIOs;
-
-            cost = new PlanCost(numTuples, tupleSize, cpuCost, numBlockIOs);
-        }
+        // TODO:  Implement the rest
+        cost = null;
     }
 
 
@@ -192,7 +160,6 @@ public class NestedLoopsJoinNode extends ThetaJoinNode {
         done = false;
         leftTuple = null;
         rightTuple = null;
-        joinedTuple = null;
     }
 
 
@@ -208,48 +175,24 @@ public class NestedLoopsJoinNode extends ThetaJoinNode {
             return null;
 
         while (getTuplesToJoin()) {
-            if (canJoinTuples()) {
-                joinedTuple = joinTuples(leftTuple, rightTuple);
-                return joinedTuple;
-            }
+            if (canJoinTuples())
+                return joinTuples(leftTuple, rightTuple);
         }
 
         return null;
     }
 
 
+    /**
+     * This helper function implements the logic that sets {@link #leftTuple}
+     * and {@link #rightTuple} based on the nested-loops logic.  
+     *
+     * @return <tt>true</tt> if another pair of tuples was found to join, or
+     *         <tt>false</tt> if no more pairs of tuples are available to join.
+     */
     private boolean getTuplesToJoin() throws IOException {
-        if (leftTuple == null && !done) {
-            leftTuple = leftChild.getNextTuple();
-            if (leftTuple == null) {
-                done = true;
-                return !done;
-            }
-        }
-
-        rightTuple = rightChild.getNextTuple();
-        if (rightTuple == null) {
-            // Reached end of right relation.  Need to do two things:
-            //   * Go to next tuple in left relation.
-            //   * Restart iteration over right relation.
-
-            leftTuple = leftChild.getNextTuple();
-            if (leftTuple == null) {
-                // Reached end of left relation.  All done.
-                done = true;
-                return !done;
-            }
-
-            rightChild.initialize();
-            rightTuple = rightChild.getNextTuple();
-            if (rightTuple == null) {
-                // Right relation is empty!  All done.
-                done = true;
-                // Redundant:  return !done;
-            }
-        }
-
-        return !done;
+        // TODO:  Implement
+        return false;
     }
 
 

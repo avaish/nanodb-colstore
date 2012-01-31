@@ -122,6 +122,11 @@ public NanoSqlParser(ParserSharedInputState state) {
 		return cmds;
 	}
 	
+/**
+ * A single statement, which could be one of many possible options.  Note that
+ * this command is not followed by a semicolon, which allows it to be used in the
+ * "commands" rule.
+ */
 	public final Command  command() throws RecognitionException, TokenStreamException {
 		Command c;
 		
@@ -206,12 +211,28 @@ public NanoSqlParser(ParserSharedInputState state) {
 		return c;
 	}
 	
+	public final Command  command_semicolon() throws RecognitionException, TokenStreamException {
+		Command c;
+		
+		c = null;
+		
+		try {      // for error handling
+			c=command();
+			match(SEMICOLON);
+		}
+		catch (RecognitionException ex) {
+			reportError(ex);
+			recover(ex,_tokenSet_0);
+		}
+		return c;
+	}
+	
 /**
  * CREATE Statements - each database object that can be created will produce a
  * different {@link edu.caltech.nanodb.commands.Command} instance that contains
  * the SQL command's details.  This rule returns that Command instance, fully
  * configured.
- **/
+ */
 	public final Command  create_stmt() throws RecognitionException, TokenStreamException {
 		Command c;
 		
@@ -334,7 +355,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			e=expression();
 			uc.addValue(name, e);
 			{
-			_loop102:
+			_loop103:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -344,7 +365,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					uc.addValue(name, e);
 				}
 				else {
-					break _loop102;
+					break _loop103;
 				}
 				
 			} while (true);
@@ -571,7 +592,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			tblName=dbobj_ident();
 			c = new AnalyzeCommand(tblName, verbose);
 			{
-			_loop116:
+			_loop117:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -579,7 +600,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					c.addTable(tblName);
 				}
 				else {
-					break _loop116;
+					break _loop117;
 				}
 				
 			} while (true);
@@ -966,7 +987,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			colName=dbobj_ident();
 			c.addColumn(colName);
 			{
-			_loop49:
+			_loop50:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -974,7 +995,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					c.addColumn(colName);
 				}
 				else {
-					break _loop49;
+					break _loop50;
 				}
 				
 			} while (true);
@@ -1028,7 +1049,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			}
 			}
 			{
-			_loop20:
+			_loop21:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -1057,7 +1078,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					}
 				}
 				else {
-					break _loop20;
+					break _loop21;
 				}
 				
 			} while (true);
@@ -1073,7 +1094,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 /**
  * Table column declarations are similar to view column declarations, but can
  * have additional syntax declaring constraints on values in the table-column.
- **/
+ */
 	public final ColumnInfo  table_col_decl(
 		CreateTableCommand cTab
 	) throws RecognitionException, TokenStreamException {
@@ -1092,7 +1113,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			colType=column_type();
 			colInfo = new ColumnInfo(nm.getText(), colType);
 			{
-			_loop23:
+			_loop24:
 			do {
 				if ((_tokenSet_4.member(LA(1)))) {
 					con=column_constraint();
@@ -1102,7 +1123,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					
 				}
 				else {
-					break _loop23;
+					break _loop24;
 				}
 				
 			} while (true);
@@ -1120,7 +1141,7 @@ public NanoSqlParser(ParserSharedInputState state) {
  * Note that column-constraints and table-constraints can be quite different,
  * even though they are represented with the same Java class in the
  * implementation.
- **/
+ */
 	public final ConstraintDecl  table_constraint() throws RecognitionException, TokenStreamException {
 		ConstraintDecl c;
 		
@@ -1191,7 +1212,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 				match(IDENT);
 				c.addColumn(c1.getText());
 				{
-				_loop37:
+				_loop38:
 				do {
 					if ((LA(1)==COMMA)) {
 						match(COMMA);
@@ -1200,7 +1221,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						c.addColumn(ci.getText());
 					}
 					else {
-						break _loop37;
+						break _loop38;
 					}
 					
 				} while (true);
@@ -1218,7 +1239,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 				match(IDENT);
 				c.addColumn(fkc1.getText());
 				{
-				_loop39:
+				_loop40:
 				do {
 					if ((LA(1)==COMMA)) {
 						match(COMMA);
@@ -1227,7 +1248,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						c.addColumn(fkci.getText());
 					}
 					else {
-						break _loop39;
+						break _loop40;
 					}
 					
 				} while (true);
@@ -1246,7 +1267,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					match(IDENT);
 					c.addRefColumn(rtc1.getText());
 					{
-					_loop42:
+					_loop43:
 					do {
 						if ((LA(1)==COMMA)) {
 							match(COMMA);
@@ -1255,7 +1276,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 							c.addRefColumn(rtci.getText());
 						}
 						else {
-							break _loop42;
+							break _loop43;
 						}
 						
 					} while (true);
@@ -1294,7 +1315,7 @@ public NanoSqlParser(ParserSharedInputState state) {
  * Column type-specifications are parsed by this rule.  Some types are simple
  * keywords.  Others have supporting arguments to parse as well, such as lengths
  * or precisions.  User-defined types are not supported.
- **/
+ */
 	public final ColumnType  column_type() throws RecognitionException, TokenStreamException {
 		ColumnType ct;
 		
@@ -1446,7 +1467,7 @@ public NanoSqlParser(ParserSharedInputState state) {
  * Note that column-constraints and table-constraints can be quite different,
  * even though they are represented with the same Java class in the
  * implementation.
- **/
+ */
 	public final ConstraintDecl  column_constraint() throws RecognitionException, TokenStreamException {
 		ConstraintDecl c;
 		
@@ -1558,7 +1579,7 @@ public NanoSqlParser(ParserSharedInputState state) {
  * This rule parses a SELECT clause.  Since SELECT clauses can be nested in
  * other expressions, it's important to have this as a separate sub-rule in the
  * parser.
- **/
+ */
 	public final SelectClause  select_clause() throws RecognitionException, TokenStreamException {
 		SelectClause sc;
 		
@@ -1614,7 +1635,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			sv=select_value();
 			sc.addSelectValue(sv);
 			{
-			_loop57:
+			_loop58:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -1622,7 +1643,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					sc.addSelectValue(sv);
 				}
 				else {
-					break _loop57;
+					break _loop58;
 				}
 				
 			} while (true);
@@ -1683,7 +1704,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 				e=expression();
 				sc.addGroupByExpr(e);
 				{
-				_loop62:
+				_loop63:
 				do {
 					if ((LA(1)==COMMA)) {
 						match(COMMA);
@@ -1691,7 +1712,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						sc.addGroupByExpr(e);
 					}
 					else {
-						break _loop62;
+						break _loop63;
 					}
 					
 				} while (true);
@@ -1769,7 +1790,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 				}
 				sc.addOrderByExpr(new OrderByExpression(e, ascending));
 				{
-				_loop68:
+				_loop69:
 				do {
 					if ((LA(1)==COMMA)) {
 						match(COMMA);
@@ -1804,7 +1825,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						sc.addOrderByExpr(new OrderByExpression(e, ascending));
 					}
 					else {
-						break _loop68;
+						break _loop69;
 					}
 					
 				} while (true);
@@ -1980,7 +2001,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			fc=join_expr();
 			{
-			_loop74:
+			_loop75:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -1988,7 +2009,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					fc = new FromClause(fc, next, JoinType.CROSS);
 				}
 				else {
-					break _loop74;
+					break _loop75;
 				}
 				
 			} while (true);
@@ -2009,7 +2030,7 @@ public NanoSqlParser(ParserSharedInputState state) {
  * appropriate structure of the expression, and that is about applying operator
  * precedence and following the form of the expressions.  Semantic analysis
  * catches the nonsensical statements.
- **/
+ */
 	public final Expression  expression() throws RecognitionException, TokenStreamException {
 		Expression e;
 		
@@ -2042,7 +2063,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			fc=from_expr();
 			{
-			_loop86:
+			_loop87:
 			do {
 				if ((_tokenSet_11.member(LA(1)))) {
 					{
@@ -2187,7 +2208,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						fc.addUsingName(n);
 						
 						{
-						_loop85:
+						_loop86:
 						do {
 							if ((LA(1)==COMMA)) {
 								match(COMMA);
@@ -2195,7 +2216,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 								fc.addUsingName(n);
 							}
 							else {
-								break _loop85;
+								break _loop86;
 							}
 							
 						} while (true);
@@ -2229,7 +2250,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					}
 				}
 				else {
-					break _loop86;
+					break _loop87;
 				}
 				
 			} while (true);
@@ -2368,7 +2389,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 				name=dbobj_ident();
 				cols = new ArrayList<String>(); cols.add(name);
 				{
-				_loop96:
+				_loop97:
 				do {
 					if ((LA(1)==COMMA)) {
 						match(COMMA);
@@ -2376,7 +2397,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						cols.add(name);
 					}
 					else {
-						break _loop96;
+						break _loop97;
 					}
 					
 				} while (true);
@@ -2417,7 +2438,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 			e=expression();
 			exprs.add(e);
 			{
-			_loop99:
+			_loop100:
 			do {
 				if ((LA(1)==COMMA)) {
 					match(COMMA);
@@ -2425,7 +2446,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					exprs.add(e);
 				}
 				else {
-					break _loop99;
+					break _loop100;
 				}
 				
 			} while (true);
@@ -2451,7 +2472,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			e=logical_and_expr();
 			{
-			_loop126:
+			_loop127:
 			do {
 				if ((LA(1)==OR)) {
 					match(OR);
@@ -2471,7 +2492,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					
 				}
 				else {
-					break _loop126;
+					break _loop127;
 				}
 				
 			} while (true);
@@ -2516,7 +2537,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 				e=expression();
 				exprs.add(e);
 				{
-				_loop123:
+				_loop124:
 				do {
 					if ((LA(1)==COMMA)) {
 						match(COMMA);
@@ -2524,7 +2545,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 						exprs.add(e);
 					}
 					else {
-						break _loop123;
+						break _loop124;
 					}
 					
 				} while (true);
@@ -2562,7 +2583,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			e=logical_not_expr();
 			{
-			_loop129:
+			_loop130:
 			do {
 				if ((LA(1)==AND)) {
 					match(AND);
@@ -2582,7 +2603,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					
 				}
 				else {
-					break _loop129;
+					break _loop130;
 				}
 				
 			} while (true);
@@ -2688,7 +2709,7 @@ public NanoSqlParser(ParserSharedInputState state) {
  *       includes compare_expr, like_expr, between_expr, in_expr, and is_expr.
  *       BUT:  this introduces nondeterminism into the parser, once you add the
  *       other alternatives.  :(  Work out a solution...
- **/
+ */
 	public final Expression  relational_expr() throws RecognitionException, TokenStreamException {
 		Expression e;
 		
@@ -2941,7 +2962,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 /**
  * A numeric expression is at least one numeric term.  Multiple numeric terms
  * are added or subtracted with each other.
- **/
+ */
 	public final Expression  additive_expr() throws RecognitionException, TokenStreamException {
 		Expression e;
 		
@@ -2954,7 +2975,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			e=mult_expr();
 			{
-			_loop148:
+			_loop149:
 			do {
 				if ((LA(1)==PLUS||LA(1)==MINUS)) {
 					{
@@ -2981,7 +3002,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					e = new ArithmeticOperator(mathType, e, e2);
 				}
 				else {
-					break _loop148;
+					break _loop149;
 				}
 				
 			} while (true);
@@ -2997,7 +3018,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 /**
  * A numeric term is at least one numeric factor.  Multiple numeric factors
  * are multiplied or divided with each other.
- **/
+ */
 	public final Expression  mult_expr() throws RecognitionException, TokenStreamException {
 		Expression e;
 		
@@ -3010,7 +3031,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 		try {      // for error handling
 			e=unary_op_expr();
 			{
-			_loop152:
+			_loop153:
 			do {
 				if ((LA(1)==STAR||LA(1)==SLASH||LA(1)==PERCENT)) {
 					{
@@ -3043,7 +3064,7 @@ public NanoSqlParser(ParserSharedInputState state) {
 					e = new ArithmeticOperator(mathType, e, e2);
 				}
 				else {
-					break _loop152;
+					break _loop153;
 				}
 				
 			} while (true);

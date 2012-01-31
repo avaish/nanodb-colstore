@@ -782,90 +782,18 @@ public class HeapFileTableManager implements TableManager {
     // Copy interface javadocs.
     @Override
     public void analyzeTable(TableFileInfo tblFileInfo) throws IOException {
+        logger.warn("TODO:  Implement analyzeTable().");
 
-        DBFile dbFile = tblFileInfo.getDBFile();
-        logger.debug("Analyzing data file " + dbFile.getDataFile());
-
-        Schema schema = tblFileInfo.getSchema();
-
-        int numPages = 0;
-        int numTuples = 0;
-        long tupleBytes = 0;
-
-        ArrayList<ColumnStatsCollector> colStatsCollectors =
-            new ArrayList<ColumnStatsCollector>(schema.numColumns());
-
-        for (ColumnInfo colInfo : schema) {
-            colStatsCollectors.add(
-                new ColumnStatsCollector(colInfo.getType().getBaseType()));
-        }
-
-        BlockedTableReader blockedReader = getBlockedReader();
-
-        // Scan through all pages in the table file.
-        DBPage dbPage = blockedReader.getFirstDataPage(tblFileInfo);
-        while (dbPage != null) {
-            numPages++;
-
-            // Count the number of tuples in this data page.  We have to
-            // iterate through the slot table, since there could be empty
-            // slots in the middle of the table.
-            int numSlots = DataPage.getNumSlots(dbPage);
-            for (int iSlot = 0; iSlot < numSlots; iSlot++) {
-                if (DataPage.getSlotValue(dbPage, iSlot) != DataPage.EMPTY_SLOT)
-                    numTuples++;
-            }
-
-            // Compute the amount of tuple data in the page.
-            tupleBytes += dbPage.getPageSize() - DataPage.getTupleDataStart(dbPage);
-
-            // Scan through the tuples in this page and update the column-stats.
-            Tuple tup = blockedReader.getFirstTupleInPage(tblFileInfo, dbPage);
-            while (tup != null) {
-                for (int iCol = 0; iCol < tup.getColumnCount(); iCol++)
-                    colStatsCollectors.get(iCol).addValue(tup.getColumnValue(iCol));
-
-                tup = blockedReader.getNextTupleInPage(tblFileInfo, dbPage, tup);
-            }
-
-            // Done with this data page.  Move on to the next one.
-            dbPage = blockedReader.getNextDataPage(tblFileInfo, dbPage);
-        }
-
-        float avgTupleSize = 0;
-        if (numTuples > 0)
-            avgTupleSize = (float) tupleBytes / (float) numTuples;
-
-        if (logger.isDebugEnabled()) {
-            logger.debug("Table " + tblFileInfo.getTableName() + " stats:");
-            logger.debug("  Data-page count:  " + numPages + " pages");
-            logger.debug("  Tuple count:  " + numTuples + " tuples");
-            logger.debug("  Average tuple size:  " + avgTupleSize + " bytes");
-            logger.debug("  Column stats:");
-            for (int iCol = 0; iCol < colStatsCollectors.size(); iCol++) {
-                ColumnStatsCollector collector = colStatsCollectors.get(iCol);
-                logger.debug(String.format(
-                    "    Column %d:  %d distinct values, %d NULL values, " +
-                    "min = %s, max = %s", iCol, collector.getNumUniqueValues(),
-                    collector.getNumNullValues(), collector.getMinValue(),
-                    collector.getMaxValue()));
-            }
-        }
-
-        // Store the current statistics on the table-file info object,
-        // and also store the stats in the table-file's header page.
-
-        ArrayList<ColumnStats> colStats =
-            new ArrayList<ColumnStats>(colStatsCollectors.size());
-        for (ColumnStatsCollector collector : colStatsCollectors)
-            colStats.add(collector.getColumnStats());
-
-        TableStats stats =
-            new TableStats(numPages, numTuples, avgTupleSize, colStats);
+        /* Your implementation will end with lines like these.  You must be
+         * sure to update the TableFileInfo object, and then store the results
+         * back to the header page.
+         *
+        TableStats stats = new TableStats(...);
         tblFileInfo.setStats(stats);
 
         DBPage headerPage = storageManager.loadDBPage(dbFile, 0);
         HeaderPage.setTableStats(headerPage, tblFileInfo);
+        */
     }
 
 

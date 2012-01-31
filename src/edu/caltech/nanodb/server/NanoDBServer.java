@@ -9,7 +9,7 @@ import java.util.List;
 import antlr.RecognitionException;
 import antlr.TokenStreamException;
 import edu.caltech.nanodb.commands.Command;
-import edu.caltech.nanodb.commands.ExitCommand;
+import edu.caltech.nanodb.commands.SelectCommand;
 import edu.caltech.nanodb.sqlparse.NanoSqlLexer;
 import edu.caltech.nanodb.sqlparse.NanoSqlParser;
 import org.apache.log4j.Logger;
@@ -88,14 +88,29 @@ public class NanoDBServer {
 
         CommandResult result = new CommandResult();
 
+        if (includeTuples && command instanceof SelectCommand)
+            result.collectSelectResults((SelectCommand) command);
+
         result.startExecution();
         try {
             command.execute();
         }
-        catch (Throwable t) {
-            result.recordFailure(t);
+        catch (Exception e) {
+            result.recordFailure(e);
         }
         result.endExecution();
+
+        // TODO:  Persist all database changes.  The buffer manager still
+        //        isn't quite intelligent enough to handle table files
+        //        across multiple commands without flushing, yet...
+        try {
+            StorageManager.getInstance().closeAllOpenTables();
+        }
+        catch (IOException e) {
+            System.out.println("IO error while closing open tables:  " +
+                e.getMessage());
+            logger.error("IO error while closing open tables", e);
+        }
 
         return result;
     }

@@ -90,10 +90,14 @@ public abstract class QueryCommand extends Command {
                     PlanNode.printNodeTreeToString(plan, true));
 
                 PlanCost cost = plan.getCost();
-                logger.debug("Estimated " + cost.numTuples +
-                    " tuples with average size " + cost.tupleSize + " bytes");
-                logger.debug("Estimated number of block IOs: " + cost.numBlockIOs);
-                logger.debug("Estimated CPU cost:  " + cost.cpuCost);
+                if (cost != null) {
+                    logger.debug(String.format(
+                        "Estimated %f tuples with average size %f bytes",
+                        cost.numTuples, cost.tupleSize));
+                    logger.debug("Estimated number of block IOs: " +
+                                 cost.numBlockIOs);
+                    logger.debug("Estimated CPU cost:  " + cost.cpuCost);
+                }
 
                 // Execute the query plan, then print out the evaluation stats.
 
@@ -135,11 +139,16 @@ public abstract class QueryCommand extends Command {
                 out.println();
 
                 PlanCost cost = plan.getCost();
-                out.printf("Estimated %f tuples with average size %f%n",
-                    cost.numTuples, cost.tupleSize);
-                out.println("Estimated number of block IOs:  " +
-                    cost.numBlockIOs);
-                logger.debug("Estimated CPU cost:  " + cost.cpuCost);
+                if (cost != null) {
+                    out.printf("Estimated %f tuples with average size %f%n",
+                        cost.numTuples, cost.tupleSize);
+                    out.println("Estimated number of block IOs:  " +
+                        cost.numBlockIOs);
+                    logger.debug("Estimated CPU cost:  " + cost.cpuCost);
+                }
+                else {
+                    out.println("Plan cost is not available.");
+                }
             }
         }
         catch (ExecutionException e) {
