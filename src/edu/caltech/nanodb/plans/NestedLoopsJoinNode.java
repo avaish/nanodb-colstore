@@ -26,9 +26,6 @@ public class NestedLoopsJoinNode extends ThetaJoinNode {
     /** Most recently retrieved tuple of the right relation. */
     private Tuple rightTuple;
 
-    /** Most recently joined tuple. */
-    protected Tuple joinedTuple;
-
 
     /** Set to true when we have exhausted all tuples from our subplans. */
     private boolean done;
@@ -47,6 +44,7 @@ public class NestedLoopsJoinNode extends ThetaJoinNode {
      *
      * @param obj the object to which we are comparing
      */
+    @Override
     public boolean equals(Object obj) {
 
         if (obj instanceof NestedLoopsJoinNode) {
@@ -61,9 +59,8 @@ public class NestedLoopsJoinNode extends ThetaJoinNode {
     }
 
 
-    /**
-     * Computes the hash-code of the nested-loops plan node.
-     */
+    /** Computes the hash-code of the nested-loops plan node. */
+    @Override
     public int hashCode() {
         int hash = 7;
         hash = 31 * hash + (predicate != null ? predicate.hashCode() : 0);
@@ -192,7 +189,6 @@ public class NestedLoopsJoinNode extends ThetaJoinNode {
         done = false;
         leftTuple = null;
         rightTuple = null;
-        joinedTuple = null;
     }
 
 
@@ -208,10 +204,8 @@ public class NestedLoopsJoinNode extends ThetaJoinNode {
             return null;
 
         while (getTuplesToJoin()) {
-            if (canJoinTuples()) {
-                joinedTuple = joinTuples(leftTuple, rightTuple);
-                return joinedTuple;
-            }
+            if (canJoinTuples())
+                return joinTuples(leftTuple, rightTuple);
         }
 
         return null;

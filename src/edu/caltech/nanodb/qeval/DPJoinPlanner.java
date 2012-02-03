@@ -5,10 +5,12 @@ import java.io.IOException;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import edu.caltech.nanodb.commands.FromClause;
 import edu.caltech.nanodb.commands.SelectClause;
@@ -141,47 +143,26 @@ public class DPJoinPlanner implements Planner {
         // We want to take a simple SELECT a, b, ... FROM A, B, ... WHERE ...
         // and turn it into a tree of plan nodes.
 
-        if (selClause.getFromClause() == null) {
+        FromClause fromClause = selClause.getFromClause();
+        if (fromClause == null) {
             throw new UnsupportedOperationException(
                 "NanoDB doesn't yet support SQL queries without a FROM clause!");
         }
 
-        // Collect all predicates associated with this select-clause, from the
-        // WHERE condition and all join conditions.
+        // Pull out the top-level conjuncts from the WHERE clause on the query,
+        // since we will handle them in special ways if we have outer joins.
 
-        HashSet<Expression> allConjuncts = new HashSet<Expression>();
-        ArrayList<FromClause> leafFromClauses = new ArrayList<FromClause>();
-        collectDetails(selClause, allConjuncts, leafFromClauses);
+        HashSet<Expression> whereConjuncts = new HashSet<Expression>();
+        addConjuncts(whereConjuncts, selClause.getWhereExpr());
 
-        logger.debug("Collected conjuncts:  " + allConjuncts);
-        logger.debug("Collected FROM-clauses:  " + leafFromClauses);
+        // Create an optimal join plan from the top-level from-clause and the
+        // top-level conjuncts.
+        JoinComponent joinComp = makeJoinPlan(fromClause, whereConjuncts);
+        PlanNode plan = joinComp.joinPlan;
 
-        // Create a subplan for every single leaf FROM-clause, and prepare the
-        // leaf-plan.
-
-        logger.debug("Generating plans for all leaf nodes.");
-        ArrayList<JoinComponent> leafComponents =
-            generateLeafJoinComponents(leafFromClauses, allConjuncts);
-
-        // Print out the results, for debugging purposes.
-        if (logger.isDebugEnabled()) {
-            for (JoinComponent leaf : leafComponents) {
-                logger.debug("    Leaf plan:  " +
-                    PlanNode.printNodeTreeToString(leaf.joinPlan, true));
-            }
-        }
-
-        // Build up the full query-plan using a dynamic programming approach.
-        JoinComponent optimalJoin = generateOptimalJoin(leafComponents, allConjuncts);
-        PlanNode plan = optimalJoin.joinPlan;
-        logger.info("Optimal join plan generated:\n" +
-            PlanNode.printNodeTreeToString(plan, true));
-
-        // If there are any unused predicates then we need to add those into
-        // the final result.
-
-        HashSet<Expression> unusedConjuncts = new HashSet<Expression>(allConjuncts);
-        unusedConjuncts.removeAll(optimalJoin.conjunctsUsed);
+        HashSet<Expression> unusedConjuncts =
+            new HashSet<Expression>(whereConjuncts);
+        unusedConjuncts.removeAll(joinComp.conjunctsUsed);
 
         Expression finalPredicate = makePredicate(unusedConjuncts);
         if (finalPredicate != null)
@@ -207,31 +188,57 @@ public class DPJoinPlanner implements Planner {
     }
 
 
-    /**
-     * This helper method pulls the essential details for join optimization out
-     * of a <tt>SELECT</tt> clause.  A <tt>WHERE</tt> predicate will be added to
-     * the set of conjuncts, and any <tt>FROM</tt> terms will be added into the
-     * set of from-clauses.
-     * <p>
-     * Note that the {@link #collectDetails(FromClause, HashSet, ArrayList)}
-     * method is used by this method to collect details out of a from-clause.
-     *
-     * @param selClause the select-clause to collect details from
-     *
-     * @param conjuncts the collection to add all conjuncts to
-     *
-     * @param leafFromClauses the collection to add all leaf from-clauses to
-     */
-    private void collectDetails(SelectClause selClause,
-        HashSet<Expression> conjuncts, ArrayList<FromClause> leafFromClauses) {
+    private JoinComponent makeJoinPlan(FromClause fromClause,
+        Collection<Expression> extraConjuncts) throws IOException {
 
-        Expression whereExpr = selClause.getWhereExpr();
-        if (whereExpr != null)
-            addConjuncts(conjuncts, whereExpr);
+        // These variables receive the leaf-clauses and join conjuncts found
+        // from scanning the sub-clauses.  Initially, we put the extra conjuncts
+        // into the collection of conjuncts.
+        HashSet<Expression> conjuncts = new HashSet<Expression>();
+        ArrayList<FromClause> leafFromClauses = new ArrayList<FromClause>();
 
-        FromClause fromClause = selClause.getFromClause();
-        if (fromClause != null)
-            collectDetails(fromClause, conjuncts, leafFromClauses);
+        collectDetails(fromClause, conjuncts, leafFromClauses);
+
+        logger.debug("Making join-plan for " + fromClause);
+        logger.debug("    Collected conjuncts:  " + conjuncts);
+        logger.debug("    Collected FROM-clauses:  " + leafFromClauses);
+        logger.debug("    Extra conjuncts:  " + extraConjuncts);
+
+        conjuncts.addAll(extraConjuncts);
+        Set<Expression> roConjuncts = Collections.unmodifiableSet(conjuncts);
+
+        // Create a subplan for every single leaf FROM-clause, and prepare the
+        // leaf-plan.
+
+        logger.debug("Generating plans for all leaves");
+
+        // Pass an unmodifiable set of the input conjuncts, to keep bugs from
+        // happening...
+        ArrayList<JoinComponent> leafComponents = generateLeafJoinComponents(
+            leafFromClauses, roConjuncts);
+
+        // Print out the results, for debugging purposes.
+        if (logger.isDebugEnabled()) {
+            for (JoinComponent leaf : leafComponents) {
+                logger.debug("    Leaf plan:  " +
+                    PlanNode.printNodeTreeToString(leaf.joinPlan, true));
+            }
+        }
+
+        // Build up the full query-plan using a dynamic programming approach.
+
+        JoinComponent optimalJoin =
+            generateOptimalJoin(leafComponents, roConjuncts);
+
+        PlanNode plan = optimalJoin.joinPlan;
+        logger.info("Optimal join plan generated:\n" +
+            PlanNode.printNodeTreeToString(plan, true));
+
+        // If there are any unused predicates that we can apply at this level,
+        // then we need to add those into the plan.
+        // TODO ???
+
+        return optimalJoin;
     }
 
 
@@ -239,11 +246,6 @@ public class DPJoinPlanner implements Planner {
      * This helper method pulls the essential details for join optimization out
      * of a <tt>FROM</tt> clause.  <tt>FROM</tt> terms will be added into the
      * set of from-clauses.
-     * <p>
-     * Note that this method is used by the
-     * {@link #collectDetails(SelectClause, HashSet, ArrayList)}
-     * to collect details out of a from-clause.  In addition, this method calls
-     * itself recursively when a from-clause has child from-clauses.
      *
      * @param fromClause the from-clause to collect details from
      *
@@ -254,36 +256,22 @@ public class DPJoinPlanner implements Planner {
     private void collectDetails(FromClause fromClause,
         HashSet<Expression> conjuncts, ArrayList<FromClause> leafFromClauses) {
 
-        if (fromClause.getClauseType() == FromClause.ClauseType.JOIN_EXPR) {
-            // This is a join expression.  Pull out the conjuncts if there are
-            // any, and then collect details from both children of the join.
+        if (fromClause.getClauseType() == FromClause.ClauseType.JOIN_EXPR &&
+            !fromClause.isOuterJoin()) {
+            // This is an inner-join expression.  Pull out the conjuncts if
+            // there are any, and then collect details from both children of
+            // the join.
 
             FromClause.JoinConditionType condType = fromClause.getConditionType();
-            if (condType != null) {
-                Expression joinExpr;
-                switch (condType) {
-                case NATURAL_JOIN:
-                case JOIN_USING:
-                    joinExpr = fromClause.getPreparedJoinExpr();
-                    break;
-
-                case JOIN_ON_EXPR:
-                    joinExpr = fromClause.getOnExpression();
-                    break;
-
-                default:
-                    throw new IllegalStateException(
-                        "Unrecognized join condition type " + condType);
-                }
-                addConjuncts(conjuncts, joinExpr);
-            }
+            if (condType != null)
+                addConjuncts(conjuncts, fromClause.getPreparedJoinExpr());
 
             collectDetails(fromClause.getLeftChild(), conjuncts, leafFromClauses);
             collectDetails(fromClause.getRightChild(), conjuncts, leafFromClauses);
         }
         else {
-            // This is either a base table or a derived table (specifically, a
-            // SELECT subquery).  Add it to the list of leaf FROM-clauses.
+            // This is either a base table, a derived table (a SELECT subquery),
+            // or an outer join.  Add it to the list of leaf FROM-clauses.
             leafFromClauses.add(fromClause);
         }
     }
@@ -302,6 +290,11 @@ public class DPJoinPlanner implements Planner {
      * @param expr the expression to pull the conjuncts out of
      */
     private void addConjuncts(Collection<Expression> conjuncts, Expression expr) {
+        // If there is no condition, just return without doing anything.
+        if (expr == null)
+            return;
+
+        // If it's an AND expression, add the terms to the set of conjuncts.
         if (expr instanceof BooleanOperator) {
             BooleanOperator boolExpr = (BooleanOperator) expr;
             if (boolExpr.getType() == BooleanOperator.Type.AND_EXPR) {
@@ -335,7 +328,8 @@ public class DPJoinPlanner implements Planner {
      *
      * @param leafFromClauses the collection of from-clauses found in the query
      *
-     * @param allConjuncts the collection of all conjuncts found in the query
+     * @param conjuncts the collection of conjuncts that can be applied at this
+     *                  level
      *
      * @return a collection of {@link JoinComponent} object containing the plans
      *         and other details for each leaf from-clause
@@ -344,40 +338,142 @@ public class DPJoinPlanner implements Planner {
      *         schema loaded, for some reason
      */
     private ArrayList<JoinComponent> generateLeafJoinComponents(
-        Collection<FromClause> leafFromClauses, Collection<Expression> allConjuncts)
+        Collection<FromClause> leafFromClauses, Collection<Expression> conjuncts)
         throws IOException {
 
         // Create a subplan for every single leaf FROM-clause, and prepare the
         // leaf-plan.
-        logger.info("Generating plans for all leaf nodes.");
         ArrayList<JoinComponent> leafComponents = new ArrayList<JoinComponent>();
         for (FromClause leafClause : leafFromClauses) {
-            PlanNode leafPlan = makeFromPlan(leafClause);
-            leafPlan.prepare();
-            Schema leafSchema = leafPlan.getSchema();
-
-            // Construct a predicate for this leaf node, if possible, by adding
-            // conjuncts that are specific to only this leaf plan-node.
-            //
-            // Do not remove those conjuncts from the set of unused conjuncts.
-
             HashSet<Expression> leafConjuncts = new HashSet<Expression>();
-            findExprsUsingSchemas(allConjuncts, false, leafConjuncts, leafSchema);
 
-            Expression leafPredicate = makePredicate(leafConjuncts);
-            if (leafPredicate != null) {
-                leafPlan = addPredicateToPlan(leafPlan, leafPredicate);
-                leafPlan.prepare();
-            }
-
-            logger.info("Generated leaf plan:\n" +
-                PlanNode.printNodeTreeToString(leafPlan));
+            PlanNode leafPlan =
+                makeLeafPlan(leafClause, conjuncts, leafConjuncts);
 
             JoinComponent leaf = new JoinComponent(leafPlan, leafConjuncts);
             leafComponents.add(leaf);
         }
 
         return leafComponents;
+    }
+
+
+    /**
+     * Constructs a plan tree for evaluating the specified from-clause.
+     * Depending on the clause's {@link FromClause#getClauseType type},
+     * the plan tree will comprise varying operations, such as:
+     * <ul>
+     *   <li>
+     *     {@link edu.caltech.nanodb.commands.FromClause.ClauseType#BASE_TABLE} -
+     *     the clause is a simple table reference, so a simple select operation
+     *     is constructed via {@link #makeSimpleSelect}.
+     *   </li>
+     *   <li>
+     *     {@link edu.caltech.nanodb.commands.FromClause.ClauseType#SELECT_SUBQUERY} -
+     *     the clause is a <tt>SELECT</tt> subquery, so a plan subtree is
+     *     constructed by a recursive call to {@link #makePlan}.
+     *   </li>
+     *   <li>
+     *     {@link edu.caltech.nanodb.commands.FromClause.ClauseType#JOIN_EXPR}
+     *     <b>(outer joins only!)</b> - the clause is an outer join of two
+     *     relations.  Because outer joins are so constrained in what conjuncts
+     *     can be pushed down through them, we treat them as leaf-components in
+     *     this optimizer as well.  The child-plans of the outer join are
+     *     constructed by recursively invoking the {@link #makeJoinPlan} method,
+     *     and then an outer join is constructed from the two children.
+     *   </li>
+     * </ul>
+     *
+     * @param fromClause the select nodes that need to be joined.
+     *
+     * @return a plan tree for evaluating the specified from-clause
+     *
+     * @throws IOException if an IO error occurs when the planner attempts to
+     *         load schema and indexing information.
+     *
+     * @throws IllegalArgumentException if the specified from-clause is a join
+     *         expression that isn't an outer join, or has some other
+     *         unrecognized type.
+     */
+    private PlanNode makeLeafPlan(FromClause fromClause,
+        Collection<Expression> conjuncts, HashSet<Expression> leafConjuncts)
+        throws IOException {
+
+        PlanNode plan;
+
+        FromClause.ClauseType clauseType = fromClause.getClauseType();
+        switch (clauseType) {
+            case BASE_TABLE:
+            case SELECT_SUBQUERY:
+
+                if (clauseType == FromClause.ClauseType.SELECT_SUBQUERY) {
+                    // This clause is a SQL subquery, so generate a plan from the
+                    // subquery and return it.
+                    plan = makePlan(fromClause.getSelectClause());
+                }
+                else {
+                    // This clause is a base-table, so we just generate a file-scan
+                    // plan node for the table.
+                    plan = makeSimpleSelect(fromClause.getTableName(), null);
+                }
+
+                // If the FROM-clause renames the result, apply the renaming here.
+                if (fromClause.isRenamed())
+                    plan = new RenameNode(plan, fromClause.getResultName());
+
+                break;
+
+            case JOIN_EXPR:
+                if (!fromClause.isOuterJoin()) {
+                    throw new IllegalArgumentException(
+                        "This method only supports outer joins.  Got " +
+                        fromClause);
+                }
+
+                Collection<Expression> childConjuncts;
+                
+                childConjuncts = conjuncts;
+                if (fromClause.hasOuterJoinOnRight())
+                    childConjuncts = null;
+                JoinComponent leftComp =
+                    makeJoinPlan(fromClause.getLeftChild(), childConjuncts);
+
+                childConjuncts = conjuncts;
+                if (fromClause.hasOuterJoinOnLeft())
+                    childConjuncts = null;
+                JoinComponent rightComp =
+                    makeJoinPlan(fromClause.getRightChild(), childConjuncts);
+
+                plan = new NestedLoopsJoinNode(leftComp.joinPlan, rightComp.joinPlan,
+                    fromClause.getJoinType(), fromClause.getPreparedJoinExpr());
+
+                leafConjuncts.addAll(leftComp.conjunctsUsed);
+                leafConjuncts.addAll(rightComp.conjunctsUsed);
+                
+                break;
+
+            default:
+                throw new IllegalArgumentException(
+                    "Unrecognized from-clause type:  " + fromClause.getClauseType());
+        }
+
+        plan.prepare();
+        Schema schema = plan.getSchema();
+
+        // If possible, construct a predicate for this leaf node by adding
+        // conjuncts that are specific to only this leaf plan-node.
+        //
+        // Do not remove those conjuncts from the set of unused conjuncts.
+
+        findExprsUsingSchemas(conjuncts, false, leafConjuncts, schema);
+
+        Expression leafPredicate = makePredicate(leafConjuncts);
+        if (leafPredicate != null) {
+            plan = addPredicateToPlan(plan, leafPredicate);
+            plan.prepare();
+        }
+
+        return plan;
     }
 
 
@@ -394,13 +490,13 @@ public class DPJoinPlanner implements Planner {
      * @param leafComponents the collection of leaf join-components, generated
      *        by the {@link #generateLeafJoinComponents} method.
      *
-     * @param allConjuncts the collection of all conjuncts found in the query
+     * @param conjuncts the collection of all conjuncts found in the query
      *
      * @return a single {@link JoinComponent} object that joins all leaf
      *         components together in an optimal way.
      */
     private JoinComponent generateOptimalJoin(
-        ArrayList<JoinComponent> leafComponents, HashSet<Expression> allConjuncts) {
+        ArrayList<JoinComponent> leafComponents, Set<Expression> conjuncts) {
 
         // This object maps a collection of leaf-plans (represented as a
         // hash-set) to the optimal join-plan for that collection of leaf plans.
@@ -470,7 +566,7 @@ public class DPJoinPlanner implements Planner {
 
                     // These are the conjuncts still unused for this join pair.
                     HashSet<Expression> unusedConjuncts =
-                        new HashSet<Expression>(allConjuncts);
+                        new HashSet<Expression>(conjuncts);
                     unusedConjuncts.removeAll(subplanConjuncts);
 
                     // These are the conjuncts relevant for the join pair.
@@ -691,76 +787,6 @@ public class DPJoinPlanner implements Planner {
                     termIter.remove();
             }
         }
-    }
-
-
-    /**
-     * Constructs a plan tree for evaluating the specified from-clause.
-     * Depending on the clause's {@link FromClause#getClauseType type},
-     * the plan tree will comprise varying operations, such as:
-     * <ul>
-     *   <li>
-     *     {@link edu.caltech.nanodb.commands.FromClause.ClauseType#BASE_TABLE} -
-     *     the clause is a simple table reference, so a simple select operation
-     *     is constructed via {@link #makeSimpleSelect}.
-     *   </li>
-     *   <li>
-     *     {@link edu.caltech.nanodb.commands.FromClause.ClauseType#SELECT_SUBQUERY} -
-     *     the clause is a <tt>SELECT</tt> subquery, so a plan subtree is
-     *     constructed by a recursive call to {@link #makePlan}.
-     *   </li>
-     *   <li>
-     *     {@link edu.caltech.nanodb.commands.FromClause.ClauseType#JOIN_EXPR} -
-     *     the clause is a join of two relations.  <em>This case should be
-     *     handled by the {@link #makePlan} method using a dynamic programming
-     *     technique, so this method throws an exception if it encounters a join
-     *     expression.
-     *   </li>
-     * </ul>
-     *
-     * @param fromClause the select nodes that need to be joined.
-     *
-     * @return a plan tree for evaluating the specified from-clause
-     *
-     * @throws IOException if an IO error occurs when the planner attempts to
-     *         load schema and indexing information.
-     *
-     * @throws IllegalArgumentException if the specified from-clause is a join
-     *         expression, or has some other unrecognized type.
-     */
-    public PlanNode makeFromPlan(FromClause fromClause)
-        throws IOException {
-
-        PlanNode plan;
-
-        FromClause.ClauseType clauseType = fromClause.getClauseType();
-        switch (clauseType) {
-        case BASE_TABLE:
-        case SELECT_SUBQUERY:
-
-            if (clauseType == FromClause.ClauseType.SELECT_SUBQUERY) {
-                // This clause is a SQL subquery, so generate a plan from the
-                // subquery and return it.
-                plan = makePlan(fromClause.getSelectClause());
-            }
-            else {
-                // This clause is a base-table, so we just generate a file-scan
-                // plan node for the table.
-                plan = makeSimpleSelect(fromClause.getTableName(), null);
-            }
-
-            // If the FROM-clause renames the result, apply the renaming here.
-            if (fromClause.isRenamed())
-                plan = new RenameNode(plan, fromClause.getResultName());
-
-            break;
-
-        default:
-            throw new IllegalArgumentException(
-                "Unrecognized from-clause type:  " + fromClause.getClauseType());
-        }
-
-        return plan;
     }
 
 
