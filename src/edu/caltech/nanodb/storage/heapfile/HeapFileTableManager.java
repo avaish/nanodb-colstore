@@ -423,7 +423,7 @@ public class HeapFileTableManager implements TableManager {
         // This should always be specified.
         String indexName = hpReader.readVarString255();
         
-        KeyColumnIndexes key = new KeyColumnIndexes(keyCols, indexName);
+        KeyColumnIndexes key = new KeyColumnIndexes(indexName, keyCols);
         key.setConstraintName(constraintName);
         
         return key;

@@ -3,8 +3,12 @@ package edu.caltech.nanodb.storage.btreeindex;
 
 import java.io.IOException;
 
+import java.util.ArrayList;
 import java.util.List;
 
+import edu.caltech.nanodb.relations.ColumnType;
+import edu.caltech.nanodb.relations.SQLDataType;
+import edu.caltech.nanodb.storage.heapfile.DataPage;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.expressions.TupleLiteral;
@@ -80,6 +84,13 @@ public class BTreeIndexManager implements IndexManager {
 
 
     /**
+     * This value is stored in a B-tree page's byte 0, to indicate that the page
+     * is empty.
+     */
+    public static final int BTREE_EMPTY_PAGE = 2;
+
+
+    /**
      * The table manager uses the storage manager a lot, so it caches a reference
      * to the singleton instance of the storage manager at initialization.
      */
@@ -103,6 +114,38 @@ public class BTreeIndexManager implements IndexManager {
     }
 
 
+    /**
+     * This helper function generates the prefix of a name for an index with no
+     * actual name specified.  Since indexes and other constraints don't
+     * necessarily require names to be specified, we need some way to generate
+     * these names.
+     *
+     * @param idxFileInfo the information describing the index to be named
+     *
+     * @return a string containing a prefix to use for naming the index.
+     */
+    public String getUnnamedIndexPrefix(IndexFileInfo idxFileInfo) {
+        // Generate a prefix based on the contents of the IndexFileInfo object.
+        IndexInfo info = idxFileInfo.getIndexInfo();
+        TableConstraintType constraintType = info.getConstraintType();
+
+        if (constraintType == null)
+            return "IDX_" + idxFileInfo.getTableName();
+
+        switch (info.getConstraintType()) {
+            case PRIMARY_KEY:
+                return "PK_" + idxFileInfo.getTableName();
+
+            case UNIQUE:
+                return "CK_" + idxFileInfo.getTableName();
+
+            default:
+                throw new IllegalArgumentException("Unrecognized constraint type " +
+                    constraintType);
+        }
+    }
+
+
     // Copy interface javadocs.
     @Override
     public void initIndexInfo(IndexFileInfo idxFileInfo) throws IOException {
@@ -116,41 +159,15 @@ public class BTreeIndexManager implements IndexManager {
             "Initializing new index %s on table %s, stored at %s", indexName,
             tableName, dbFile));
 
-        // The index's header page mainly stores what columns are in the index,
-        // and also the roots of the indexing structure.  The actual schema
-        // information is stored in the referenced table.  Thus, there isn't a
-        // whole lot of information to store in the index header.
+        // The index's header page just stores details of the indexing structure
+        // itself, since the the actual schema information and other index
+        // details are stored in the referenced table.
+
         DBPage headerPage = storageManager.loadDBPage(dbFile, 0);
-
-        headerPage.writeShort(HeaderPage.OFFSET_NUM_DATA_PAGES, 0);
-
-        PageWriter hpWriter = new PageWriter(headerPage);
-        hpWriter.setPosition(HeaderPage.OFFSET_INDEX_SPEC);
-
-        // Write out the index information.
-        // TODO:  logger.info("Writing index specification");
-    }
-
-
-    public String getUnnamedIndexPrefix(IndexFileInfo idxFileInfo) {
-        // Generate a prefix based on the contents of the IndexFileInfo object.
-        IndexInfo info = idxFileInfo.getIndexInfo();
-        TableConstraintType constraintType = info.getConstraintType();
-        
-        if (constraintType == null)
-            return "IDX_" + idxFileInfo.getTableName();
-
-        switch (info.getConstraintType()) {
-        case PRIMARY_KEY:
-            return "PK_" + idxFileInfo.getTableName();
-        
-        case UNIQUE:
-            return "CK_" + idxFileInfo.getTableName();
-
-        default:
-            throw new IllegalArgumentException("Unrecognized constraint type " +
-                constraintType);
-        }
+        HeaderPage.setRootPageNo(headerPage, 0);
+        HeaderPage.setFirstLeafPageNo(headerPage, 0);
+        HeaderPage.setLastLeafPageNo(headerPage, 0);
+        HeaderPage.setFirstEmptyPageNo(headerPage, 0);
     }
 
 
@@ -162,29 +179,67 @@ public class BTreeIndexManager implements IndexManager {
      *         table's schema and other details.
      */
     public void loadIndexInfo(IndexFileInfo idxFileInfo) throws IOException {
-        throw new UnsupportedOperationException("Not yet implemented.");
+        // For now, we don't need to do anything in this method.
     }
 
 
     @Override
-    public IndexPointer addTuple(IndexFileInfo idxFileInfo, TableSchema schema,
+    public void addTuple(IndexFileInfo idxFileInfo, TableSchema schema,
         ColumnIndexes colIndexes, PageTuple tup) throws IOException {
 
+        // Pull out the index name so we can use it for helpful log messages.
+        String indexName = idxFileInfo.getIndexName();
+        
         // Get the schema of the index so that we can interpret the key-values.
-        List<ColumnInfo> colInfos = schema.getColumnInfos(colIndexes);
+        ArrayList<ColumnInfo> colInfos = schema.getColumnInfos(colIndexes);
+        colInfos.add(new ColumnInfo("#TUPLE_FP",
+            new ColumnType(SQLDataType.FILE_POINTER)));
 
         // The header page tells us where the root page starts.
         DBFile dbFile = idxFileInfo.getDBFile();
         DBPage dbpHeader = storageManager.loadDBPage(dbFile, 0);
 
+        // These are the values we store into the index for the tuple:  the key,
+        // and a file-pointer to the tuple that the key is for.
+        TupleLiteral newTupleKey = makeStoredKeyValue(tup, colIndexes);
+//        FilePointer newTupleFilePtr = tup.getFilePointer();
+
+        logger.debug("Adding search-key value " + newTupleKey + " to index " +
+            indexName);
+
         // Get the root page of the index.
         int rootPageNo = HeaderPage.getRootPageNo(dbpHeader);
-        DBPage dbpRoot = storageManager.loadDBPage(dbFile, rootPageNo);
+        DBPage dbpRoot = null;
 
-        // Navigate through the page hierarchy until we reach a leaf page.
+        if (rootPageNo == 0) {
+            // The index doesn't have any data-pages at all yet; we need to
+            // create a brand new leaf page and make it the root.
 
-        TupleLiteral newTupleKey = makeKeyValue(tup, colIndexes);
-        FilePointer newTupleFilePtr = tup.getFilePointer();
+            logger.debug("Index " + indexName + " currently has no data " +
+                "pages; finding/creating one to use as the root!");
+
+            dbpRoot = getNewDataPage(dbFile, dbpHeader);
+            rootPageNo = dbpRoot.getPageNo();
+
+            HeaderPage.setRootPageNo(dbpHeader, rootPageNo);
+            HeaderPage.setFirstLeafPageNo(dbpHeader, rootPageNo);
+            HeaderPage.setLastLeafPageNo(dbpHeader, rootPageNo);
+
+            dbpRoot.writeByte(0, BTREE_LEAF_PAGE);
+            LeafPage.init(dbpRoot, colInfos);
+
+            logger.debug("New root pageNo is " + rootPageNo);
+        }
+        else {
+            // The index has a root page; load it.
+            dbpRoot = storageManager.loadDBPage(dbFile, rootPageNo);
+
+            logger.debug("Index " + idxFileInfo.getIndexName() +
+                " root pageNo is " + rootPageNo);
+        }
+
+        // Next, descend down the index's structure until we find the proper
+        // leaf-page based on the key value(s).
 
         DBPage dbPage = dbpRoot;
         int pageType = dbPage.readByte(0);
@@ -192,19 +247,36 @@ public class BTreeIndexManager implements IndexManager {
             throw new IOException("Invalid page type encountered:  " + pageType);
 
         while (pageType != BTREE_LEAF_PAGE) {
+            logger.debug("Examining non-leaf page " + dbPage.getPageNo() +
+                " of index " + indexName);
+            
             int nextPageNo = -1;
 
             int numKeys = NonLeafPage.numKeys(dbPage);
             BTreeIndexPageTuple key = NonLeafPage.getFirstKey(dbPage, colInfos);
             for (int i = 0; i < numKeys; i++) {
-                if (NonLeafPage.compareToKey(newTupleKey, null, key, null) < 0)
+                int cmp = NonLeafPage.compareToKey(newTupleKey, key);
+                if (cmp < 0) {
+                    logger.debug("Value is less than key at index " + i +
+                        "; following pointer " + i + " before this key.");
                     nextPageNo = NonLeafPage.getPointerBeforeKey(key);
+                    break;
+                }
+                else if (cmp == 0) {
+                    logger.debug("Value is equal to key at index " + i +
+                        "; following pointer " + (i+1) + " after this key.");
+                    nextPageNo = NonLeafPage.getPointerAfterKey(key);
+                    break;
+                }
 
+                // Go on to the next key.
                 key = NonLeafPage.getNextKey(key);
             }
             if (nextPageNo == -1) {
                 // None of the other entries in the page matched the tuple.  Get
                 // the last pointer in the page.
+                logger.debug("Value is greater than all keys in this page;" +
+                    " following last pointer " + numKeys + " in the page.");
                 nextPageNo = NonLeafPage.getPointerAfterKey(key);
             }
 
@@ -217,53 +289,142 @@ public class BTreeIndexManager implements IndexManager {
 
         // Now we are at a leaf page, we can figure out where the next value
         // goes.
-        
+
         int newEntrySize = PageTuple.getTupleStorageSize(colInfos, newTupleKey);
         newEntrySize += 4;  // Include the size of the file-pointer as well.
 
         LeafPage leaf = new LeafPage(dbPage, colInfos);
         if (leaf.getFreeSpace() < newEntrySize) {
             // TODO:  Split the leaf page into two leaves.
+            throw new UnsupportedOperationException(
+                "NYI:  Leaf page is full and I don't know how to split it yet!");
         }
 
-        // Insert the key and its corresponding tuple-pointer into the page.
-        {
-            int numEntries = leaf.getNumEntries();
+        // Insert the key and its corresponding tuple-pointer into the page,
+        // making sure to keep the keys in increasing order.
+
+        int numEntries = leaf.getNumEntries();
+        if (numEntries == 0) {
+            logger.debug("Leaf page is empty; storing new entry at start.");
+            leaf.addEntryAtIndex(newTupleKey, 0);
+        }
+        else {
             int i;
             for (i = 0; i < numEntries; i++) {
                 BTreeIndexPageTuple key = leaf.getKey(i);
 
+                logger.debug(i + ":  comparing " + newTupleKey + " to " + key);
+                
                 // Compare the tuple to the current key.  Once we find where the
                 // new key/tuple should go, copy the key/pointer into the page.
-                if (LeafPage.compareToKey(newTupleKey, newTupleFilePtr,
-                                          key, null) >= 0) {
-                    leaf.addEntryAtIndex(newTupleKey, newTupleFilePtr, i);
+                if (LeafPage.compareToKey(newTupleKey, key) < 0) {
+                    logger.debug("Storing new entry at index " + i +
+                        " in the leaf page.");
+                    leaf.addEntryAtIndex(newTupleKey, i);
                     break;
                 }
             }
 
             if (i == numEntries) {
                 // The new tuple will go at the end of this page's entries.
-                leaf.addEntryAtIndex(newTupleKey, newTupleFilePtr, numEntries);
+                logger.debug("Storing new entry at end of leaf page.");
+                leaf.addEntryAtIndex(newTupleKey, numEntries);
             }
         }
+    }
 
-        return new IndexPointer(newTupleFilePtr);
+
+    /**
+     * This helper function finds and returns a new data page, either by taking
+     * it from the empty-pages list in the index file, or if this list is empty,
+     * creating a brand new page at the end of the file.
+     *
+     * @param dbFile the index file to get a new empty data page from
+     * @param dbpHeader the header page of the index file, which is usually
+     *        already loaded before this method is called, and which sometimes
+     *        needs to be updated if a page is taken from the free list.
+     *
+     * @return an empty {@code DBPage} that can be used as a new index page.
+     *
+     * @throws IOException if an error occurs while loading a data page, or
+     *         while extending the size of the index file.
+     */
+    private DBPage getNewDataPage(DBFile dbFile, DBPage dbpHeader)
+        throws IOException {
+
+        if (dbFile == null)
+            throw new IllegalArgumentException("dbFile cannot be null");
+
+        if (dbpHeader == null)
+            throw new IllegalArgumentException("dbpHeader cannot be null");
+        
+        if (dbpHeader.getPageNo() != 0) {
+            throw new IllegalArgumentException("dbpHeader must be the header " +
+                "page of the index file; got page-no. " + dbpHeader.getPageNo());
+        }
+
+        DBPage newPage = null;
+        int pageNo = HeaderPage.getFirstEmptyPageNo(dbpHeader);
+        if (pageNo == 0) {
+            // There are no empty pages.  Create a new page to use.
+            newPage =
+                storageManager.loadDBPage(dbFile, dbFile.getNumPages(), true);
+        }
+        else {
+            // Load the empty page, and remove it from the chain of empty pages.
+            newPage = storageManager.loadDBPage(dbFile, pageNo);
+            HeaderPage.setFirstEmptyPageNo(dbpHeader, newPage.readUnsignedShort(1));
+        }
+
+        return newPage;
     }
 
 
     @Override
     public void deleteTuple(IndexFileInfo idxFileInfo, Tuple tup) throws IOException {
-        //To change body of implemented methods use File | Settings | File Templates.
+        // TODO:  IMPLEMENT
     }
-    
-    
-    private TupleLiteral makeKeyValue(Tuple tblTuple, ColumnIndexes colIndexes) {
+
+
+    /**
+     * This helper function creates a {@link TupleLiteral} that holds the
+     * key-values necessary for storing or deleting the specified table-tuple
+     * in the index.  For making a lookup-only key value, use the
+     * {@link #makeLookupKeyValue} function.  The difference between the two
+     * functions is that this version stores the file-pointer from the tuple
+     * into the key as the last value, but the {@link #makeLookupKeyValue}
+     * helper writes a dummy [0, 0] file-pointer into the key.
+     *
+     * @param ptup the tuple from the original table, that the key will be
+     *        created from.
+     *
+     * @param colIndexes the column-indexes of the tuple to use for constructing
+     *                   the key
+     *
+     * @return a tuple-literal that can be used for storing, looking up, or
+     *         deleting the specific tuple {@code ptup}.
+     */
+    private TupleLiteral makeStoredKeyValue(PageTuple ptup,
+                                            ColumnIndexes colIndexes) {
         // Build up a new tuple-literal containing the new key to be inserted.
         TupleLiteral newKeyVal = new TupleLiteral();
         for (int i = 0; i < colIndexes.size(); i++)
-            newKeyVal.addValue(tblTuple.getColumnValue(colIndexes.getCol(i)));
+            newKeyVal.addValue(ptup.getColumnValue(colIndexes.getCol(i)));
+        
+        // Include the file-pointer as the last value in the tuple, so that all
+        // key-values are unique in the index.
+        newKeyVal.addValue(ptup.getExternalReference());
 
         return newKeyVal;
+    }
+
+
+    private TupleLiteral makeLookupKeyValue(Tuple tup) {
+        TupleLiteral lookupVal = new TupleLiteral(tup);
+
+        // Put a dummy file-pointer on the end of the lookup tuple.
+        lookupVal.addValue(FilePointer.ZERO_FILE_POINTER);
+
+        return lookupVal;
     }
 }

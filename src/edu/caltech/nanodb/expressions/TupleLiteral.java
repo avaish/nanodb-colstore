@@ -125,4 +125,28 @@ public class TupleLiteral implements Tuple, Serializable {
     public void setColumnValue(int colIndex, Object value) {
         values.set(colIndex, value);
     }
+    
+    
+    @Override
+    public String toString() {
+        StringBuilder buf = new StringBuilder();
+        buf.append("TL[");
+
+        boolean first = true;
+        for (Object obj : values) {
+            if (first)
+                first = false;
+            else
+                buf.append(',');
+
+            if (obj == null)
+                buf.append("NULL");
+            else
+                buf.append(obj);
+        }
+
+        buf.append(']');
+        
+        return buf.toString();
+    }
 }

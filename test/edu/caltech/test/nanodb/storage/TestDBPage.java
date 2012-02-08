@@ -369,12 +369,13 @@ public class TestDBPage extends StorageTestCase {
 		assert value.equals(dbPage.readVarString255(positionValue));
 		
 		// Test a string of length exactly 255
-		// JapanÕs -> Japan?s
 		value = "A SURGE in the radiation levels surrounding the " +
 			"reactors at the Dai-ichi nuclear power plant at Fukushima " +
 			"on Wednesday morning forced authorities to withdraw workers " +
 			"from the site of Japan's escalating nuclear catastrophe. " +
 			"A skeleton crew of 50, these are";
+        assert value.length() == 255;  // Sanity check.
+
 		dbPage.writeVarString255(positionValue, value);
 		//System.out.println(value);
 		//System.out.println(dbPage.readVarString255(positionValue));

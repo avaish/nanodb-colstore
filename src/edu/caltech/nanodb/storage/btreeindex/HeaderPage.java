@@ -48,9 +48,13 @@ public class HeaderPage {
      * stored.
      */
     public static final int OFFSET_LAST_LEAF_PAGE = 8;
-    
-    
-    public static final int OFFSET_INDEX_SPEC = 10;
+
+
+    /**
+     * The offset in the header page where the first empty page is located in
+     * the file.
+     */
+    public static final int OFFSET_FIRST_EMPTY_PAGE = 10;
 
 
     /**
@@ -76,40 +80,11 @@ public class HeaderPage {
 
 
     /**
-     * Returns the number of data pages in the index file.
-     *
-     * @param dbPage the header page of the index file
-     * @return the number of data pages in the index file.
-     */
-    public static int getNumDataPages(DBPage dbPage) {
-        verifyIsHeaderPage(dbPage);
-        return dbPage.readUnsignedShort(OFFSET_NUM_DATA_PAGES);
-    }
-
-
-    /**
-     * Sets the number of data pages in the header page of the index file.
-     *
-     * @param dbPage the header page of the heap table file
-     * @param numDataPages the number of data pages
-     */
-    public static void setNumDataPages(DBPage dbPage, int numDataPages) {
-        verifyIsHeaderPage(dbPage);
-
-        if (numDataPages < 0 || numDataPages > 65535) {
-            throw new IllegalArgumentException(
-                "numDataPages must be in the range 0..65535; got " + numDataPages);
-        }
-
-        dbPage.writeShort(OFFSET_NUM_DATA_PAGES, numDataPages);
-    }
-
-
-    /**
      * Returns the page-number of the root page in the index file.
      *
      * @param dbPage the header page of the index file
-     * @return the page-number of the root page in the index file.
+     * @return the page-number of the root page, or 0 if the index file doesn't
+     *         contain a root page.
      */
     public static int getRootPageNo(DBPage dbPage) {
         verifyIsHeaderPage(dbPage);
@@ -122,12 +97,13 @@ public class HeaderPage {
      * file.
      *
      * @param dbPage the header page of the heap table file
-     * @param rootPageNo the page-number of the root page
+     * @param rootPageNo the page-number of the root page, or 0 if the index
+     *        file doesn't contain a root page.
      */
     public static void setRootPageNo(DBPage dbPage, int rootPageNo) {
         verifyIsHeaderPage(dbPage);
 
-        if (rootPageNo <= 0) {
+        if (rootPageNo < 0) {
             throw new IllegalArgumentException(
                 "rootPageNo must be > 0; got " + rootPageNo);
         }
@@ -140,7 +116,8 @@ public class HeaderPage {
      * Returns the page-number of the first leaf page in the index file.
      *
      * @param dbPage the header page of the index file
-     * @return the page-number of the first leaf page in the index file.
+     * @return the page-number of the first leaf page in the index file, or 0
+     *         if the index file doesn't contain any leaf pages.
      */
     public static int getFirstLeafPageNo(DBPage dbPage) {
         verifyIsHeaderPage(dbPage);
@@ -153,14 +130,15 @@ public class HeaderPage {
      * index file.
      *
      * @param dbPage the header page of the heap table file
-     * @param firstLeafPageNo the page-number of the first leaf page
+     * @param firstLeafPageNo the page-number of the first leaf page in the
+     *        index file, or 0 if the index file doesn't contain any leaf pages.
      */
     public static void setFirstLeafPageNo(DBPage dbPage, int firstLeafPageNo) {
         verifyIsHeaderPage(dbPage);
 
-        if (firstLeafPageNo <= 0) {
+        if (firstLeafPageNo < 0) {
             throw new IllegalArgumentException(
-                "firstLeafPageNo must be > 0; got " + firstLeafPageNo);
+                "firstLeafPageNo must be >= 0; got " + firstLeafPageNo);
         }
 
         dbPage.writeShort(OFFSET_FIRST_LEAF_PAGE, firstLeafPageNo);
@@ -189,12 +167,44 @@ public class HeaderPage {
     public static void setLastLeafPageNo(DBPage dbPage, int lastLeafPageNo) {
         verifyIsHeaderPage(dbPage);
 
-        if (lastLeafPageNo <= 0) {
+        if (lastLeafPageNo < 0) {
             throw new IllegalArgumentException(
-                "lastLeafPageNo must be > 0; got " + lastLeafPageNo);
+                "lastLeafPageNo must be >= 0; got " + lastLeafPageNo);
         }
 
-        dbPage.writeShort(OFFSET_LAST_LEAF_PAGE, lastLeafPageNo);
+        dbPage.writeShort(OFFSET_FIRST_EMPTY_PAGE, lastLeafPageNo);
     }
 
-}
+
+    /**
+     * Returns the page-number of the first empty page in the index file.
+     * Empty pages form a linked chain in the index file, so that they are
+     * easy to locate.
+     *
+     * @param dbPage the header page of the index file
+     * @return the page-number of the last leaf page in the index file.
+     */
+    public static int getFirstEmptyPageNo(DBPage dbPage) {
+        verifyIsHeaderPage(dbPage);
+        return dbPage.readUnsignedShort(OFFSET_FIRST_EMPTY_PAGE);
+    }
+
+
+    /**
+     * Sets the page-number of the first empty page in the header page of the
+     * index file.  Empty pages form a linked chain in the index file, so that
+     * they are easy to locate.
+     *
+     * @param dbPage the header page of the heap table file
+     * @param firstEmptyPageNo the page-number of the first empty page
+     */
+    public static void setFirstEmptyPageNo(DBPage dbPage, int firstEmptyPageNo) {
+        verifyIsHeaderPage(dbPage);
+
+        if (firstEmptyPageNo < 0) {
+            throw new IllegalArgumentException(
+                "firstEmptyPageNo must be >= 0; got " + firstEmptyPageNo);
+        }
+
+        dbPage.writeShort(OFFSET_FIRST_EMPTY_PAGE, firstEmptyPageNo);
+    }}

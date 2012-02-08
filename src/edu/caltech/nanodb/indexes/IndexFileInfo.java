@@ -143,6 +143,11 @@ public class IndexFileInfo {
     }
     
     
+    public IndexManager getIndexManager() {
+        return indexManager;
+    }
+
+
     public void setIndexManager(IndexManager indexManager) {
         this.indexManager = indexManager;
     }

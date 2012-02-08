@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 
+import edu.caltech.nanodb.server.EventDispatcher;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.indexes.IndexFileInfo;
@@ -77,6 +78,10 @@ public class StorageManager {
         File baseDir = new File(baseDirPath);
 
         storageMgr = new StorageManager(baseDir);
+
+        // Register the component that manages indexes when tables are modified.
+        EventDispatcher.getInstance().addRowEventListener(
+            new IndexUpdater(storageMgr));
     }
 
 
@@ -770,7 +775,8 @@ public class StorageManager {
         logger.debug(String.format("Type is %s, page size is %d bytes.",
             type, dbFile.getPageSize()));
 
-        idxFileInfo = new IndexFileInfo(indexName, null, dbFile);
+        idxFileInfo =
+            new IndexFileInfo(indexName, tblFileInfo.getTableName(), dbFile);
         idxFileInfo.setIndexManager(idxManager);
 
         // Cache this table since it's now considered "open".

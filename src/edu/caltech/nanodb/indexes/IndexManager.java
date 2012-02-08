@@ -55,13 +55,12 @@ public interface IndexManager {
      *
      * @param tup the tuple to add to the index
      *
-     * @return a pointer to where the tuple is stored in the index
-     *
      * @throws IOException if an IO error occurs when attempting to add the
      *         tuple.
      */
-    IndexPointer addTuple(IndexFileInfo idxFileInfo, TableSchema schema,
-                          ColumnIndexes colIndexes, PageTuple tup) throws IOException;
+    void addTuple(IndexFileInfo idxFileInfo, TableSchema schema,
+                  ColumnIndexes colIndexes, PageTuple tup) throws IOException;
+
 
     /**
      * This method deletes a tuple from an index.

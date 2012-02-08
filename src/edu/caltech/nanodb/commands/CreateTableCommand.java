@@ -28,7 +28,7 @@ import edu.caltech.nanodb.storage.TableFileInfo;
  */
 public class CreateTableCommand extends Command {
 
-    /** A logging object for reporting anything interesting that happens. **/
+    /** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(CreateTableCommand.class);
 
 
@@ -65,6 +65,9 @@ public class CreateTableCommand extends Command {
                               boolean temporary, boolean ifNotExists) {
         super(Command.Type.DDL);
 
+        if (tableName == null)
+            throw new IllegalArgumentException("tableName cannot be null");
+
         this.tableName = tableName;
         this.temporary = temporary;
         this.ifNotExists = ifNotExists;
@@ -81,7 +84,12 @@ public class CreateTableCommand extends Command {
      */
     public void addColumn(ColumnInfo colInfo) {
         if (colInfo == null)
-            throw new NullPointerException("colInfo");
+            throw new IllegalArgumentException("colInfo cannot be null");
+
+        if (!tableName.equals(colInfo.getTableName())) {
+            colInfo = new ColumnInfo(colInfo.getName(), tableName,
+                colInfo.getType());
+        }
 
         columnInfos.add(colInfo);
     }
@@ -97,7 +105,7 @@ public class CreateTableCommand extends Command {
      */
     public void addConstraint(ConstraintDecl con) {
         if (con == null)
-            throw new NullPointerException("con");
+            throw new IllegalArgumentException("con cannot be null");
 
         constraints.add(con);
     }

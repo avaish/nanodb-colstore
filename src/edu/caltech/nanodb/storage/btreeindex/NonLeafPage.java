@@ -1,14 +1,11 @@
 package edu.caltech.nanodb.storage.btreeindex;
 
 
-import edu.caltech.nanodb.relations.ColumnIndexes;
+import java.util.List;
+
 import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.relations.Tuple;
 import edu.caltech.nanodb.storage.DBPage;
-import edu.caltech.nanodb.storage.FilePointer;
-import edu.caltech.nanodb.storage.PageTuple;
-
-import java.util.List;
 
 
 /**
@@ -104,8 +101,7 @@ public class NonLeafPage {
     /**
      */
     @SuppressWarnings("unchecked")
-    public static int compareToKey(Tuple keyA, FilePointer tuplePtrA,
-                                   Tuple keyB, FilePointer tuplePtrB) {
+    public static int compareToKey(Tuple keyA, Tuple keyB) {
 
         if (keyA.getColumnCount() != keyB.getColumnCount())
             throw new IllegalArgumentException("keys must be the same size");
@@ -113,7 +109,7 @@ public class NonLeafPage {
         int compareResult = 0;
 
         int size = keyA.getColumnCount();
-        for (int i = 0; i < size; i++) {
+        for (int i = 0; i < size && compareResult == 0; i++) {
             Comparable valueA = (Comparable) keyA.getColumnValue(i);
             Comparable valueB = (Comparable) keyB.getColumnValue(i);
 
@@ -126,16 +122,13 @@ public class NonLeafPage {
                 else
                     compareResult = 0;
             }
-            else if (valueB == null) {
+            else if ( /* valueA != null && */ valueB == null) {
                 compareResult = 1;
             }
             else {
                 compareResult = valueA.compareTo(valueB);
             }
         }
-
-        if (compareResult == 0)     // Compare the file-pointers as well.
-            compareResult = tuplePtrA.compareTo(tuplePtrB);
 
         return compareResult;
     }

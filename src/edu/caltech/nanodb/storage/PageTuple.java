@@ -126,7 +126,16 @@ public abstract class PageTuple implements Tuple {
     }
 
 
-    public FilePointer getFilePointer() {
+    /**
+     * This method returns an external reference to the tuple, which can be
+     * stored and used to look up this tuple.  The external reference is
+     * represented as a file-pointer.  The default implementation simply returns
+     * a file-pointer to the tuple-data itself, but specific storage formats may
+     * introduce a level of indirection into external references.
+     *
+     * @return a file-pointer that can be used to look up this tuple
+     */
+    public FilePointer getExternalReference() {
         return new FilePointer(dbPage.getPageNo(), pageOffset);
     }
 
@@ -327,6 +336,7 @@ public abstract class PageTuple implements Tuple {
      *   <li><tt>DOUBLE</tt> produces {@link java.lang.Double}</li>
      *   <li><tt>CHAR(<em>n</em>)</tt> produces {@link java.lang.String}</li>
      *   <li><tt>VARCHAR(<em>n</em>)</tt> produces {@link java.lang.String}</li>
+     *   <li><tt>FILE_POINTER</tt> (internal) produces {@link FilePointer}</li>
      * </ul>
      */
     public Object getColumnValue(int colIndex) {
@@ -369,6 +379,11 @@ public abstract class PageTuple implements Tuple {
 
             case VARCHAR:
                 value = dbPage.readVarString65535(offset);
+                break;
+
+            case FILE_POINTER:
+                value = new FilePointer(dbPage.readUnsignedShort(offset),
+                                        dbPage.readUnsignedShort(offset + 2));
                 break;
 
             default:
@@ -602,6 +617,12 @@ public abstract class PageTuple implements Tuple {
             size = 2 + dataLength;
             break;
 
+        case FILE_POINTER:
+            // File-pointers are comprised of a two-byte page number and a
+            // two-byte offset in the page.
+            size = 4;
+            break;
+
         default:
             throw new UnsupportedOperationException(
                 "Cannot currently store type " + colType.getBaseType());
@@ -609,8 +630,6 @@ public abstract class PageTuple implements Tuple {
 
         return size;
     }
-
-
 
 
     /**
