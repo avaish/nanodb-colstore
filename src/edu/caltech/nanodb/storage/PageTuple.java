@@ -688,7 +688,7 @@ public abstract class PageTuple implements Tuple {
     }
 
 
-    public static void storeTuple(DBPage dbPage, int pageOffset,
+    public static int storeTuple(DBPage dbPage, int pageOffset,
                                   List<ColumnInfo> colInfos, Tuple tuple) {
 
         if (colInfos.size() != tuple.getColumnCount()) {
@@ -719,6 +719,8 @@ public abstract class PageTuple implements Tuple {
             currOffset += dataSize;
             iCol++;
         }
+
+        return currOffset;
     }
 
 

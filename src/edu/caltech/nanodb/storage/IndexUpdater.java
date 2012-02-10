@@ -116,7 +116,7 @@ public class IndexUpdater implements RowEventListener {
                     indexDef.getIndexName());
 
                 IndexManager indexManager = idxFileInfo.getIndexManager();
-                indexManager.addTuple(idxFileInfo, schema, indexDef, ptup);
+                indexManager.addTuple(idxFileInfo, ptup);
             }
             catch (IOException e) {
                 throw new EventDispatchException("Couldn't update index " +

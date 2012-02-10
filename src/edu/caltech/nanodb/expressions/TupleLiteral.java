@@ -14,8 +14,15 @@ import edu.caltech.nanodb.relations.Tuple;
  */
 public class TupleLiteral implements Tuple, Serializable {
 
-    /** The actual values of the columns in the tuple. **/
+    /** The actual values of the columns in the tuple. */
     private ArrayList<Object> values;
+
+
+    /**
+     * The cached storage size of the tuple literal in bytes, or -1 if the size
+     * has not been computed and cached.
+     */
+    private int storageSize = -1;
 
 
     /**
@@ -63,6 +70,16 @@ public class TupleLiteral implements Tuple, Serializable {
     public TupleLiteral(Object... inputs) {
         values = new ArrayList<Object>(inputs.length);
         Collections.addAll(values, inputs);
+    }
+
+
+    public int getStorageSize() {
+        return storageSize;
+    }
+
+
+    public void setStorageSize(int size) {
+        storageSize = size;
     }
 
 

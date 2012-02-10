@@ -178,7 +178,7 @@ public class CreateTableCommand extends Command {
         }
 
         try {
-            initTableConstraints(storageManager, schema, referencedTables);
+            initTableConstraints(storageManager, tblFileInfo, referencedTables);
         }
         catch (IOException e) {
             throw new ExecutionException(
@@ -202,12 +202,13 @@ public class CreateTableCommand extends Command {
     
     
     private void initTableConstraints(StorageManager storageManager,
-        TableSchema schema, HashMap<String, TableSchema> referencedTables)
+        TableFileInfo tblFileInfo, HashMap<String, TableSchema> referencedTables)
         throws ExecutionException, IOException {
 
         // Add constraints to the table's schema, creating indexes where
         // appropriate so that the constraints can be enforced.
 
+        TableSchema schema = tblFileInfo.getSchema();
         HashSet<String> constraintNames = new HashSet<String>();
 
         for (ConstraintDecl cd : constraints) {
@@ -231,7 +232,8 @@ public class CreateTableCommand extends Command {
                 IndexInfo info = new IndexInfo(tableName, schema, pk, true);
                 info.setConstraintType(TableConstraintType.PRIMARY_KEY);
 
-                IndexFileInfo idxFileInfo = new IndexFileInfo(null, tableName, info);
+                IndexFileInfo idxFileInfo =
+                    new IndexFileInfo(null, tblFileInfo, info);
                 storageManager.createUnnamedIndex(idxFileInfo);
                 logger.debug(String.format(
                     "Created index %s on table %s to enforce primary key.",
@@ -250,7 +252,8 @@ public class CreateTableCommand extends Command {
                 IndexInfo info = new IndexInfo(tableName, schema, ck, true);
                 info.setConstraintType(TableConstraintType.UNIQUE);
 
-                IndexFileInfo idxFileInfo = new IndexFileInfo(null, tableName, info);
+                IndexFileInfo idxFileInfo =
+                    new IndexFileInfo(null, tblFileInfo, info);
                 storageManager.createUnnamedIndex(idxFileInfo);
                 logger.debug(String.format(
                     "Created index %s on table %s to enforce candidate key.",

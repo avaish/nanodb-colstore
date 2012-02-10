@@ -48,8 +48,9 @@ public interface IndexManager {
 
 
     /**
-     * This method adds a tuple to an index, and returns an index-pointer to
-     * where the tuple was added.
+     * This method adds a tuple to an index.  The tuple must be a
+     * {@link PageTuple} since the file-pointer to the tuple must be stored
+     * into the index.
      *
      * @param idxFileInfo the index to add the tuple to
      *
@@ -58,12 +59,13 @@ public interface IndexManager {
      * @throws IOException if an IO error occurs when attempting to add the
      *         tuple.
      */
-    void addTuple(IndexFileInfo idxFileInfo, TableSchema schema,
-                  ColumnIndexes colIndexes, PageTuple tup) throws IOException;
+    void addTuple(IndexFileInfo idxFileInfo, PageTuple tup) throws IOException;
 
 
     /**
-     * This method deletes a tuple from an index.
+     * This method deletes a tuple from an index.  The tuple must be a
+     * {@link PageTuple} since the file-pointer to the tuple must be removed
+     * from the index.
      *
      * @param idxFileInfo the index to delete the tuple from
      *
@@ -72,5 +74,5 @@ public interface IndexManager {
      * @throws IOException if an IO error occurs when attempting to delete the
      *         tuple.
      */
-    void deleteTuple(IndexFileInfo idxFileInfo, Tuple tup) throws IOException;
+    void deleteTuple(IndexFileInfo idxFileInfo, PageTuple tup) throws IOException;
 }

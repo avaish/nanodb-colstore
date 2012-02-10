@@ -96,8 +96,19 @@ public class TableSchema extends Schema {
         candidateKeys.add(ck);
         indexes.put(ck.getIndexName(), ck);
     }
-    
-    
+
+
+    public void addIndex(ColumnIndexes index) {
+        if (index == null)
+            throw new IllegalArgumentException("index cannot be null");
+
+        if (index.getIndexName() == null)
+            throw new IllegalArgumentException("index must specify an index name");
+
+        indexes.put(index.getIndexName(), index);
+    }
+
+
     public int numCandidateKeys() {
         return candidateKeys.size();
     }

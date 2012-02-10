@@ -1,19 +1,21 @@
 package edu.caltech.nanodb.storage.btreeindex;
 
 
-import edu.caltech.nanodb.expressions.TupleLiteral;
-import edu.caltech.nanodb.indexes.IndexPointer;
-import edu.caltech.nanodb.relations.ColumnInfo;
-import edu.caltech.nanodb.relations.Tuple;
-import edu.caltech.nanodb.storage.DBPage;
-import edu.caltech.nanodb.storage.PageTuple;
-import org.apache.log4j.Logger;
-
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.log4j.Logger;
+
+import edu.caltech.nanodb.expressions.TupleComparator;
+import edu.caltech.nanodb.expressions.TupleLiteral;
+import edu.caltech.nanodb.indexes.IndexFileInfo;
+import edu.caltech.nanodb.relations.ColumnInfo;
+import edu.caltech.nanodb.storage.DBPage;
+import edu.caltech.nanodb.storage.PageTuple;
+
 
 /**
+ *
  */
 public class LeafPage {
     /** A logging object for reporting anything interesting that happens. */
@@ -24,27 +26,42 @@ public class LeafPage {
     public static final int OFFSET_PAGE_TYPE = 0;
 
 
-    /** The page in the database file where the previous leaf is stored. */
-    public static final int OFFSET_PREV_PAGE_NO = 1;
-
-
-    /** The page in the database file where the next leaf is stored. */
-    public static final int OFFSET_NEXT_PAGE_NO = 3;
-
-
-    /** The number of key+pointer entries in the page. */
-    public static final int OFFSET_NUM_ENTRIES = 5;
+    /** The offset where the parent page number is stored in this page. */
+    public static final int OFFSET_PARENT_PAGE_NO = 1;
 
 
     /**
-     * The offset of the first key in the leaf-page.
+     * The offset where the previous-sibling page number is stored in this page.
+     * The only leaf page that doesn't have a previous sibling is the first leaf
+     * in the index.
      */
-    public static final int OFFSET_FIRST_KEY = 7;
+    public static final int OFFSET_PREV_PAGE_NO = 3;
+
+
+    /**
+     * The offset where the next-sibling page number is stored in this page.
+     * The only leaf page that doesn't have a next sibling is the last leaf
+     * in the index.
+     */
+    public static final int OFFSET_NEXT_PAGE_NO = 5;
+
+
+    /**
+     * The offset where the number of key+pointer entries is stored in the page.
+     */
+    public static final int OFFSET_NUM_ENTRIES = 7;
+
+
+    /** The offset of the first key in the leaf page. */
+    public static final int OFFSET_FIRST_KEY = 9;
 
     
     private DBPage dbPage;
+
     
+    private IndexFileInfo idxFileInfo;
     
+
     private List<ColumnInfo> colInfos;
     
     
@@ -67,11 +84,37 @@ public class LeafPage {
     private int endOffset;
 
 
-    public LeafPage(DBPage dbPage, List<ColumnInfo> colInfos) {
+    public LeafPage(DBPage dbPage, IndexFileInfo idxFileInfo) {
         this.dbPage = dbPage;
-        this.colInfos = colInfos;
+        this.idxFileInfo = idxFileInfo;
+        this.colInfos = idxFileInfo.getIndexSchema();
 
         loadPageContents();
+    }
+
+
+    /**
+     * This static helper function initializes a leaf index-page with the type
+     * and detail values that will allow a new {@code LeafPage} wrapper to be
+     * initialized for the page, and then returns a newly initialized wrapper
+     * object.
+     *
+     * @param dbPage the page to initialize as a leaf-page.
+     *
+     * @param idxFileInfo details about the index that the leaf-page is for
+     *
+     * @return a newly initialized {@code LeafPage} object wrapping the page
+     */
+    public static LeafPage init(DBPage dbPage, IndexFileInfo idxFileInfo) {
+        dbPage.writeByte(OFFSET_PAGE_TYPE, BTreeIndexManager.BTREE_LEAF_PAGE);
+
+        dbPage.writeShort(OFFSET_NUM_ENTRIES, 0);
+
+        dbPage.writeShort(OFFSET_PARENT_PAGE_NO, 0);
+        dbPage.writeShort(OFFSET_PREV_PAGE_NO, 0);
+        dbPage.writeShort(OFFSET_NEXT_PAGE_NO, 0);
+
+        return new LeafPage(dbPage, idxFileInfo);
     }
 
 
@@ -101,7 +144,27 @@ public class LeafPage {
             endOffset = OFFSET_FIRST_KEY;
         }
     }
+
     
+    public IndexFileInfo getIndexFileInfo() {
+        return idxFileInfo;
+    }
+    
+    
+    public int getPageNo() {
+        return dbPage.getPageNo();
+    }
+    
+
+    public int getParentPageNo() {
+        return dbPage.readUnsignedShort(OFFSET_PARENT_PAGE_NO);
+    }
+
+
+    public void setParentPageNo(int pageNo) {
+        dbPage.writeShort(OFFSET_PARENT_PAGE_NO, pageNo);
+    }
+
     
     public int getPrevPageNo() {
         return dbPage.readUnsignedShort(OFFSET_PREV_PAGE_NO);
@@ -126,13 +189,6 @@ public class LeafPage {
     public int getNumEntries() {
         return numEntries;
     }
-    
-
-    /* TODO:  Not sure whether we need this, or whether we ought to keep it.
-    public int getDataSize() {
-        return endOffset;
-    }
-    */
 
 
     public int getFreeSpace() {
@@ -143,76 +199,74 @@ public class LeafPage {
     public BTreeIndexPageTuple getKey(int index) {
         return keys.get(index);
     }
-
-/* TODO:  Now the pointer is stored in the key itself.
-    public IndexPointer getPointerBeforeKey(BTreeIndexPageTuple tup) {
-        // In leaf pages, there are the same number of pointers and keys.  Each
-        // key is preceded by a file-pointer consisting of a page number and an
-        // offset within the page.  There is no pointer after the last key.
-        if (tup.getDBPage() != dbPage) {
-            throw new IllegalArgumentException(
-                "Key is from a different page than this page.");
-        }
-            
-        int pageNo = dbPage.readUnsignedShort(tup.getOffset() - 4);
-        int offset = dbPage.readUnsignedShort(tup.getOffset() - 2);
-        return new IndexPointer(pageNo, offset);
-    }
-*/
-
-    /**
-     * Compares two keys and their corresponding tuple-pointers, and a value is
-     * returned to indicate the ordering:
-     * <ul>
-     *   <li>Result &lt; 0 if <tt>tuple[colIndexes]</tt> &lt; <tt>keyTuple</tt></li>
-     *   <li>Result == 0 if <tt>tuple[colIndexes]</tt> == <tt>keyTuple</tt></li>
-     *   <li>Result &gt; 0 if <tt>tuple[colIndexes]</tt> &gt; <tt>keyTuple</tt></li>
-     * </ul>
-     *
-     * @return a negative, positive, or zero value indicating the ordering of
-     *         the two inputs
-     */
-    @SuppressWarnings("unchecked")
-    public static int compareToKey(Tuple keyA, Tuple keyB) {
-
-        if (keyA.getColumnCount() != keyB.getColumnCount())
-            throw new IllegalArgumentException("keys must be the same size");
-
-        int compareResult = 0;
-
-        int size = keyA.getColumnCount();
-        for (int i = 0; i < size && compareResult == 0; i++) {
-            Comparable valueA = (Comparable) keyA.getColumnValue(i);
-            Comparable valueB = (Comparable) keyB.getColumnValue(i);
-
-            // Although it should be "unknown" when we compare two NULL values
-            // for equality, we say they are equal so that they will all appear
-            // together in the sorting results.
-            if (valueA == null) {
-                if (valueB != null)
-                    compareResult = -1;
-                else
-                    compareResult = 0;
-            }
-            else if ( /* valueA != null && */ valueB == null) {
-                compareResult = 1;
-            }
-            else {
-                compareResult = valueA.compareTo(valueB);
-            }
-        }
-
-        return compareResult;
+    
+    
+    public int getKeySize(int index) {
+        BTreeIndexPageTuple key = getKey(index);
+        return key.getEndOffset() - key.getOffset();
     }
 
 
-    public IndexPointer addEntryAtIndex(TupleLiteral newKey, int index) {
+    public void addEntry(TupleLiteral newKey) {
+        if (newKey.getStorageSize() == -1) {
+            throw new IllegalArgumentException("New key's storage size must " +
+                "be computed before this method is called.");
+        }
+
+        if (getFreeSpace() < newKey.getStorageSize()) {
+            throw new IllegalArgumentException(String.format(
+                "Not enough space in this node to store the new key " +
+                "(%d bytes free; %d bytes required)", getFreeSpace(),
+                newKey.getStorageSize()));
+        }
+
+        if (numEntries == 0) {
+            logger.debug("Leaf page is empty; storing new entry at start.");
+            addEntryAtIndex(newKey, 0);
+        }
+        else {
+            int i;
+            for (i = 0; i < numEntries; i++) {
+                BTreeIndexPageTuple key = keys.get(i);
+
+                /* This gets REALLY verbose...
+                logger.debug(i + ":  comparing " + newKey + " to " + key);
+                */
+
+                // Compare the tuple to the current key.  Once we find where the
+                // new key/tuple should go, copy the key/pointer into the page.
+                if (TupleComparator.compareTuples(newKey, key) < 0) {
+                    logger.debug("Storing new entry at index " + i +
+                        " in the leaf page.");
+                    addEntryAtIndex(newKey, i);
+                    break;
+                }
+            }
+
+            if (i == numEntries) {
+                // The new tuple will go at the end of this page's entries.
+                logger.debug("Storing new entry at end of leaf page.");
+                addEntryAtIndex(newKey, numEntries);
+            }
+        }
+
+        // The addEntryAtIndex() method updates the internal fields that cache
+        // where keys live, etc.
+    }
+
+
+    private void addEntryAtIndex(TupleLiteral newKey, int index) {
         logger.debug("Leaf-page is starting with data ending at index " +
             endOffset + ", and has " + numEntries + " entries.");
 
         // Get the length of the new tuple, and add in the size of the
         // file-pointer as well.
-        int len = PageTuple.getTupleStorageSize(colInfos, newKey);
+        int len = newKey.getStorageSize();
+        if (len == -1) {
+            throw new IllegalArgumentException("New key's storage size must " +
+                "be computed before this method is called.");
+        }
+
         logger.debug("New key's storage size is " + len + " bytes");
 
         int keyOffset;
@@ -251,20 +305,92 @@ public class LeafPage {
         logger.debug("Wrote new key to leaf-page at offset " + keyOffset + ".");
         logger.debug("Leaf-page is ending with data ending at index " +
             endOffset + ", and has " + numEntries + " entries.");
-
-        // return new IndexPointer(newFilePtr.getPageNo(), newFilePtr.getOffset());
-        return null;
     }
-    
-    
-    public static LeafPage init(DBPage dbPage, List<ColumnInfo> colInfos) {
-        dbPage.writeByte(OFFSET_PAGE_TYPE, BTreeIndexManager.BTREE_LEAF_PAGE);
 
-        dbPage.writeShort(OFFSET_NUM_ENTRIES, 0);
 
-        dbPage.writeShort(OFFSET_PREV_PAGE_NO, 0);
-        dbPage.writeShort(OFFSET_NEXT_PAGE_NO, 0);
+    public void moveEntriesLeft(LeafPage leftSibling, int count) {
+        if (leftSibling == null)
+            throw new IllegalArgumentException("leftSibling cannot be null");
+
+        if (leftSibling.getParentPageNo() != getParentPageNo()) {
+            throw new IllegalArgumentException("leftSibling doesn't have the" +
+                " same parent as this node");
+        }
+
+        if (leftSibling.getNextPageNo() != getPageNo() ||
+            getPrevPageNo() != leftSibling.getPageNo()) {
+            throw new IllegalArgumentException("leftSibling isn't actually " +
+                "the left sibling of this node");
+        }
+
+        if (count < 0 || count > numEntries) {
+            throw new IllegalArgumentException("count must be in range [0, " +
+                numEntries + "), got " + count);
+        }
+
+        int moveEndOffset = getKey(count).getOffset();
+        int len = moveEndOffset - OFFSET_FIRST_KEY;
+
+        // Copy the range of key-data to the destination page.  Then update the
+        // count of entries in the destination page.
+        // Don't need to move any data in the left sibling; we are appending!
+        leftSibling.dbPage.write(leftSibling.endOffset, dbPage.getPageData(),
+            OFFSET_FIRST_KEY, len);             // Copy the key-data across
+        leftSibling.dbPage.writeShort(OFFSET_NUM_ENTRIES,
+            leftSibling.numEntries + count);    // Update the entry-count
+
+        // Remove that range of key-data from this page.
+        dbPage.moveDataRange(moveEndOffset, OFFSET_FIRST_KEY,
+            endOffset - moveEndOffset);
+        dbPage.setDataRange(endOffset - len, len, (byte) 0);
+        dbPage.writeShort(OFFSET_NUM_ENTRIES, numEntries - count);
+
+        // Update the cached info for both leaves.
+        loadPageContents();
+        leftSibling.loadPageContents();
+    }
+
+
+    
+    public void moveEntriesRight(LeafPage rightSibling, int count) {
+        if (rightSibling == null)
+            throw new IllegalArgumentException("rightSibling cannot be null");
+
+        if (rightSibling.getParentPageNo() != getParentPageNo()) {
+            throw new IllegalArgumentException("rightSibling doesn't have the" +
+                " same parent as this node");
+        }
+
+        if (rightSibling.getPrevPageNo() != getPageNo() ||
+            getNextPageNo() != rightSibling.getPageNo()) {
+            throw new IllegalArgumentException("rightSibling isn't actually " +
+                "the right sibling of this node");
+        }
         
-        return new LeafPage(dbPage, colInfos);
+        if (count < 0 || count > numEntries) {
+            throw new IllegalArgumentException("count must be in range [0, " +
+                numEntries + "), got " + count);
+        }
+
+        int startOffset = getKey(numEntries - count).getOffset();
+        int len = endOffset - startOffset;
+
+        // Copy the range of key-data to the destination page.  Then update the
+        // count of entries in the destination page.
+        rightSibling.dbPage.moveDataRange(OFFSET_FIRST_KEY,
+            rightSibling.endOffset, len);       // Make room for the data
+        rightSibling.dbPage.write(OFFSET_FIRST_KEY, dbPage.getPageData(),
+            startOffset, len);                  // Copy the key-data across
+        rightSibling.dbPage.writeShort(OFFSET_NUM_ENTRIES,
+            rightSibling.numEntries + count);   // Update the entry-count
+
+        // Remove that range of key-data from this page.
+        dbPage.setDataRange(startOffset, len, (byte) 0);
+        dbPage.writeShort(OFFSET_NUM_ENTRIES, numEntries - count);
+
+        // Update the cached info for both leaves.
+        loadPageContents();
+        rightSibling.loadPageContents();
     }
+
 }

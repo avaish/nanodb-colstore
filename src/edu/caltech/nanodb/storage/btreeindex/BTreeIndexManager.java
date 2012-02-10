@@ -3,12 +3,9 @@ package edu.caltech.nanodb.storage.btreeindex;
 
 import java.io.IOException;
 
-import java.util.ArrayList;
 import java.util.List;
 
-import edu.caltech.nanodb.relations.ColumnType;
-import edu.caltech.nanodb.relations.SQLDataType;
-import edu.caltech.nanodb.storage.heapfile.DataPage;
+import edu.caltech.nanodb.expressions.TupleComparator;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.expressions.TupleLiteral;
@@ -16,19 +13,16 @@ import edu.caltech.nanodb.expressions.TupleLiteral;
 import edu.caltech.nanodb.indexes.IndexFileInfo;
 import edu.caltech.nanodb.indexes.IndexInfo;
 import edu.caltech.nanodb.indexes.IndexManager;
-import edu.caltech.nanodb.indexes.IndexPointer;
 
 import edu.caltech.nanodb.relations.ColumnIndexes;
 import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.relations.TableConstraintType;
-import edu.caltech.nanodb.relations.TableSchema;
 import edu.caltech.nanodb.relations.Tuple;
 
 import edu.caltech.nanodb.storage.DBFile;
 import edu.caltech.nanodb.storage.DBPage;
 import edu.caltech.nanodb.storage.FilePointer;
 import edu.caltech.nanodb.storage.PageTuple;
-import edu.caltech.nanodb.storage.PageWriter;
 import edu.caltech.nanodb.storage.StorageManager;
 
 
@@ -58,15 +52,6 @@ import edu.caltech.nanodb.storage.StorageManager;
 public class BTreeIndexManager implements IndexManager {
     /** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(BTreeIndexManager.class);
-
-
-    public static final String IDXNAME_UNNAMED_PK = "PK_%s";
-
-
-    public static final String IDXNAME_UNNAMED_CK = "CK_%s";
-
-
-    public static final String IDXNAME_UNNAMED_INDEX = "IDX_%s";
 
 
     /**
@@ -184,41 +169,91 @@ public class BTreeIndexManager implements IndexManager {
 
 
     @Override
-    public void addTuple(IndexFileInfo idxFileInfo, TableSchema schema,
-        ColumnIndexes colIndexes, PageTuple tup) throws IOException {
+    public void addTuple(IndexFileInfo idxFileInfo, PageTuple tup)
+        throws IOException {
 
-        // Pull out the index name so we can use it for helpful log messages.
+        // These are the values we store into the index for the tuple:  the key,
+        // and a file-pointer to the tuple that the key is for.
+        TupleLiteral newTupleKey = makeStoredKeyValue(idxFileInfo, tup);
+
+        logger.debug("Adding search-key value " + newTupleKey + " to index " +
+            idxFileInfo.getIndexName());
+
+        // Navigate to the leaf-page, creating one if the index is currently
+        // empty.
+        LeafPage leaf = navigateToLeafPage(idxFileInfo, newTupleKey, true);
+        addEntryToLeafPage(leaf, newTupleKey);
+    }
+    
+    
+    private void addEntryToLeafPage(LeafPage leaf, TupleLiteral newTupleKey)
+        throws IOException {
+
+        // Figure out where the new key-value goes in the leaf page.
+
+        int newEntrySize = newTupleKey.getStorageSize();
+        if (leaf.getFreeSpace() < newEntrySize) {
+            // Try to relocate entries from this leaf to either sibling,
+            // or if that can't happen, split the leaf page into two.
+            if (!relocateLeafEntriesAndAddKey(leaf, newTupleKey))
+                splitLeafAndAddKey(leaf, newTupleKey);
+        }
+        else {
+            // There is room in the leaf for the new key.  Add it there.
+            leaf.addEntry(newTupleKey);
+        }
+    }
+
+    
+    private LeafPage loadLeafPage(IndexFileInfo idxFileInfo, int pageNo)
+        throws IOException {
+
+        if (pageNo == 0)
+            return null;
+
+        DBFile dbFile = idxFileInfo.getDBFile();
+        DBPage dbPage = storageManager.loadDBPage(dbFile, pageNo);
+        return new LeafPage(dbPage, idxFileInfo);
+    }
+
+
+    private NonLeafPage loadNonLeafPage(IndexFileInfo idxFileInfo, int pageNo)
+        throws IOException {
+
+        if (pageNo == 0)
+            return null;
+
+        DBFile dbFile = idxFileInfo.getDBFile();
+        DBPage dbPage = storageManager.loadDBPage(dbFile, pageNo);
+        return new NonLeafPage(dbPage, idxFileInfo);
+    }
+
+
+    private LeafPage navigateToLeafPage(IndexFileInfo idxFileInfo,
+        TupleLiteral searchKey, boolean createIfNeeded) throws IOException {
+
         String indexName = idxFileInfo.getIndexName();
-        
-        // Get the schema of the index so that we can interpret the key-values.
-        ArrayList<ColumnInfo> colInfos = schema.getColumnInfos(colIndexes);
-        colInfos.add(new ColumnInfo("#TUPLE_FP",
-            new ColumnType(SQLDataType.FILE_POINTER)));
 
         // The header page tells us where the root page starts.
         DBFile dbFile = idxFileInfo.getDBFile();
         DBPage dbpHeader = storageManager.loadDBPage(dbFile, 0);
 
-        // These are the values we store into the index for the tuple:  the key,
-        // and a file-pointer to the tuple that the key is for.
-        TupleLiteral newTupleKey = makeStoredKeyValue(tup, colIndexes);
-//        FilePointer newTupleFilePtr = tup.getFilePointer();
-
-        logger.debug("Adding search-key value " + newTupleKey + " to index " +
-            indexName);
-
         // Get the root page of the index.
         int rootPageNo = HeaderPage.getRootPageNo(dbpHeader);
-        DBPage dbpRoot = null;
-
+        DBPage dbpRoot;
         if (rootPageNo == 0) {
-            // The index doesn't have any data-pages at all yet; we need to
-            // create a brand new leaf page and make it the root.
+            // The index doesn't have any data-pages at all yet.  Create one if
+            // the caller wants it.
+
+            if (!createIfNeeded)
+                return null;
+
+            // We need to create a brand new leaf page and make it the root.
 
             logger.debug("Index " + indexName + " currently has no data " +
                 "pages; finding/creating one to use as the root!");
 
-            dbpRoot = getNewDataPage(dbFile, dbpHeader);
+            dbpRoot = getNewDataPage(dbFile);
             rootPageNo = dbpRoot.getPageNo();
 
             HeaderPage.setRootPageNo(dbpHeader, rootPageNo);
@@ -226,7 +261,7 @@ public class BTreeIndexManager implements IndexManager {
             HeaderPage.setLastLeafPageNo(dbpHeader, rootPageNo);
 
             dbpRoot.writeByte(0, BTREE_LEAF_PAGE);
-            LeafPage.init(dbpRoot, colInfos);
+            LeafPage.init(dbpRoot, idxFileInfo);
 
             logger.debug("New root pageNo is " + rootPageNo);
         }
@@ -249,35 +284,40 @@ public class BTreeIndexManager implements IndexManager {
         while (pageType != BTREE_LEAF_PAGE) {
             logger.debug("Examining non-leaf page " + dbPage.getPageNo() +
                 " of index " + indexName);
-            
-            int nextPageNo = -1;
 
-            int numKeys = NonLeafPage.numKeys(dbPage);
-            BTreeIndexPageTuple key = NonLeafPage.getFirstKey(dbPage, colInfos);
+            int nextPageNo = -1;
+            
+            NonLeafPage nonLeafPage = new NonLeafPage(dbPage, idxFileInfo);
+
+            int numKeys = nonLeafPage.getNumKeys();
+            if (numKeys < 1) {
+                throw new IllegalStateException("Non-leaf page " +
+                    dbPage.getPageNo() + " is invalid:  it contains no keys!");
+            }
+
             for (int i = 0; i < numKeys; i++) {
-                int cmp = NonLeafPage.compareToKey(newTupleKey, key);
+                BTreeIndexPageTuple key = nonLeafPage.getKey(i);
+                int cmp = TupleComparator.compareTuples(searchKey, key);
                 if (cmp < 0) {
                     logger.debug("Value is less than key at index " + i +
                         "; following pointer " + i + " before this key.");
-                    nextPageNo = NonLeafPage.getPointerBeforeKey(key);
+                    nextPageNo = nonLeafPage.getPointer(i);
                     break;
                 }
                 else if (cmp == 0) {
                     logger.debug("Value is equal to key at index " + i +
                         "; following pointer " + (i+1) + " after this key.");
-                    nextPageNo = NonLeafPage.getPointerAfterKey(key);
+                    nextPageNo = nonLeafPage.getPointer(i + 1);
                     break;
                 }
-
-                // Go on to the next key.
-                key = NonLeafPage.getNextKey(key);
             }
+
             if (nextPageNo == -1) {
                 // None of the other entries in the page matched the tuple.  Get
                 // the last pointer in the page.
                 logger.debug("Value is greater than all keys in this page;" +
                     " following last pointer " + numKeys + " in the page.");
-                nextPageNo = NonLeafPage.getPointerAfterKey(key);
+                nextPageNo = nonLeafPage.getPointer(numKeys);
             }
 
             // Navigate to the next page in the index.
@@ -287,50 +327,7 @@ public class BTreeIndexManager implements IndexManager {
                 throw new IOException("Invalid page type encountered:  " + pageType);
         }
 
-        // Now we are at a leaf page, we can figure out where the next value
-        // goes.
-
-        int newEntrySize = PageTuple.getTupleStorageSize(colInfos, newTupleKey);
-        newEntrySize += 4;  // Include the size of the file-pointer as well.
-
-        LeafPage leaf = new LeafPage(dbPage, colInfos);
-        if (leaf.getFreeSpace() < newEntrySize) {
-            // TODO:  Split the leaf page into two leaves.
-            throw new UnsupportedOperationException(
-                "NYI:  Leaf page is full and I don't know how to split it yet!");
-        }
-
-        // Insert the key and its corresponding tuple-pointer into the page,
-        // making sure to keep the keys in increasing order.
-
-        int numEntries = leaf.getNumEntries();
-        if (numEntries == 0) {
-            logger.debug("Leaf page is empty; storing new entry at start.");
-            leaf.addEntryAtIndex(newTupleKey, 0);
-        }
-        else {
-            int i;
-            for (i = 0; i < numEntries; i++) {
-                BTreeIndexPageTuple key = leaf.getKey(i);
-
-                logger.debug(i + ":  comparing " + newTupleKey + " to " + key);
-                
-                // Compare the tuple to the current key.  Once we find where the
-                // new key/tuple should go, copy the key/pointer into the page.
-                if (LeafPage.compareToKey(newTupleKey, key) < 0) {
-                    logger.debug("Storing new entry at index " + i +
-                        " in the leaf page.");
-                    leaf.addEntryAtIndex(newTupleKey, i);
-                    break;
-                }
-            }
-
-            if (i == numEntries) {
-                // The new tuple will go at the end of this page's entries.
-                logger.debug("Storing new entry at end of leaf page.");
-                leaf.addEntryAtIndex(newTupleKey, numEntries);
-            }
-        }
+        return new LeafPage(dbPage, idxFileInfo);
     }
 
 
@@ -340,48 +337,406 @@ public class BTreeIndexManager implements IndexManager {
      * creating a brand new page at the end of the file.
      *
      * @param dbFile the index file to get a new empty data page from
-     * @param dbpHeader the header page of the index file, which is usually
-     *        already loaded before this method is called, and which sometimes
-     *        needs to be updated if a page is taken from the free list.
      *
      * @return an empty {@code DBPage} that can be used as a new index page.
      *
      * @throws IOException if an error occurs while loading a data page, or
      *         while extending the size of the index file.
      */
-    private DBPage getNewDataPage(DBFile dbFile, DBPage dbpHeader)
-        throws IOException {
+    private DBPage getNewDataPage(DBFile dbFile) throws IOException {
 
         if (dbFile == null)
             throw new IllegalArgumentException("dbFile cannot be null");
 
-        if (dbpHeader == null)
-            throw new IllegalArgumentException("dbpHeader cannot be null");
-        
-        if (dbpHeader.getPageNo() != 0) {
-            throw new IllegalArgumentException("dbpHeader must be the header " +
-                "page of the index file; got page-no. " + dbpHeader.getPageNo());
-        }
+        DBPage dbpHeader = storageManager.loadDBPage(dbFile, 0);
 
-        DBPage newPage = null;
+        DBPage newPage;
         int pageNo = HeaderPage.getFirstEmptyPageNo(dbpHeader);
+
+        logger.debug("First empty page number is " + pageNo);
+
         if (pageNo == 0) {
             // There are no empty pages.  Create a new page to use.
-            newPage =
-                storageManager.loadDBPage(dbFile, dbFile.getNumPages(), true);
+            int numPages = dbFile.getNumPages();
+            newPage = storageManager.loadDBPage(dbFile, numPages, true);
         }
         else {
             // Load the empty page, and remove it from the chain of empty pages.
             newPage = storageManager.loadDBPage(dbFile, pageNo);
-            HeaderPage.setFirstEmptyPageNo(dbpHeader, newPage.readUnsignedShort(1));
+            int nextEmptyPage = newPage.readUnsignedShort(1);
+            HeaderPage.setFirstEmptyPageNo(dbpHeader, nextEmptyPage);
         }
+
+        logger.debug("Found new data page for the index:  page " +
+            newPage.getPageNo());
+
+        // TODO:  Increment the number of data pages?
 
         return newPage;
     }
 
+    
+    private boolean relocateLeafEntriesAndAddKey(LeafPage page,
+        TupleLiteral key) throws IOException {
+
+        // See if we are able to relocate records either direction to free up
+        // space for the new key.
+
+        int bytesRequired = key.getStorageSize();
+
+        IndexFileInfo idxFileInfo = page.getIndexFileInfo();
+        DBFile dbFile = idxFileInfo.getDBFile();
+
+        LeafPage prevPage = loadLeafPage(idxFileInfo, page.getPrevPageNo());
+        if (prevPage != null &&
+            prevPage.getParentPageNo() == page.getParentPageNo()) {
+
+            // See if we can move some of this leaf's entries to the previous
+            // leaf, to free up space.
+
+            int count = tryLeafRelocateForSpace(page, prevPage, bytesRequired);
+            if (count > 0) {
+                // Yes, we can do it!
+                
+                logger.debug(String.format("Relocating %d entries from " +
+                    "leaf-page %d to left-sibling leaf-page %d", count,
+                    page.getPageNo(), prevPage.getPageNo()));
+                
+                page.moveEntriesLeft(prevPage, count);
+                BTreeIndexPageTuple firstRightKey =
+                    addEntryToLeafPair(prevPage, page, key);
+
+                DBPage parentPage = storageManager.loadDBPage(dbFile,
+                    page.getParentPageNo());
+                NonLeafPage nonLeafPage = new NonLeafPage(parentPage, idxFileInfo);
+                updateEntryInNonLeafPage(nonLeafPage, prevPage.getPageNo(),
+                    firstRightKey, page.getPageNo());
+
+                return true;
+            }
+        }
+
+        LeafPage nextPage = loadLeafPage(idxFileInfo, page.getNextPageNo());
+        if (nextPage != null &&
+            nextPage.getParentPageNo() == page.getParentPageNo()) {
+
+            // See if we can move some of this leaf's entries to the next leaf,
+            // to free up space.
+
+            int count = tryLeafRelocateForSpace(page, nextPage, bytesRequired);
+            if (count > 0) {
+                // Yes, we can do it!
+
+                logger.debug(String.format("Relocating %d entries from " +
+                    "leaf-page %d to right-sibling leaf-page %d", count,
+                    page.getPageNo(), nextPage.getPageNo()));
+
+                page.moveEntriesRight(nextPage, count);
+                BTreeIndexPageTuple firstRightKey =
+                    addEntryToLeafPair(page, nextPage, key);
+
+                DBPage parentPage = storageManager.loadDBPage(dbFile,
+                    page.getParentPageNo());
+                NonLeafPage nonLeafPage = new NonLeafPage(parentPage, idxFileInfo);
+                updateEntryInNonLeafPage(nonLeafPage, page.getPageNo(),
+                    firstRightKey, nextPage.getPageNo());
+
+                return true;
+            }
+        }
+
+        // Couldn't relocate entries to either the prevous or next page.  We
+        // must split the leaf into two.
+        return false;
+    }
+
+    
+    private void updateEntryInNonLeafPage(NonLeafPage page, int prevPageNo,
+                                          Tuple key, int nextPageNo) {
+        for (int i = 0; i < page.getNumPointers() - 1; i++) {
+            if (page.getPointer(i) == prevPageNo &&
+                page.getPointer(i + 1) == nextPageNo) {
+
+                page.replaceKey(i, key);
+                return;
+            }
+        }
+        
+        for (int i = 0; i < page.getNumPointers(); i++) {
+            logger.error(String.format("Page %d pointer %d value is %d",
+                page.getPageNo(), i, page.getPointer(i)));
+        }
+        
+        
+        throw new IllegalStateException(
+            "Couldn't find sequence of page-pointers [" + prevPageNo + ", " +
+            nextPageNo + "] in non-leaf page " + page.getPageNo());
+    }
+    
+
+    /**
+     * This helper function determines how many entries must be relocated from
+     * one leaf-page to another, in order to free up the specified number of
+     * bytes.  If it is possible, the number of entries that must be relocated
+     * is returned.  If it is not possible, the method returns 0.
+     *
+     * @param leaf the leaf node to relocate entries from
+     *
+     * @param adjLeaf the adjacent leaf (predecessor or successor) to relocate
+     *        entries to
+     *
+     * @param bytesRequired the number of bytes that must be freed up in
+     *        {@code leaf} by the operation
+     *
+     * @return the number of entries that must be relocated to free up the
+     *         required space, or 0 if it is not possible.
+     */
+    private int tryLeafRelocateForSpace(LeafPage leaf, LeafPage adjLeaf,
+                                        int bytesRequired) {
+
+        // TODO:  BIG BUG!  Sometimes records are moved from the end of the
+        //        leaf, sometimes they are moved from the start.
+
+        int leafBytesFree = leaf.getFreeSpace();
+        int adjBytesFree = adjLeaf.getFreeSpace();
+
+        int numRelocated = 0;
+        while (true) {
+            int keySize = leaf.getKeySize(numRelocated);
+
+            if (adjBytesFree < keySize)
+                break;
+
+            numRelocated++;
+
+            leafBytesFree += keySize;
+            adjBytesFree -= keySize;
+
+            // Since we don't yet know which leaf the new key will go into,
+            // stop when we can put the key in either leaf.
+            if (leafBytesFree >= bytesRequired &&
+                adjBytesFree >= bytesRequired) {
+                break;
+            }
+        }
+
+        return numRelocated;
+    }
+
+
+    /**
+     * This helper method takes a pair of leaf nodes that are siblings to each
+     * other, and adds the specified key to whichever leaf the key should go
+     * into.  The method returns the first key in the right leaf-page, since
+     * this value is necessary to update the parent node of the pair of leaves.
+     *
+     * @param prevLeaf the first leaf in the pair, left sibling of
+     *        {@code nextLeaf}
+     *
+     * @param nextLeaf the second leaf in the pair, right sibling of
+     *        {@code prevLeaf}
+     *
+     * @param key the key to insert into the pair of leaves
+     *
+     * @return the first key of {@code nextLeaf}, after the insert is completed
+     */
+    private BTreeIndexPageTuple addEntryToLeafPair(LeafPage prevLeaf,
+        LeafPage nextLeaf, TupleLiteral key) {
+
+        BTreeIndexPageTuple firstRightKey = nextLeaf.getKey(0);
+        if (TupleComparator.compareTuples(key, firstRightKey) < 0) {
+            // The new key goes in the left page.
+            prevLeaf.addEntry(key);
+        }
+        else {
+            // The new key goes in the right page.
+            nextLeaf.addEntry(key);
+
+            // Re-retrieve the right page's first key since it may have changed.
+            firstRightKey = nextLeaf.getKey(0);
+        }
+
+        return firstRightKey;
+    }
+    
+
+    private void splitLeafAndAddKey(LeafPage leaf, TupleLiteral key)
+        throws IOException {
+
+        if (logger.isDebugEnabled()) {
+            logger.debug("Splitting leaf-page " + leaf.getPageNo() +
+                " into two leaves.");
+            logger.debug("    Old prev-page:  " + leaf.getPrevPageNo() +
+                "    Old next-page:  " + leaf.getNextPageNo());
+        }
+
+        // Get a new blank page in the index, with the same parent as the
+        // leaf-page we were handed.
+
+        IndexFileInfo idxFileInfo = leaf.getIndexFileInfo();
+        DBFile dbFile = idxFileInfo.getDBFile();
+        DBPage newPage = getNewDataPage(idxFileInfo.getDBFile());
+        LeafPage newLeaf = LeafPage.init(newPage, idxFileInfo);
+
+        // We may need to update the details in the header page.
+        DBPage dbpHeader = storageManager.loadDBPage(dbFile, 0);
+
+        // Chain the leaf-page into the sequence with the previous and next
+        // leaves.  The new leaf always follows the leaf we were handed.
+        newLeaf.setPrevPageNo(leaf.getPageNo());
+        newLeaf.setNextPageNo(leaf.getNextPageNo());
+        leaf.setNextPageNo(newLeaf.getPageNo());
+
+        if (logger.isDebugEnabled()) {
+            logger.debug("    New prev-page:  " + leaf.getPrevPageNo() +
+                "    New next-page:  " + leaf.getNextPageNo());
+            logger.debug("    New next-leaf prev-page:  " + newLeaf.getPrevPageNo() +
+                "    New next-leaf next-page:  " + newLeaf.getNextPageNo());
+        }
+
+        if (HeaderPage.getLastLeafPageNo(dbpHeader) == leaf.getPageNo()) {
+            // The "last page" in the index is changing.
+            HeaderPage.setLastLeafPageNo(dbpHeader, newLeaf.getPageNo());
+        }
+        
+        // Set the new leaf to have the same parent-page as the current leaf,
+        // even though we may have to create a new parent-node later on.  This
+        // is so we can move entries from the old leaf to the new leaf.
+        int parentPageNo = leaf.getParentPageNo();
+        newLeaf.setParentPageNo(parentPageNo);
+
+        // Figure out how many values we want to move from the old leaf to the
+        // new leaf.
+        
+        int numEntries = leaf.getNumEntries();
+
+        if (logger.isDebugEnabled()) {
+            logger.debug(String.format("Relocating %d entries from left-leaf %d" +
+                " to right-leaf %d", numEntries, leaf.getPageNo(), newLeaf.getPageNo()));
+            logger.debug("    Old left # of entries:  " + leaf.getNumEntries());
+            logger.debug("    Old right # of entries:  " + newLeaf.getNumEntries());
+        }
+
+        leaf.moveEntriesRight(newLeaf, numEntries / 2);
+
+        if (logger.isDebugEnabled()) {
+            logger.debug("    New left # of entries:  " + leaf.getNumEntries());
+            logger.debug("    New right # of entries:  " + newLeaf.getNumEntries());
+        }
+
+        BTreeIndexPageTuple firstRightKey =
+            addEntryToLeafPair(leaf, newLeaf, key);
+
+        // If the current leaf doesn't have a parent, it's because it's
+        // currently the root.
+        if (parentPageNo == 0) {
+            // Create a new root node and set both leaves to have it as their
+            // parent.
+            DBPage parentPage = getNewDataPage(dbFile);
+            NonLeafPage.init(parentPage, idxFileInfo,
+                leaf.getPageNo(), firstRightKey, newLeaf.getPageNo());
+
+            parentPageNo = parentPage.getPageNo();
+
+            leaf.setParentPageNo(parentPageNo);
+            newLeaf.setParentPageNo(parentPageNo);
+            
+            // We have a new root-page in the index!
+            HeaderPage.setRootPageNo(dbpHeader, parentPageNo);
+        }
+        else {
+            // Add the new leaf into the parent non-leaf node.  (This may cause
+            // the parent node's contents to be moved or split, if the parent
+            // is full.)
+
+            // (We already set the new leaf's parent-page-number earlier.)
+
+            DBPage dbpParent = storageManager.loadDBPage(dbFile, parentPageNo);
+            NonLeafPage parentPage = new NonLeafPage(dbpParent, idxFileInfo);
+            addEntryToNonLeafPage(parentPage, leaf.getPageNo(), firstRightKey,
+                newLeaf.getPageNo());
+            
+            logger.debug("Parent page " + parentPageNo + " now has " +
+                parentPage.getNumPointers() + " page-pointers.");
+        }
+    }
+    
+    
+    private void addEntryToNonLeafPage(NonLeafPage page, int prevPageNo,
+        Tuple key, int nextPageNo) throws IOException {
+
+        // The new entry will be the key, plus 2 bytes for the page-pointer.
+        List<ColumnInfo> colInfos = page.getIndexFileInfo().getIndexSchema();
+        int newEntrySize = PageTuple.getTupleStorageSize(colInfos, key) + 2;
+
+        if (page.getFreeSpace() < newEntrySize) {
+            // Try to relocate entries from this inner page to either sibling,
+            // or if that can't happen, split the inner page into two.
+            /*
+            if (!relocateNonLeafEntriesAndAddKey(page, prevPageNo, key,
+                                                 nextPageNo, newEntrySize)) {
+                splitNonLeafAndAddKey(page, prevPageNo, key, nextPageNo);
+            }
+            */
+            throw new UnsupportedOperationException("Not yet implemented");
+        }
+        else {
+            // There is room in the leaf for the new key.  Add it there.
+            page.addEntry(prevPageNo, key, nextPageNo);
+        }
+
+    }
+
+/*
+    private boolean relocateNonLeafEntriesAndAddKey(NonLeafPage page,
+        int prevPageNo, Tuple key, int nextPageNo, int bytesRequired)
+        throws IOException {
+
+        // See if we are able to relocate records either direction to free up
+        // space for the new key.
+
+        IndexFileInfo idxFileInfo = page.getIndexFileInfo();
+        DBFile dbFile = idxFileInfo.getDBFile();
+
+        NonLeafPage prevPage = loadNonLeafPage(idxFileInfo, page.getPrevPageNo());
+        if (prevPage != null &&
+            prevPage.getParentPageNo() == page.getParentPageNo()) {
+
+            // See if we can move some of this leaf's entries to the previous
+            // leaf, to free up space.
+
+            int count = tryNonLeafRelocateForSpace(page, prevPage, bytesRequired);
+            if (count > 0) {
+                // Yes, we can do it!
+
+                // TODO:  Need parent's key too.
+                page.moveEntriesLeft(prevPage, count);
+                BTreeIndexPageTuple firstRightKey =
+                    addEntryToLeafPair(prevPage, page, key);
+
+                DBPage parentPage = storageManager.loadDBPage(dbFile,
+                    page.getParentPageNo());
+                NonLeafPage nonLeafPage = new NonLeafPage(parentPage, idxFileInfo);
+                updateEntryInNonLeafPage(nonLeafPage, prevPage.getPageNo(),
+                    firstRightKey, page.getPageNo());
+
+                return true;
+            }
+        }
+
+        NonLeafPage nextPage = loadNonLeafPage(idxFileInfo, page.getNextPageNo());
+        // TODO:  Try to relocate right.
+
+        // Couldn't relocate entries to either the previous or next page.  We
+        // must split the leaf into two.
+        return false;
+    }
+*/
+
 
     @Override
-    public void deleteTuple(IndexFileInfo idxFileInfo, Tuple tup) throws IOException {
+    public void deleteTuple(IndexFileInfo idxFileInfo, PageTuple tup)
+        throws IOException {
         // TODO:  IMPLEMENT
     }
 
@@ -395,25 +750,33 @@ public class BTreeIndexManager implements IndexManager {
      * into the key as the last value, but the {@link #makeLookupKeyValue}
      * helper writes a dummy [0, 0] file-pointer into the key.
      *
+     * @param idxFileInfo the details of the index that the key will be created
+     *                    for
+     *
      * @param ptup the tuple from the original table, that the key will be
      *        created from.
-     *
-     * @param colIndexes the column-indexes of the tuple to use for constructing
-     *                   the key
      *
      * @return a tuple-literal that can be used for storing, looking up, or
      *         deleting the specific tuple {@code ptup}.
      */
-    private TupleLiteral makeStoredKeyValue(PageTuple ptup,
-                                            ColumnIndexes colIndexes) {
+    private TupleLiteral makeStoredKeyValue(IndexFileInfo idxFileInfo,
+                                                 PageTuple ptup) {
+
+        // Figure out what columns from the table we use for the index keys.
+        ColumnIndexes colIndexes = idxFileInfo.getTableColumnIndexes();
+        
         // Build up a new tuple-literal containing the new key to be inserted.
         TupleLiteral newKeyVal = new TupleLiteral();
         for (int i = 0; i < colIndexes.size(); i++)
             newKeyVal.addValue(ptup.getColumnValue(colIndexes.getCol(i)));
-        
+
         // Include the file-pointer as the last value in the tuple, so that all
         // key-values are unique in the index.
         newKeyVal.addValue(ptup.getExternalReference());
+
+        List<ColumnInfo> colInfos = idxFileInfo.getIndexSchema();
+        int storageSize = PageTuple.getTupleStorageSize(colInfos, newKeyVal);
+        newKeyVal.setStorageSize(storageSize);
 
         return newKeyVal;
     }

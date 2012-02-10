@@ -775,11 +775,10 @@ public class StorageManager {
         logger.debug(String.format("Type is %s, page size is %d bytes.",
             type, dbFile.getPageSize()));
 
-        idxFileInfo =
-            new IndexFileInfo(indexName, tblFileInfo.getTableName(), dbFile);
+        idxFileInfo = new IndexFileInfo(indexName, tblFileInfo, dbFile);
         idxFileInfo.setIndexManager(idxManager);
 
-        // Cache this table since it's now considered "open".
+        // Cache this index since it's now considered "open".
         openIndexes.put(indexName, idxFileInfo);
 
         // Defer to the appropriate index-manager to read in the remainder of

@@ -178,4 +178,59 @@ public class TupleComparator implements Comparator<Tuple> {
 
         return true;
     }
+
+
+    /**
+     * Compares all columns of the two input tuples, in the order they appear
+     * within the tuples, and a value is returned to indicate the ordering:
+     * <ul>
+     *   <li>Result &lt; 0 if <tt>t1</tt> &lt; <tt>t2</tt></li>
+     *   <li>Result == 0 if <tt>t1</tt> == <tt>t2</tt></li>
+     *   <li>Result &gt; 0 if <tt>t1</tt> &gt; <tt>t2</tt></li>
+     * </ul>
+     *
+     * @param t1 the first tuple to compare.  Must not be {@code null}.
+     * @param t2 the second tuple to compare.  Must not be {@code null}.
+     *
+     * @return a negative, positive, or zero value indicating the ordering of
+     *         the two inputs
+     *
+     * @design (Donnie) This method is designed for index implementations; thus,
+     *         the schemas on the input tuples are expected to be the same and
+     *         no type-coercion is done.  At some point, however, we may want to
+     *         support more general tuple comparisons.
+     */
+    @SuppressWarnings("unchecked")
+    public static int compareTuples(Tuple t1, Tuple t2) {
+
+        if (t1.getColumnCount() != t2.getColumnCount())
+            throw new IllegalArgumentException("keys must be the same size");
+
+        int compareResult = 0;
+
+        int size = t1.getColumnCount();
+        for (int i = 0; i < size && compareResult == 0; i++) {
+            Comparable valueA = (Comparable) t1.getColumnValue(i);
+            Comparable valueB = (Comparable) t2.getColumnValue(i);
+
+            // Although it should be "unknown" when we compare two NULL values
+            // for equality, we say they are equal so that they will all appear
+            // together in the sorting results.
+            if (valueA == null) {
+                if (valueB != null)
+                    compareResult = -1;
+                else
+                    compareResult = 0;
+            }
+            else if ( /* valueA != null && */ valueB == null) {
+                compareResult = 1;
+            }
+            else {
+                compareResult = valueA.compareTo(valueB);
+            }
+        }
+
+        return compareResult;
+    }
+
 }

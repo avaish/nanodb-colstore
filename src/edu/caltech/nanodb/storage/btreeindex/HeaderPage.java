@@ -172,7 +172,7 @@ public class HeaderPage {
                 "lastLeafPageNo must be >= 0; got " + lastLeafPageNo);
         }
 
-        dbPage.writeShort(OFFSET_FIRST_EMPTY_PAGE, lastLeafPageNo);
+        dbPage.writeShort(OFFSET_LAST_LEAF_PAGE, lastLeafPageNo);
     }
 
 
