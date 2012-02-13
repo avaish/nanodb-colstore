@@ -204,7 +204,10 @@ public class DPJoinPlanner implements Planner {
         logger.debug("    Collected FROM-clauses:  " + leafFromClauses);
         logger.debug("    Extra conjuncts:  " + extraConjuncts);
 
-        conjuncts.addAll(extraConjuncts);
+        if (extraConjuncts != null) {
+            conjuncts.addAll(extraConjuncts);
+        }
+
         Set<Expression> roConjuncts = Collections.unmodifiableSet(conjuncts);
 
         // Create a subplan for every single leaf FROM-clause, and prepare the
@@ -421,6 +424,21 @@ public class DPJoinPlanner implements Planner {
                 if (fromClause.isRenamed())
                     plan = new RenameNode(plan, fromClause.getResultName());
 
+                plan.prepare();
+                Schema schema = plan.getSchema();
+
+                // If possible, construct a predicate for this leaf node by adding
+                // conjuncts that are specific to only this leaf plan-node.
+                //
+                // Do not remove those conjuncts from the set of unused conjuncts.
+
+                findExprsUsingSchemas(conjuncts, false, leafConjuncts, schema);
+
+                Expression leafPredicate = makePredicate(leafConjuncts);
+                if (leafPredicate != null) {
+                    plan = addPredicateToPlan(plan, leafPredicate);
+                }
+
                 break;
 
             case JOIN_EXPR:
@@ -458,20 +476,6 @@ public class DPJoinPlanner implements Planner {
         }
 
         plan.prepare();
-        Schema schema = plan.getSchema();
-
-        // If possible, construct a predicate for this leaf node by adding
-        // conjuncts that are specific to only this leaf plan-node.
-        //
-        // Do not remove those conjuncts from the set of unused conjuncts.
-
-        findExprsUsingSchemas(conjuncts, false, leafConjuncts, schema);
-
-        Expression leafPredicate = makePredicate(leafConjuncts);
-        if (leafPredicate != null) {
-            plan = addPredicateToPlan(plan, leafPredicate);
-            plan.prepare();
-        }
 
         return plan;
     }
