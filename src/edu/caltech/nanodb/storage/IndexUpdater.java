@@ -121,7 +121,7 @@ public class IndexUpdater implements RowEventListener {
             catch (IOException e) {
                 throw new EventDispatchException("Couldn't update index " +
                     indexDef.getIndexName() + " for table " +
-                    tblFileInfo.getTableName());
+                    tblFileInfo.getTableName(), e);
             }
         }
     }

@@ -155,6 +155,16 @@ public abstract class PageTuple implements Tuple {
     }
 
 
+    /**
+     * Returns the storage-size of the tuple in bytes.
+     *
+     * @return the storage-size of the tuple in bytes.
+     */
+    public int getSize() {
+        return endOffset - pageOffset;
+    }
+
+
     public List<ColumnInfo> getColumnInfos() {
         return Collections.unmodifiableList(colInfos);
     }

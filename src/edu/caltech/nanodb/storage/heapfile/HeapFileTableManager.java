@@ -688,7 +688,7 @@ public class HeapFileTableManager implements TableManager {
 
             int freeSpace = DataPage.getFreeSpaceInPage(dbPage);
 
-            logger.debug(String.format("Page %d has %d bytes of free space.",
+            logger.trace(String.format("Page %d has %d bytes of free space.",
                 pageNo, freeSpace));
 
             // If this page has enough free space to add a new tuple, break

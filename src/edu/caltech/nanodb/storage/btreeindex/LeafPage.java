@@ -31,29 +31,21 @@ public class LeafPage {
 
 
     /**
-     * The offset where the previous-sibling page number is stored in this page.
-     * The only leaf page that doesn't have a previous sibling is the first leaf
-     * in the index.
-     */
-    public static final int OFFSET_PREV_PAGE_NO = 3;
-
-
-    /**
      * The offset where the next-sibling page number is stored in this page.
      * The only leaf page that doesn't have a next sibling is the last leaf
-     * in the index.
+     * in the index; its "next page" value will be set to 0.
      */
-    public static final int OFFSET_NEXT_PAGE_NO = 5;
+    public static final int OFFSET_NEXT_PAGE_NO = 3;
 
 
     /**
      * The offset where the number of key+pointer entries is stored in the page.
      */
-    public static final int OFFSET_NUM_ENTRIES = 7;
+    public static final int OFFSET_NUM_ENTRIES = 5;
 
 
     /** The offset of the first key in the leaf page. */
-    public static final int OFFSET_FIRST_KEY = 9;
+    public static final int OFFSET_FIRST_KEY = 7;
 
     
     private DBPage dbPage;
@@ -111,7 +103,6 @@ public class LeafPage {
         dbPage.writeShort(OFFSET_NUM_ENTRIES, 0);
 
         dbPage.writeShort(OFFSET_PARENT_PAGE_NO, 0);
-        dbPage.writeShort(OFFSET_PREV_PAGE_NO, 0);
         dbPage.writeShort(OFFSET_NEXT_PAGE_NO, 0);
 
         return new LeafPage(dbPage, idxFileInfo);
@@ -166,16 +157,6 @@ public class LeafPage {
     }
 
     
-    public int getPrevPageNo() {
-        return dbPage.readUnsignedShort(OFFSET_PREV_PAGE_NO);
-    }
-
-
-    public void setPrevPageNo(int pageNo) {
-        dbPage.writeShort(OFFSET_PREV_PAGE_NO, pageNo);
-    }
-
-
     public int getNextPageNo() {
         return dbPage.readUnsignedShort(OFFSET_NEXT_PAGE_NO);
     }
@@ -317,10 +298,10 @@ public class LeafPage {
                 " same parent as this node");
         }
 
-        if (leftSibling.getNextPageNo() != getPageNo() ||
-            getPrevPageNo() != leftSibling.getPageNo()) {
-            throw new IllegalArgumentException("leftSibling isn't actually " +
-                "the left sibling of this node");
+        if (leftSibling.getNextPageNo() != getPageNo()) {
+            throw new IllegalArgumentException("leftSibling " +
+                leftSibling.getPageNo() + " isn't actually the left " +
+                "sibling of this leaf-node " + getPageNo());
         }
 
         if (count < 0 || count > numEntries) {
@@ -361,10 +342,10 @@ public class LeafPage {
                 " same parent as this node");
         }
 
-        if (rightSibling.getPrevPageNo() != getPageNo() ||
-            getNextPageNo() != rightSibling.getPageNo()) {
-            throw new IllegalArgumentException("rightSibling isn't actually " +
-                "the right sibling of this node");
+        if (getNextPageNo() != rightSibling.getPageNo()) {
+            throw new IllegalArgumentException("rightSibling " +
+                rightSibling.getPageNo() + " isn't actually the right " +
+                "sibling of this leaf-node " + getPageNo());
         }
         
         if (count < 0 || count > numEntries) {
@@ -377,12 +358,18 @@ public class LeafPage {
 
         // Copy the range of key-data to the destination page.  Then update the
         // count of entries in the destination page.
+
+        // Make room for the data
         rightSibling.dbPage.moveDataRange(OFFSET_FIRST_KEY,
-            rightSibling.endOffset, len);       // Make room for the data
+            OFFSET_FIRST_KEY + len, rightSibling.endOffset - OFFSET_FIRST_KEY);
+
+        // Copy the key-data across
         rightSibling.dbPage.write(OFFSET_FIRST_KEY, dbPage.getPageData(),
-            startOffset, len);                  // Copy the key-data across
+            startOffset, len);
+
+        // Update the entry-count
         rightSibling.dbPage.writeShort(OFFSET_NUM_ENTRIES,
-            rightSibling.numEntries + count);   // Update the entry-count
+            rightSibling.numEntries + count);
 
         // Remove that range of key-data from this page.
         dbPage.setDataRange(startOffset, len, (byte) 0);

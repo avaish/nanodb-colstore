@@ -2,12 +2,12 @@ import random, string;
 
 
 print '''CREATE TABLE test_pk_index (
-    id INTEGER PRIMARY KEY,
+    id CHAR(40) PRIMARY KEY,
     value VARCHAR(20)
 );
 '''
 
-ids = range(5000)
+ids = range(50000)
 random.shuffle(ids);
 
 def gen_string():
@@ -18,7 +18,7 @@ def gen_string():
     return s
 
 for id in ids:
-    print "INSERT INTO test_pk_index VALUES (%d, '%s');" % (id, gen_string())
+    print "INSERT INTO test_pk_index VALUES ('%d', '%s');" % (id, gen_string())
 
 print "\nQUIT;"
 

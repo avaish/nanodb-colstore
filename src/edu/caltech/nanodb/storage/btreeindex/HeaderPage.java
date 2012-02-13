@@ -44,13 +44,6 @@ public class HeaderPage {
 
 
     /**
-     * The offset in the header page where the last leaf page of the index is
-     * stored.
-     */
-    public static final int OFFSET_LAST_LEAF_PAGE = 8;
-
-
-    /**
      * The offset in the header page where the first empty page is located in
      * the file.
      */
@@ -142,37 +135,6 @@ public class HeaderPage {
         }
 
         dbPage.writeShort(OFFSET_FIRST_LEAF_PAGE, firstLeafPageNo);
-    }
-
-
-    /**
-     * Returns the page-number of the last leaf page in the index file.
-     *
-     * @param dbPage the header page of the index file
-     * @return the page-number of the last leaf page in the index file.
-     */
-    public static int getLastLeafPageNo(DBPage dbPage) {
-        verifyIsHeaderPage(dbPage);
-        return dbPage.readUnsignedShort(OFFSET_LAST_LEAF_PAGE);
-    }
-
-
-    /**
-     * Sets the page-number of the first leaf page in the header page of the
-     * index file.
-     *
-     * @param dbPage the header page of the heap table file
-     * @param lastLeafPageNo the page-number of the first leaf page
-     */
-    public static void setLastLeafPageNo(DBPage dbPage, int lastLeafPageNo) {
-        verifyIsHeaderPage(dbPage);
-
-        if (lastLeafPageNo < 0) {
-            throw new IllegalArgumentException(
-                "lastLeafPageNo must be >= 0; got " + lastLeafPageNo);
-        }
-
-        dbPage.writeShort(OFFSET_LAST_LEAF_PAGE, lastLeafPageNo);
     }
 
 
