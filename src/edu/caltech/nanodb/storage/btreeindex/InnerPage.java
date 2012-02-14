@@ -260,11 +260,9 @@ public class InnerPage {
     
     public void addEntry(int pagePtr1, Tuple key1, int pagePtr2) {
 
-        if (logger.isDebugEnabled()) {
-            logger.debug("Non-leaf page " + getPageNo() +
-                " contents before adding entry:");
-            for (int p = 0; p < numPointers; p++)
-                logger.debug("    Index " + p + " = page " + getPointer(p));
+        if (logger.isTraceEnabled()) {
+            logger.trace("Non-leaf page " + getPageNo() +
+                " contents before adding entry:\n" + toFormattedString());
         }
 
         int i;
@@ -325,11 +323,9 @@ public class InnerPage {
 
         loadPageContents();
 
-        if (logger.isDebugEnabled()) {
-            logger.debug("Non-leaf page " + getPageNo() +
-                " contents after adding entry:");
-            for (int p = 0; p < numPointers; p++)
-                logger.debug("    Index " + p + " = page " + getPointer(p));
+        if (logger.isTraceEnabled()) {
+            logger.trace("Non-leaf page " + getPageNo() +
+                " contents after adding entry:\n" + toFormattedString());
         }
     }
 

@@ -355,7 +355,8 @@ public class InnerPageOperations {
         if (parentPageNo != 0) {
             parentPage = loadPage(idxFileInfo, parentPageNo);
             int parentPtrIndex = parentPage.getIndexOfPointer(page.getPageNo());
-            parentKey = parentPage.getKey(parentPtrIndex);
+            if (parentPtrIndex < parentPage.getNumPointers() - 1)
+                parentKey = parentPage.getKey(parentPtrIndex);
         }
         Tuple newParentKey =
             page.movePointersRight(newPage, numPointers / 2, parentKey);
