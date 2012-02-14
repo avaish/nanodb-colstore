@@ -1,7 +1,6 @@
 package edu.caltech.nanodb.storage.btreeindex;
 
 
-import java.util.ArrayList;
 import java.util.List;
 
 import edu.caltech.nanodb.expressions.TupleLiteral;
@@ -15,17 +14,18 @@ import org.apache.log4j.Logger;
 
 /**
  */
-public class NonLeafPage {
+public class InnerPage {
     /** A logging object for reporting anything interesting that happens. */
-    private static Logger logger = Logger.getLogger(NonLeafPage.class);
+    private static Logger logger = Logger.getLogger(InnerPage.class);
 
 
     /** The page type always occupies the first byte of the page. */
     public static final int OFFSET_PAGE_TYPE = 0;
 
 
-    /** The offset where the parent page number is stored in this page. */
+    /** The offset where the parent page number is stored in this page. * /
     public static final int OFFSET_PARENT_PAGE_NO = 1;
+*/
 
     /**
      * The offset where the number of pointer entries is stored in the page.
@@ -73,7 +73,7 @@ public class NonLeafPage {
     private int endOffset;
 
     
-    public NonLeafPage(DBPage dbPage, IndexFileInfo idxFileInfo) {
+    public InnerPage(DBPage dbPage, IndexFileInfo idxFileInfo) {
         this.dbPage = dbPage;
         this.idxFileInfo = idxFileInfo;
 
@@ -81,24 +81,24 @@ public class NonLeafPage {
     }
 
 
-    public static NonLeafPage init(DBPage dbPage, IndexFileInfo idxFileInfo) {
+    public static InnerPage init(DBPage dbPage, IndexFileInfo idxFileInfo) {
 
         dbPage.writeByte(OFFSET_PAGE_TYPE, BTreeIndexManager.BTREE_INNER_PAGE);
 
-        dbPage.writeShort(OFFSET_PARENT_PAGE_NO, 0);
+//        dbPage.writeShort(OFFSET_PARENT_PAGE_NO, 0);
         dbPage.writeShort(OFFSET_NUM_POINTERS, 0);
 
-        return new NonLeafPage(dbPage, idxFileInfo);
+        return new InnerPage(dbPage, idxFileInfo);
     }
 
 
 
-    public static NonLeafPage init(DBPage dbPage, IndexFileInfo idxFileInfo,
+    public static InnerPage init(DBPage dbPage, IndexFileInfo idxFileInfo,
                                    int ptr0, Tuple key0, int ptr1) {
 
         dbPage.writeByte(OFFSET_PAGE_TYPE, BTreeIndexManager.BTREE_INNER_PAGE);
 
-        dbPage.writeShort(OFFSET_PARENT_PAGE_NO, 0);
+//        dbPage.writeShort(OFFSET_PARENT_PAGE_NO, 0);
 
         // Write the first contents of the non-leaf page:  [ptr0, key0, ptr1]
         // Since key0 will usually be a BTreeIndexPageTuple, we have to rely on
@@ -116,7 +116,7 @@ public class NonLeafPage {
 
         dbPage.writeShort(OFFSET_NUM_POINTERS, 2);
 
-        return new NonLeafPage(dbPage, idxFileInfo);
+        return new InnerPage(dbPage, idxFileInfo);
     }
 
 
@@ -171,7 +171,7 @@ public class NonLeafPage {
         return dbPage.getPageNo();
     }
 
-
+/*
     public int getParentPageNo() {
         return dbPage.readUnsignedShort(OFFSET_PARENT_PAGE_NO);
     }
@@ -180,7 +180,7 @@ public class NonLeafPage {
     public void setParentPageNo(int pageNo) {
         dbPage.writeShort(OFFSET_PARENT_PAGE_NO, pageNo);
     }
-
+*/
 
     public int getNumPointers() {
         return numPointers;
@@ -205,8 +205,22 @@ public class NonLeafPage {
     public int getPointer(int index) {
         return dbPage.readUnsignedShort(pointerOffsets[index]);
     }
-    
-    
+
+
+    public BTreeIndexPageTuple getKey(int index) {
+        return keys[index];
+    }
+
+
+    /**
+     * This helper method scans the inner page for the specified page-pointer,
+     * returning the index of the pointer if it is found, or -1 if the pointer
+     * is not found.
+     *
+     * @param pointer the page-pointer to find in this inner page
+     *
+     * @return the index of the page-pointer if found, or -1 if not found
+     */
     public int getIndexOfPointer(int pointer) {
         for (int i = 0; i < getNumPointers(); i++) {
             if (getPointer(i) == pointer)
@@ -215,13 +229,8 @@ public class NonLeafPage {
 
         return -1;
     }
-    
 
-    public BTreeIndexPageTuple getKey(int index) {
-        return keys[index];
-    }
 
-    
     public void replaceKey(int index, Tuple key) {
         int oldStart = keys[index].getOffset();
         int oldLen = keys[index].getEndOffset() - oldStart;
@@ -249,7 +258,7 @@ public class NonLeafPage {
     }
     
     
-    public void addEntry(int pageNo1, Tuple key, int pageNo2) {
+    public void addEntry(int pagePtr1, Tuple key1, int pagePtr2) {
 
         if (logger.isDebugEnabled()) {
             logger.debug("Non-leaf page " + getPageNo() +
@@ -260,16 +269,16 @@ public class NonLeafPage {
 
         int i;
         for (i = 0; i < numPointers; i++) {
-            if (getPointer(i) == pageNo1)
+            if (getPointer(i) == pagePtr1)
                 break;
         }
         
         logger.debug(String.format("Found page-pointer %d in index %d",
-            pageNo1, i));
+            pagePtr1, i));
 
         if (i == numPointers) {
             throw new IllegalArgumentException(
-                "Can't find initial page-pointer " + pageNo1 +
+                "Can't find initial page-pointer " + pagePtr1 +
                 " in non-leaf page " + getPageNo());
         }
         
@@ -292,7 +301,7 @@ public class NonLeafPage {
         // into the page.
 
         List<ColumnInfo> colInfos = idxFileInfo.getIndexSchema();
-        int newKeySize = PageTuple.getTupleStorageSize(colInfos, key);
+        int newKeySize = PageTuple.getTupleStorageSize(colInfos, key1);
         int newEntrySize = newKeySize + 2;
         if (endOffset + newEntrySize > dbPage.getPageSize()) {
             throw new IllegalArgumentException("New key-value and " +
@@ -306,8 +315,8 @@ public class NonLeafPage {
         }
 
         // Write in the new key/pointer values.
-        PageTuple.storeTuple(dbPage, oldKeyStart, colInfos, key);
-        dbPage.writeShort(oldKeyStart + newKeySize, pageNo2);
+        PageTuple.storeTuple(dbPage, oldKeyStart, colInfos, key1);
+        dbPage.writeShort(oldKeyStart + newKeySize, pagePtr2);
 
         // Finally, increment the number of pointers in the page, then reload
         // the cached data.
@@ -325,13 +334,8 @@ public class NonLeafPage {
     }
 
 
-    public TupleLiteral movePointersLeft(NonLeafPage leftSibling, int count,
+    public TupleLiteral movePointersLeft(InnerPage leftSibling, int count,
                                          Tuple parentKey) {
-
-        if (leftSibling.getParentPageNo() != getParentPageNo()) {
-            throw new IllegalArgumentException(
-                "leftSibling doesn't have the same parent as this node");
-        }
 
         if (count < 0 || count > numPointers) {
             throw new IllegalArgumentException("count must be in range [0, " +
@@ -407,23 +411,17 @@ public class NonLeafPage {
     }
 
 
-    public TupleLiteral movePointersRight(NonLeafPage rightSibling, int count,
+    public TupleLiteral movePointersRight(InnerPage rightSibling, int count,
                                           Tuple parentKey) {
-
-        if (rightSibling.getParentPageNo() != getParentPageNo()) {
-            throw new IllegalArgumentException(
-                "rightSibling doesn't have the same parent as this node");
-        }
 
         if (count < 0 || count > numPointers) {
             throw new IllegalArgumentException("count must be in range [0, " +
                 numPointers + "), got " + count);
         }
 
-        if (logger.isDebugEnabled()) {
-            logger.debug("Non-leaf page " + getPageNo() +
-                " contents before moving pointers right:");
-            logger.debug(toFormattedString());
+        if (logger.isTraceEnabled()) {
+            logger.trace("Non-leaf page " + getPageNo() +
+                " contents before moving pointers right:\n" + toFormattedString());
         }
 
         int startPointerIndex = numPointers - count;
@@ -498,22 +496,31 @@ public class NonLeafPage {
         loadPageContents();
         rightSibling.loadPageContents();
 
-        if (logger.isDebugEnabled()) {
-            logger.debug("Non-leaf page " + getPageNo() +
-                " contents after moving pointers right:");
-            logger.debug(toFormattedString());
-        }
+        if (logger.isTraceEnabled()) {
+            logger.trace("Non-leaf page " + getPageNo() +
+                " contents after moving pointers right:\n" + toFormattedString());
 
-        if (logger.isDebugEnabled()) {
-            logger.debug("Right-sibling page " + rightSibling.getPageNo() +
-                " contents after moving pointers right:");
-            logger.debug(rightSibling.toFormattedString());
+            logger.trace("Right-sibling page " + rightSibling.getPageNo() +
+                " contents after moving pointers right:\n" +
+                rightSibling.toFormattedString());
         }
 
         return newParentKey;
     }
-    
-    
+
+
+    /**
+     * <p>
+     * This helper method creates a formatted string containing the contents of
+     * the inner page, including the pointers and the intervening keys.
+     * </p>
+     * <p>
+     * It is strongly suggested that this method should only be used for
+     * trace-level output, since otherwise the output will become overwhelming.
+     * </p>
+     *
+     * @return a formatted string containing the contents of the inner page
+     */
     public String toFormattedString() {
         StringBuilder buf = new StringBuilder();
 

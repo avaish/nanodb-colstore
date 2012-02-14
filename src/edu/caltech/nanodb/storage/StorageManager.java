@@ -78,6 +78,7 @@ public class StorageManager {
         File baseDir = new File(baseDirPath);
 
         storageMgr = new StorageManager(baseDir);
+        storageMgr.finishInit();
 
         // Register the component that manages indexes when tables are modified.
         EventDispatcher.getInstance().addRowEventListener(
@@ -222,12 +223,14 @@ public class StorageManager {
         }
 
         logger.info("Using base directory " + baseDir);
-
         this.baseDir = baseDir;
 
         fileManager = new FileManager(baseDir);
         bufferManager = new BufferManager(fileManager);
+    }
 
+
+    private void finishInit() {
         initFileTypeManagers();
     }
 

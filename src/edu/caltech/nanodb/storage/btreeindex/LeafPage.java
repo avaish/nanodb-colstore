@@ -26,26 +26,26 @@ public class LeafPage {
     public static final int OFFSET_PAGE_TYPE = 0;
 
 
-    /** The offset where the parent page number is stored in this page. */
+    /** The offset where the parent page number is stored in this page. * /
     public static final int OFFSET_PARENT_PAGE_NO = 1;
-
+*/
 
     /**
      * The offset where the next-sibling page number is stored in this page.
      * The only leaf page that doesn't have a next sibling is the last leaf
      * in the index; its "next page" value will be set to 0.
      */
-    public static final int OFFSET_NEXT_PAGE_NO = 3;
+    public static final int OFFSET_NEXT_PAGE_NO = 1;
 
 
     /**
      * The offset where the number of key+pointer entries is stored in the page.
      */
-    public static final int OFFSET_NUM_ENTRIES = 5;
+    public static final int OFFSET_NUM_ENTRIES = 3;
 
 
     /** The offset of the first key in the leaf page. */
-    public static final int OFFSET_FIRST_KEY = 7;
+    public static final int OFFSET_FIRST_KEY = 5;
 
     
     private DBPage dbPage;
@@ -77,6 +77,11 @@ public class LeafPage {
 
 
     public LeafPage(DBPage dbPage, IndexFileInfo idxFileInfo) {
+        if (dbPage.readUnsignedByte(0) != BTreeIndexManager.BTREE_LEAF_PAGE) {
+            throw new IllegalArgumentException("Specified DBPage " +
+                dbPage.getPageNo() + " is not marked as a leaf-page.");
+        }
+
         this.dbPage = dbPage;
         this.idxFileInfo = idxFileInfo;
         this.colInfos = idxFileInfo.getIndexSchema();
@@ -102,7 +107,7 @@ public class LeafPage {
 
         dbPage.writeShort(OFFSET_NUM_ENTRIES, 0);
 
-        dbPage.writeShort(OFFSET_PARENT_PAGE_NO, 0);
+//        dbPage.writeShort(OFFSET_PARENT_PAGE_NO, 0);
         dbPage.writeShort(OFFSET_NEXT_PAGE_NO, 0);
 
         return new LeafPage(dbPage, idxFileInfo);
@@ -146,7 +151,7 @@ public class LeafPage {
         return dbPage.getPageNo();
     }
     
-
+/*
     public int getParentPageNo() {
         return dbPage.readUnsignedShort(OFFSET_PARENT_PAGE_NO);
     }
@@ -155,7 +160,7 @@ public class LeafPage {
     public void setParentPageNo(int pageNo) {
         dbPage.writeShort(OFFSET_PARENT_PAGE_NO, pageNo);
     }
-
+*/
     
     public int getNextPageNo() {
         return dbPage.readUnsignedShort(OFFSET_NEXT_PAGE_NO);
@@ -293,12 +298,11 @@ public class LeafPage {
         if (leftSibling == null)
             throw new IllegalArgumentException("leftSibling cannot be null");
 
-        if (leftSibling.getParentPageNo() != getParentPageNo()) {
-            throw new IllegalArgumentException("leftSibling doesn't have the" +
-                " same parent as this node");
-        }
-
         if (leftSibling.getNextPageNo() != getPageNo()) {
+            logger.error(String.format("Left sibling leaf %d says that page " +
+                "%d is its right sibling, not this page %d",
+                leftSibling.getPageNo(), leftSibling.getNextPageNo(), getPageNo()));
+            
             throw new IllegalArgumentException("leftSibling " +
                 leftSibling.getPageNo() + " isn't actually the left " +
                 "sibling of this leaf-node " + getPageNo());
@@ -337,10 +341,12 @@ public class LeafPage {
         if (rightSibling == null)
             throw new IllegalArgumentException("rightSibling cannot be null");
 
+/*
         if (rightSibling.getParentPageNo() != getParentPageNo()) {
             throw new IllegalArgumentException("rightSibling doesn't have the" +
                 " same parent as this node");
         }
+*/
 
         if (getNextPageNo() != rightSibling.getPageNo()) {
             throw new IllegalArgumentException("rightSibling " +
@@ -379,5 +385,4 @@ public class LeafPage {
         loadPageContents();
         rightSibling.loadPageContents();
     }
-
 }
