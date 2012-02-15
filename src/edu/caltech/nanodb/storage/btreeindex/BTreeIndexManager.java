@@ -4,10 +4,13 @@ package edu.caltech.nanodb.storage.btreeindex;
 import java.io.IOException;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
+import edu.caltech.nanodb.client.SessionState;
 import edu.caltech.nanodb.expressions.TupleComparator;
 import edu.caltech.nanodb.indexes.OrderedIndexManager;
+import edu.caltech.nanodb.storage.TableFileInfo;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.expressions.TupleLiteral;
@@ -228,6 +231,15 @@ public class BTreeIndexManager implements IndexManager {
     public void deleteTuple(IndexFileInfo idxFileInfo, PageTuple tup)
         throws IOException {
         // TODO:  IMPLEMENT
+    }
+
+
+    @Override
+    public List<String> verifyIndex(IndexFileInfo idxFileInfo) throws IOException {
+        BTreeIndexVerifier verifier = new BTreeIndexVerifier(idxFileInfo);
+        List<String> errors = verifier.verify();
+
+        return errors;
     }
 
 
