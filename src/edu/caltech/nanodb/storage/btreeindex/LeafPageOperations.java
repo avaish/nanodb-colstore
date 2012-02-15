@@ -1,16 +1,17 @@
 package edu.caltech.nanodb.storage.btreeindex;
 
 
+import java.io.IOException;
+import java.util.List;
+
+import org.apache.log4j.Logger;
+
 import edu.caltech.nanodb.expressions.TupleComparator;
 import edu.caltech.nanodb.expressions.TupleLiteral;
 import edu.caltech.nanodb.indexes.IndexFileInfo;
 import edu.caltech.nanodb.storage.DBFile;
 import edu.caltech.nanodb.storage.DBPage;
 import edu.caltech.nanodb.storage.StorageManager;
-import org.apache.log4j.Logger;
-
-import java.io.IOException;
-import java.util.List;
 
 
 /**
@@ -144,7 +145,9 @@ public class LeafPageOperations {
                 // See if we can move some of this leaf's entries to the
                 // previous leaf, to free up space.
 
-                int count = tryLeafRelocateForSpace(page, prevPage, bytesRequired);
+                int count = tryLeafRelocateForSpace(page, prevPage, false,
+                    bytesRequired);
+
                 if (count > 0) {
                     // Yes, we can do it!
 
@@ -185,7 +188,9 @@ public class LeafPageOperations {
                 // See if we can move some of this leaf's entries to the next
                 // leaf, to free up space.
 
-                int count = tryLeafRelocateForSpace(page, nextPage, bytesRequired);
+                int count = tryLeafRelocateForSpace(page, nextPage, true,
+                    bytesRequired);
+
                 if (count > 0) {
                     // Yes, we can do it!
 
@@ -238,7 +243,7 @@ public class LeafPageOperations {
      * @return the first key of {@code nextLeaf}, after the insert is completed
      */
     private BTreeIndexPageTuple addEntryToLeafPair(LeafPage prevLeaf,
-                                                   LeafPage nextLeaf, TupleLiteral key) {
+        LeafPage nextLeaf, TupleLiteral key) {
 
         BTreeIndexPageTuple firstRightKey = nextLeaf.getKey(0);
         if (TupleComparator.compareTuples(key, firstRightKey) < 0) {
@@ -268,6 +273,11 @@ public class LeafPageOperations {
      * @param adjLeaf the adjacent leaf (predecessor or successor) to relocate
      *        entries to
      *
+     * @param movingRight pass {@code true} if the sibling is to the right of
+     *        {@code page} (and therefore we are moving entries right), or
+     *        {@code false} if the sibling is to the left of {@code page} (and
+     *        therefore we are moving entries left).
+     *
      * @param bytesRequired the number of bytes that must be freed up in
      *        {@code leaf} by the operation
      *
@@ -275,11 +285,9 @@ public class LeafPageOperations {
      *         required space, or 0 if it is not possible.
      */
     private int tryLeafRelocateForSpace(LeafPage leaf, LeafPage adjLeaf,
-                                        int bytesRequired) {
+        boolean movingRight, int bytesRequired) {
 
-        // TODO:  BIG BUG!  Sometimes records are moved from the end of the
-        //        leaf, sometimes they are moved from the start.
-
+        int numKeys = leaf.getNumEntries();
         int leafBytesFree = leaf.getFreeSpace();
         int adjBytesFree = adjLeaf.getFreeSpace();
 
@@ -292,9 +300,19 @@ public class LeafPageOperations {
 
         int numRelocated = 0;
         while (true) {
-            int keySize = leaf.getKeySize(numRelocated);
+            // Figure out the index of the key we need the size of, based on the
+            // direction we are moving values.  If we are moving values right,
+            // we need to look at the keys starting at the rightmost one.  If we
+            // are moving values left, we need to start with the leftmost key.
+            int index;
+            if (movingRight)
+                index = numKeys - numRelocated - 1;
+            else
+                index = numRelocated;
 
-            logger.debug("Key " + numRelocated + " is " + keySize + " bytes");
+            int keySize = leaf.getKeySize(index);
+
+            logger.debug("Key " + index + " is " + keySize + " bytes");
 
             if (adjBytesFree < keySize)
                 break;
@@ -318,6 +336,29 @@ public class LeafPageOperations {
     }
 
 
+    /**
+     * <p>
+     * This helper function splits the specified leaf-node into two nodes, also
+     * updating the parent node in the process, and then inserts the specified
+     * search-key into the appropriate leaf.  This method is used to add a key
+     * to a leaf that doesn't have enough space, when it isn't possible to
+     * relocate values to the left or right sibling of the leaf.
+     * </p>
+     * <p>
+     * When the leaf node is split, half of the keys are put into the new leaf,
+     * regardless of the size of individual keys.  In other words, this method
+     * doesn't try to keep the leaves half-full based on bytes used.
+     * </p>
+     *
+     *
+     * @param leaf the leaf node to split and then add the key to
+     * @param pagePath the sequence of page-numbers traversed to reach this
+     *        leaf node.
+     *
+     * @param key the new key to insert into the leaf node
+     *
+     * @throws IOException if an IO error occurs during the operation.
+     */
     private void splitLeafAndAddKey(LeafPage leaf, List<Integer> pagePath,
                                     TupleLiteral key) throws IOException {
 
@@ -409,5 +450,4 @@ public class LeafPageOperations {
                 parentPage.getNumPointers() + " page-pointers.");
         }
     }
-
 }

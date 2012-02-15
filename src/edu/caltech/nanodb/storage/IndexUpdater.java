@@ -3,6 +3,8 @@ package edu.caltech.nanodb.storage;
 
 import java.io.IOException;
 
+import org.apache.log4j.Logger;
+
 import edu.caltech.nanodb.indexes.IndexFileInfo;
 import edu.caltech.nanodb.indexes.IndexManager;
 import edu.caltech.nanodb.relations.ColumnIndexes;
@@ -10,7 +12,6 @@ import edu.caltech.nanodb.relations.TableSchema;
 import edu.caltech.nanodb.relations.Tuple;
 import edu.caltech.nanodb.server.EventDispatchException;
 import edu.caltech.nanodb.server.RowEventListener;
-import org.apache.log4j.Logger;
 
 
 /**
@@ -100,6 +101,15 @@ public class IndexUpdater implements RowEventListener {
     }
 
 
+    /**
+     * This helper method handles the case when a tuple is being added to the
+     * table, after the row has already been added to the table.  All indexes
+     * on the table are updated to include the new row.
+     *
+     * @param tblFileInfo details of the table being updated
+     *
+     * @param ptup the new tuple that was inserted into the table
+     */
     private void addRowToIndexes(TableFileInfo tblFileInfo, PageTuple ptup) {
 
         logger.debug("Adding tuple to indexes for table " +
@@ -126,7 +136,16 @@ public class IndexUpdater implements RowEventListener {
         }
     }
 
-    
+
+    /**
+     * This helper method handles the case when a tuple is being removed from
+     * the table, before the row has actually been removed from the table.
+     * All indexes on the table are updated to remove the row.
+     *
+     * @param tblFileInfo details of the table being updated
+     *
+     * @param ptup the tuple about to be removed from the table
+     */
     private void removeRowFromIndexes(TableFileInfo tblFileInfo, PageTuple ptup) {
 
         logger.debug("Removing tuple from indexes for table " +

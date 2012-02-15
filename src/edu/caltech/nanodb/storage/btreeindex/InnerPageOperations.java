@@ -1,5 +1,11 @@
 package edu.caltech.nanodb.storage.btreeindex;
 
+
+import java.io.IOException;
+import java.util.List;
+
+import org.apache.log4j.Logger;
+
 import edu.caltech.nanodb.expressions.TupleLiteral;
 import edu.caltech.nanodb.indexes.IndexFileInfo;
 import edu.caltech.nanodb.relations.ColumnInfo;
@@ -8,10 +14,6 @@ import edu.caltech.nanodb.storage.DBFile;
 import edu.caltech.nanodb.storage.DBPage;
 import edu.caltech.nanodb.storage.PageTuple;
 import edu.caltech.nanodb.storage.StorageManager;
-import org.apache.log4j.Logger;
-
-import java.io.IOException;
-import java.util.List;
 
 
 /**
@@ -52,31 +54,46 @@ public class InnerPageOperations {
      * pointers in an inner B<sup>+</sup> tree node.  It is an error if the
      * specified pair of pointers cannot be found in the node.
      *
-     * @todo (Donnie) This implementation has a major failing - it assumes that
-     *       the old and new keys are the same size.  This cannot be assumed in
-     *       general.  If the page doesn't have room for the new key then the
-     *       page may need to be split, per usual.  This is why the
-     *       {@code pagePath} argument is provided.
-     *
      * @param page the inner page to update the key in
      * @param pagePath the path to the page, from the root node
      * @param pagePtr1 the pointer P<sub>i</sub> before the key to update
      * @param key1 the new value of the key K<sub>i</sub> to store
      * @param pagePtr2 the pointer P<sub>i+1</sub> after the key to update
+     *
+     * @todo (Donnie) This implementation has a major failing that will occur
+     *       infrequently - if the inner page doesn't have room for the new key
+     *       (e.g. if the page was already almost full, and then the new key is
+     *       larger than the old key) then the inner page needs to be split,
+     *       per usual.  Right now it will just throw an exception in this case.
+     *       This is why the {@code pagePath} argument is provided, so that when
+     *       this bug is fixed, the page-path will be available.
      */
     public void replaceKey(InnerPage page, List<Integer> pagePath,
                            int pagePtr1, Tuple key1, int pagePtr2) {
-
-        // TODO:  This code assumes that the old and new key are the same size.
-        //        If the page doesn't have enough space for the new key, we need
-        //        to split/relocate the page to handle this.
 
         for (int i = 0; i < page.getNumPointers() - 1; i++) {
             if (page.getPointer(i) == pagePtr1 &&
                 page.getPointer(i + 1) == pagePtr2) {
 
                 // Found the pair of pointers!  Replace the key-value.
-                page.replaceKey(i, key1);
+
+                BTreeIndexPageTuple oldKey = page.getKey(i);
+                int oldKeySize = oldKey.getSize();
+
+                int newKeySize = PageTuple.getTupleStorageSize(
+                    page.getIndexFileInfo().getIndexSchema(), key1);
+
+                if (page.getFreeSpace() - oldKeySize + newKeySize >= 0) {
+                    // We have room - go ahead and do this.
+                    page.replaceKey(i, key1);
+                }
+                else {
+                    // We need to split the inner page in this situation.
+                    throw new UnsupportedOperationException(
+                        "Can't replace key on inner page at index " + i +
+                        ": out of space, and NanoDB doesn't know how to " +
+                        " split inner pages in this situation yet.");
+                }
                 
                 // Make sure we didn't cause any brain damage...
                 assert page.getPointer(i) == pagePtr1;
@@ -102,12 +119,37 @@ public class InnerPageOperations {
     }
 
 
-
+    /**
+     * This helper function determines how many pointers must be relocated from
+     * one inner page to another, in order to free up the specified number of
+     * bytes.  If it is possible, the number of pointers that must be relocated
+     * is returned.  If it is not possible, the method returns 0.
+     *
+     * @param page the inner page to relocate entries from
+     *
+     * @param adjPage the adjacent page (predecessor or successor) to relocate
+     *        entries to
+     *
+     * @param movingRight pass {@code true} if the sibling is to the right of
+     *        {@code page} (and therefore we are moving entries right), or
+     *        {@code false} if the sibling is to the left of {@code page} (and
+     *        therefore we are moving entries left).
+     *
+     * @param bytesRequired the number of bytes that must be freed up in
+     *        {@code page} by the operation
+     *
+     * @param parentKeySize the size of the parent key that must also be
+     *        relocated into the adjacent page, and therefore affects how many
+     *        pointers can be transferred
+     *
+     * @return the number of pointers that must be relocated to free up the
+     *         required space, or 0 if it is not possible.
+     */
     private int tryNonLeafRelocateForSpace(InnerPage page, InnerPage adjPage,
-                                           int bytesRequired, int parentKeySize) {
+        boolean movingRight, int bytesRequired, int parentKeySize) {
 
+        int numKeys = page.getNumKeys();
         int pageBytesFree = page.getFreeSpace();
-
         int adjBytesFree = adjPage.getFreeSpace();
 
         // The parent key always has to move to the adjacent page, so if that
@@ -127,8 +169,21 @@ public class InnerPageOperations {
                 break;
             }
 
+            // Figure out the index of the key we need the size of, based on the
+            // direction we are moving values.  If we are moving values right,
+            // we need to look at the keys starting at the rightmost one.  If we
+            // are moving values left, we need to start with the leftmost key.
+            int index;
+            if (movingRight)
+                index = numKeys - numRelocated - 1;
+            else
+                index = numRelocated;
+
             keyBytesMoved += lastKeySize;
-            lastKeySize = page.getKey(numRelocated).getSize();
+
+            lastKeySize = page.getKey(index).getSize();
+            logger.debug("Key " + index + " is " + lastKeySize + " bytes");
+
             numRelocated++;
 
             // Since we don't yet know which page the new pointer will go into,
@@ -226,7 +281,7 @@ public class InnerPageOperations {
                 BTreeIndexPageTuple parentKey = parentPage.getKey(pagePtrIndex - 1);
                 int parentKeySize = parentKey.getSize();
 
-                int count = tryNonLeafRelocateForSpace(page, prevPage,
+                int count = tryNonLeafRelocateForSpace(page, prevPage, false,
                     newEntrySize, parentKeySize);
 
                 if (count > 0) {
@@ -273,7 +328,7 @@ public class InnerPageOperations {
                 BTreeIndexPageTuple parentKey = parentPage.getKey(pagePtrIndex);
                 int parentKeySize = parentKey.getSize();
 
-                int count = tryNonLeafRelocateForSpace(page, nextPage,
+                int count = tryNonLeafRelocateForSpace(page, nextPage, true,
                     newEntrySize, parentKeySize);
 
                 if (count > 0) {
@@ -313,6 +368,37 @@ public class InnerPageOperations {
     }
 
 
+    /**
+     * <p>
+     * This helper function splits the specified inner page into two pages,
+     * also updating the parent page in the process, and then inserts the
+     * specified key and page-pointer into the appropriate inner page.  This
+     * method is used to add a key/pointer to an inner page that doesn't have
+     * enough space, when it isn't possible to relocate pointers to the left
+     * or right sibling of the page.
+     * </p>
+     * <p>
+     * When the inner node is split, half of the pointers are put into the new
+     * sibling, regardless of the size of the keys involved.  In other words,
+     * this method doesn't try to keep the pages half-full based on bytes used.
+     * </p>
+     *
+     * @param page the inner node to split and then add the key/pointer to
+     *
+     * @param pagePath the sequence of page-numbers traversed to reach this
+     *        inner node.
+     *
+     * @param pagePtr1 the existing page-pointer after which the new key and
+     *        pointer should be inserted
+     *
+     * @param key1 the new key to insert into the inner page, immediately after
+     *        the page-pointer value {@code pagePtr1}.
+     *
+     * @param pagePtr2 the new page-pointer value to insert after the new key
+     *        value
+     *
+     * @throws IOException if an IO error occurs during the operation.
+     */
     private void splitAndAddKey(InnerPage page, List<Integer> pagePath,
         int pagePtr1, Tuple key1, int pagePtr2) throws IOException {
 

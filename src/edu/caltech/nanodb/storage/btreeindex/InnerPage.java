@@ -13,6 +13,17 @@ import org.apache.log4j.Logger;
 
 
 /**
+ * <p>
+ * This class wraps a {@link DBPage} object that is an inner page in the
+ * B<sup>+</sup> tree implementation, to provide some of the basic
+ * inner-page-management operations necessary for the indexing structure.
+ * </p>
+ * <p>
+ * Operations involving individual leaf-pages are provided by the
+ * {@link LeafPage} wrapper-class.  Higher-level operations involving multiple
+ * leaves and/or inner pages of the B<sup>+</sup> tree structure, are provided
+ * by the {@link LeafPageOperations} and {@link InnerPageOperations} classes.
+ * </p>
  */
 public class InnerPage {
     /** A logging object for reporting anything interesting that happens. */
@@ -22,10 +33,6 @@ public class InnerPage {
     /** The page type always occupies the first byte of the page. */
     public static final int OFFSET_PAGE_TYPE = 0;
 
-
-    /** The offset where the parent page number is stored in this page. * /
-    public static final int OFFSET_PARENT_PAGE_NO = 1;
-*/
 
     /**
      * The offset where the number of pointer entries is stored in the page.
@@ -39,9 +46,14 @@ public class InnerPage {
     public static final int OFFSET_FIRST_POINTER = 5;
 
 
+    /** The actual data page that holds the B<sup>+</sup> tree leaf node. */
     private DBPage dbPage;
 
 
+    /**
+     * Information about the index itself, such as what file it is stored in,
+     * its name, the columns in the index, and so forth.
+     */
     private IndexFileInfo idxFileInfo;
 
 
@@ -72,7 +84,15 @@ public class InnerPage {
      */
     private int endOffset;
 
-    
+
+    /**
+     * Initialize the inner-page wrapper class for the specified index page.
+     * The contents of the inner-page are cached in the fields of the wrapper
+     * object.
+     *
+     * @param dbPage the data page from the index file to wrap
+     * @param idxFileInfo the general descriptive information about the index
+     */
     public InnerPage(DBPage dbPage, IndexFileInfo idxFileInfo) {
         this.dbPage = dbPage;
         this.idxFileInfo = idxFileInfo;
@@ -81,24 +101,52 @@ public class InnerPage {
     }
 
 
+    /**
+     * This static helper function initializes a {@link DBPage} object's
+     * contents with the type and detail values that will allow a new
+     * {@code InnerPage} wrapper to be instantiated for the page, and then it
+     * returns a wrapper object for the page.  This version of the {@code init}
+     * function creates an inner page that is initially empty.
+     *
+     * @param dbPage the page to initialize as an inner-page.
+     *
+     * @param idxFileInfo details about the index that the inner-page is for
+     *
+     * @return a newly initialized {@code InnerPage} object wrapping the page
+     */
     public static InnerPage init(DBPage dbPage, IndexFileInfo idxFileInfo) {
-
         dbPage.writeByte(OFFSET_PAGE_TYPE, BTreeIndexManager.BTREE_INNER_PAGE);
-
-//        dbPage.writeShort(OFFSET_PARENT_PAGE_NO, 0);
         dbPage.writeShort(OFFSET_NUM_POINTERS, 0);
-
         return new InnerPage(dbPage, idxFileInfo);
     }
 
 
-
+    /**
+     * This static helper function initializes a {@link DBPage} object's
+     * contents with the type and detail values that will allow a new
+     * {@code InnerPage} wrapper to be instantiated for the page, and then it
+     * returns a wrapper object for the page.  This version of the {@code init}
+     * function creates an inner page that initially contains the specified
+     * page-pointers and key value.
+     *
+     * @param dbPage the page to initialize as an inner-page.
+     *
+     * @param idxFileInfo details about the index that the inner-page is for
+     *
+     * @param pagePtr1 the first page-pointer to store in the inner page, to the
+     *        left of {@code key1}
+     *
+     * @param key1 the first key to store in the inner page
+     *
+     * @param pagePtr2 the second page-pointer to store in the inner page, to
+     *        the right of {@code key1}
+     *
+     * @return a newly initialized {@code InnerPage} object wrapping the page
+     */
     public static InnerPage init(DBPage dbPage, IndexFileInfo idxFileInfo,
-                                   int ptr0, Tuple key0, int ptr1) {
+                                   int pagePtr1, Tuple key1, int pagePtr2) {
 
         dbPage.writeByte(OFFSET_PAGE_TYPE, BTreeIndexManager.BTREE_INNER_PAGE);
-
-//        dbPage.writeShort(OFFSET_PARENT_PAGE_NO, 0);
 
         // Write the first contents of the non-leaf page:  [ptr0, key0, ptr1]
         // Since key0 will usually be a BTreeIndexPageTuple, we have to rely on
@@ -106,13 +154,13 @@ public class InnerPage {
 
         int offset = OFFSET_FIRST_POINTER;
 
-        dbPage.writeShort(offset, ptr0);
+        dbPage.writeShort(offset, pagePtr1);
         offset += 2;
 
         offset = PageTuple.storeTuple(dbPage, offset,
-            idxFileInfo.getIndexSchema(), key0);
+            idxFileInfo.getIndexSchema(), key1);
 
-        dbPage.writeShort(offset, ptr1);
+        dbPage.writeShort(offset, pagePtr2);
 
         dbPage.writeShort(OFFSET_NUM_POINTERS, 2);
 
@@ -120,6 +168,11 @@ public class InnerPage {
     }
 
 
+    /**
+     * This private helper scans through the inner page's contents and caches
+     * the contents of the inner page in a way that makes it easy to use and
+     * manipulate.
+     */
     private void loadPageContents() {
         numPointers = dbPage.readUnsignedShort(OFFSET_NUM_POINTERS);
         if (numPointers > 0) {
@@ -162,34 +215,50 @@ public class InnerPage {
     }
 
 
+    /**
+     * Returns the high-level details for the index that this page is a part of.
+     *
+     * @return the high-level details for the index
+     */
     public IndexFileInfo getIndexFileInfo() {
         return idxFileInfo;
     }
 
 
+    /**
+     * Returns the page-number of this leaf page.
+     *
+     * @return the page-number of this leaf page.
+     */
     public int getPageNo() {
         return dbPage.getPageNo();
     }
 
-/*
-    public int getParentPageNo() {
-        return dbPage.readUnsignedShort(OFFSET_PARENT_PAGE_NO);
-    }
 
-
-    public void setParentPageNo(int pageNo) {
-        dbPage.writeShort(OFFSET_PARENT_PAGE_NO, pageNo);
-    }
-*/
-
+    /**
+     * Returns the number of pointers currently stored in this inner page.  The
+     * number of keys is always one less than the number of pointers, since
+     * each key must have a pointer on both sides.
+     *
+     * @return the number of pointers in this inner page.
+     */
     public int getNumPointers() {
         return numPointers;
     }
-    
-    
+
+
+    /**
+     * Returns the number of keys currently stored in this inner page.  The
+     * number of keys is always one less than the number of pointers, since
+     * each key must have a pointer on both sides.
+     *
+     * @return the number of keys in this inner page.
+     *
+     * @throws IllegalStateException if the inner page contains 0 pointers
+     */
     public int getNumKeys() {
         if (numPointers < 1) {
-            throw new IllegalStateException("Non-leaf page contains no " +
+            throw new IllegalStateException("Inner page contains no " +
                 "pointers.  Number of keys is meaningless.");
         }
         
@@ -197,16 +266,35 @@ public class InnerPage {
     }
 
 
+    /**
+     * Returns the amount of space available in this inner page, in bytes.
+     *
+     * @return the amount of space available in this inner page, in bytes.
+     */
     public int getFreeSpace() {
         return dbPage.getPageSize() - endOffset;
     }
 
-    
+
+    /**
+     * Returns the pointer at the specified index.
+     *
+     * @param index the index of the pointer to retrieve
+     *
+     * @return the pointer at that index
+     */
     public int getPointer(int index) {
         return dbPage.readUnsignedShort(pointerOffsets[index]);
     }
 
 
+    /**
+     * Returns the key at the specified index.
+     *
+     * @param index the index of the key to retrieve
+     *
+     * @return the key at that index
+     */
     public BTreeIndexPageTuple getKey(int index) {
         return keys[index];
     }
@@ -256,8 +344,28 @@ public class InnerPage {
         // TODO:  This is slow, but it should be fine for now.
         loadPageContents();
     }
-    
-    
+
+
+    /**
+     * This method inserts a new key and page-pointer into the inner page,
+     * immediately following the page-pointer {@code pagePtr1}, which must
+     * already appear within the page.  The caller is expected to have already
+     * verified that the new key and page-pointer are able to fit in the page.
+     *
+     * @param pagePtr1 the page-pointer which should appear before the new key
+     *        in the inner page.  <b>This is required to already appear within
+     *        the inner page.</b>
+     *
+     * @param key1 the new key to add to the inner page, immediately after the
+     *        {@code pagePtr1} value.
+     *
+     * @param pagePtr2 the new page-pointer to add to the inner page,
+     *        immediately after the {@code key1} value.
+     *
+     * @throws IllegalArgumentException if the specified {@code pagePtr1} value
+     *         cannot be found in the inner page, or if the new key and
+     *         page-pointer won't fit within the space available in the page.
+     */
     public void addEntry(int pagePtr1, Tuple key1, int pagePtr2) {
 
         if (logger.isTraceEnabled()) {
@@ -330,6 +438,40 @@ public class InnerPage {
     }
 
 
+    /**
+     * <p>
+     * This helper function moves the specified number of page-pointers to the
+     * left sibling of this inner node.  The data is copied in one shot so that
+     * the transfer will be fast, and the various associated bookkeeping values
+     * in both inner pages are updated.
+     * </p>
+     * <p>
+     * Of course, moving a subset of the page-pointers to a sibling will leave
+     * a key without a pointer on one side; this key is promoted up to the
+     * parent of the inner node.  Additionally, an existing parent-key can be
+     * provided by the caller, which should be inserted before the new pointers
+     * being moved into the sibling node.
+     * </p>
+     *
+     * @param leftSibling the left sibling of this inner node in the index file
+     *
+     * @param count the number of pointers to move to the left sibling
+     *
+     * @param parentKey If this inner node and the sibling already have a parent
+     *        node, this is the key between the two nodes' page-pointers in the
+     *        parent node.  If the two nodes don't have a parent (i.e. because
+     *        an inner node is being split into two nodes and the depth of the
+     *        tree is being increased) then this value will be {@code null}.
+     *
+     * @return the key that should go into the parent node, between the
+     *         page-pointers for this node and its sibling
+     *
+     * @todo (Donnie) When support for deletion is added to the index
+     *       implementation, we will need to support the case when the incoming
+     *       {@code parentKey} is non-{@code null}, but the returned key is
+     *       {@code null} because one of the two siblings' pointers will be
+     *       removed.
+     */
     public TupleLiteral movePointersLeft(InnerPage leftSibling, int count,
                                          Tuple parentKey) {
 
@@ -337,9 +479,6 @@ public class InnerPage {
             throw new IllegalArgumentException("count must be in range [0, " +
                 numPointers + "), got " + count);
         }
-
-        int moveEndOffset = pointerOffsets[count] + 2;
-        int len = moveEndOffset - OFFSET_FIRST_POINTER;
 
         // The parent-key can be null if we are splitting a page into two pages.
         // However, this situation is only valid if the right sibling is EMPTY.
@@ -358,6 +497,9 @@ public class InnerPage {
         // Copy the range of pointer-data to the destination page, making sure
         // to include the parent-key before the first pointer from the right
         // page.  Then update the count of pointers in the destination page.
+
+        int moveEndOffset = pointerOffsets[count] + 2;
+        int len = moveEndOffset - OFFSET_FIRST_POINTER;
 
         if (parentKey != null) {
             // Write in the parent key
@@ -407,6 +549,40 @@ public class InnerPage {
     }
 
 
+    /**
+     * <p>
+     * This helper function moves the specified number of page-pointers to the
+     * right sibling of this inner node.  The data is copied in one shot so that
+     * the transfer will be fast, and the various associated bookkeeping values
+     * in both inner pages are updated.
+     * </p>
+     * <p>
+     * Of course, moving a subset of the page-pointers to a sibling will leave
+     * a key without a pointer on one side; this key is promoted up to the
+     * parent of the inner node.  Additionally, an existing parent-key can be
+     * provided by the caller, which should be inserted before the new pointers
+     * being moved into the sibling node.
+     * </p>
+     *
+     * @param rightSibling the right sibling of this inner node in the index file
+     *
+     * @param count the number of pointers to move to the right sibling
+     *
+     * @param parentKey If this inner node and the sibling already have a parent
+     *        node, this is the key between the two nodes' page-pointers in the
+     *        parent node.  If the two nodes don't have a parent (i.e. because
+     *        an inner node is being split into two nodes and the depth of the
+     *        tree is being increased) then this value will be {@code null}.
+     *
+     * @return the key that should go into the parent node, between the
+     *         page-pointers for this node and its sibling
+     *
+     * @todo (Donnie) When support for deletion is added to the index
+     *       implementation, we will need to support the case when the incoming
+     *       {@code parentKey} is non-{@code null}, but the returned key is
+     *       {@code null} because one of the two siblings' pointers will be
+     *       removed.
+     */
     public TupleLiteral movePointersRight(InnerPage rightSibling, int count,
                                           Tuple parentKey) {
 

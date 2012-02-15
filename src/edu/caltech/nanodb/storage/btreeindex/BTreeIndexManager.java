@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import edu.caltech.nanodb.expressions.TupleComparator;
+import edu.caltech.nanodb.indexes.OrderedIndexManager;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.expressions.TupleLiteral;
@@ -18,11 +19,9 @@ import edu.caltech.nanodb.indexes.IndexManager;
 import edu.caltech.nanodb.relations.ColumnIndexes;
 import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.relations.TableConstraintType;
-import edu.caltech.nanodb.relations.Tuple;
 
 import edu.caltech.nanodb.storage.DBFile;
 import edu.caltech.nanodb.storage.DBPage;
-import edu.caltech.nanodb.storage.FilePointer;
 import edu.caltech.nanodb.storage.PageTuple;
 import edu.caltech.nanodb.storage.StorageManager;
 
@@ -30,11 +29,11 @@ import edu.caltech.nanodb.storage.StorageManager;
 /**
  * <p>
  * This is the class that manages B<sup>+</sup> tree indexes.  These indexes are
- * used for enforcing primary and candidate keys, and also providing optimized
- * access to tuples with specific values.
+ * used for enforcing primary, candidate and foreign keys, and also for
+ * providing optimized access to tuples with specific values.
  * </p>
  * <p>
- * B<sup>+</sup> tree indexes are comprised of three kinds of pages:
+ * Here is a brief overview of the NanoDB B<sup>+</sup> tree file format:
  * </p>
  * <ul>
  * <li>Page 0 is always a header page, and specifies the entry-points in the
@@ -42,13 +41,23 @@ import edu.caltech.nanodb.storage.StorageManager;
  *     the tree.  Page 0 also maintains a list of empty pages in the tree, so
  *     that adding new nodes to the tree is fast.  (See the {@link HeaderPage}
  *     class for details.)</li>
- * <li>The remaining (non-free) pages are either leaf nodes or non-leaf nodes.
- *     The first byte of the page indicates whether it is a leaf page or a
- *     non-leaf page, the next short value specifies how many entries are in the
- *     page, and the remaining space is used for the indexing structure.  (See
- *     the {@link InnerPage} and {@link LeafPage} classes for details.)
- * </li>
+ * <li>The remaining pages are either leaf nodes, inner nodes, or empty nodes.
+ *     The first byte of the page always indicates the kind of node.  For
+ *     details about the internal structure of leaf and inner nodes, see the
+ *     {@link InnerPage} and {@link LeafPage} classes.</li>
+ * <li>Empty nodes are formed into a simple singly linked list.  Each empty
+ *     node holds a page-pointer to the next empty node in the sequence, using
+ *     an unsigned short stored at index 1 (after the page-type value in index
+ *     0).  The final empty page stores 0 as its next-page pointer value.</li>
  * </ul>
+ * <p>
+ * This index implementation always adds a uniquifier to tuples being stored in
+ * the index; specifically, the file-pointer of the tuple being stored into the
+ * index.  This file-pointer also allows the referenced tuple to be retrieved
+ * from the table via the index when needed.  The tuple's file-pointer is always
+ * appended to the key-value being stored, so the last column is always the
+ * file-pointer to the tuple.
+ * </p>
  */
 public class BTreeIndexManager implements IndexManager {
     /** A logging object for reporting anything interesting that happens. */
@@ -90,11 +99,19 @@ public class BTreeIndexManager implements IndexManager {
      * to the singleton instance of the storage manager at initialization.
      */
     private StorageManager storageManager;
-    
-    
+
+
+    /**
+     * A helper class that manages the larger-scale operations involving leaf
+     * nodes of the B+ tree.
+     */
     private LeafPageOperations leafPageOps;
-    
-    
+
+
+    /**
+     * A helper class that manages the larger-scale operations involving inner
+     * nodes of the B+ tree.
+     */
     private InnerPageOperations innerPageOps;
 
 
@@ -214,8 +231,36 @@ public class BTreeIndexManager implements IndexManager {
     }
 
 
-
-
+    /**
+     * This helper method performs the common task of navigating from the root
+     * of the B<sup>+</sup> tree down to the appropriate leaf node, based on
+     * the search-key provided by the caller.  Note that this method does not
+     * determine whether the search-key actually exists.  Rather, it simply
+     * navigates to the leaf in the index where the search-key would appear, if
+     * it indeed appears in the index.
+     *
+     * @param idxFileInfo details of the index that is being navigated
+     *
+     * @param searchKey the search-key being used to navigate the B<sup>+</sup>
+     *        tree structure
+     *
+     * @param createIfNeeded If the B<sup>+</sup> tree is currently empty (i.e.
+     *        not even containing leaf pages) then this argument can be used to
+     *        create a new leaf page where the search-key can be stored.  This
+     *        allows the method to be used for adding tuples to the index.
+     *
+     * @param pagePath If this optional argument is specified, then the method
+     *        stores the sequence of page-numbers it visits as it navigates
+     *        from root to leaf.  If {@code null} is passed then nothing is
+     *        stored as the method traverses the index structure.
+     *
+     * @return the leaf-page where the search-key would appear, or {@code null}
+     *         if the index is currently empty and {@code createIfNeeded} is
+     *         {@code false}.
+     *
+     * @throws IOException if an IO error occurs while navigating the index
+     *         structure
+     */
     private LeafPage navigateToLeafPage(IndexFileInfo idxFileInfo,
         TupleLiteral searchKey, boolean createIfNeeded,
         List<Integer> pagePath) throws IOException {
@@ -287,7 +332,7 @@ public class BTreeIndexManager implements IndexManager {
 
             for (int i = 0; i < numKeys; i++) {
                 BTreeIndexPageTuple key = innerPage.getKey(i);
-                int cmp = TupleComparator.compareTuples(searchKey, key);
+                int cmp = TupleComparator.comparePartialTuples(searchKey, key);
                 if (cmp < 0) {
                     logger.debug("Value is less than key at index " + i +
                         "; following pointer " + i + " before this key.");
@@ -412,14 +457,10 @@ public class BTreeIndexManager implements IndexManager {
     /**
      * This helper function creates a {@link TupleLiteral} that holds the
      * key-values necessary for storing or deleting the specified table-tuple
-     * in the index.  For making a lookup-only key value, use the
-     * {@link #makeLookupKeyValue} function.  The difference between the two
-     * functions is that this version stores the file-pointer from the tuple
-     * into the key as the last value, but the {@link #makeLookupKeyValue}
-     * helper writes a dummy [0, 0] file-pointer into the key.
+     * in the index.  Specifically, this method stores the tuple's file-pointer
+     * in the key as the last value.
      *
-     * @param idxFileInfo the details of the index that the key will be created
-     *                    for
+     * @param idxFileInfo the details of the index to create the key for
      *
      * @param ptup the tuple from the original table, that the key will be
      *        created from.
@@ -447,29 +488,5 @@ public class BTreeIndexManager implements IndexManager {
         newKeyVal.setStorageSize(storageSize);
 
         return newKeyVal;
-    }
-
-
-    /**
-     * This helper function creates a {@link TupleLiteral} that holds the
-     * key-values necessary for looking up a table-tuple in the index.  For
-     * making a key value for storing or deleting a tuple, use the
-     * {@link #makeStoredKeyValue} function.  The difference between the two
-     * functions is that this version stores a dummy [0, 0] file-pointer into
-     * the key as the last value, but the {@link #makeStoredKeyValue} helper
-     * writes the page-tuple's file-pointer into the key.
-     *
-     * @param tup the tuple that the key will be created from.
-     *
-     * @return a tuple-literal that can be used for looking up tuples with the
-     *         key-values stored in {@code tup}.
-     */
-    private TupleLiteral makeLookupKeyValue(Tuple tup) {
-        TupleLiteral lookupVal = new TupleLiteral(tup);
-
-        // Put a dummy file-pointer on the end of the lookup tuple.
-        lookupVal.addValue(FilePointer.ZERO_FILE_POINTER);
-
-        return lookupVal;
     }
 }

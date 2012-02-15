@@ -181,37 +181,138 @@ public class TupleComparator implements Comparator<Tuple> {
 
 
     /**
+     * <p>
      * Compares all columns of the two input tuples, in the order they appear
-     * within the tuples, and a value is returned to indicate the ordering:
+     * within the tuples, and a value is returned to indicate the ordering.
+     * </p>
      * <ul>
      *   <li>Result &lt; 0 if <tt>t1</tt> &lt; <tt>t2</tt></li>
      *   <li>Result == 0 if <tt>t1</tt> == <tt>t2</tt></li>
      *   <li>Result &gt; 0 if <tt>t1</tt> &gt; <tt>t2</tt></li>
      * </ul>
+     * <p>
+     * This method performs type-coercion between the values being compared, so
+     * that it may be used for evaluating general predicates.
+     * </p>
+     * <p>
+     * <b>This method requires the tuples being compared to have the same number
+     * of columns.</b>  For a method that allows tuples with different numbers
+     * of columns to be compared, see the {@link #comparePartialTuples} method.
+     * </p>
      *
      * @param t1 the first tuple to compare.  Must not be {@code null}.
      * @param t2 the second tuple to compare.  Must not be {@code null}.
      *
      * @return a negative, positive, or zero value indicating the ordering of
      *         the two inputs
+     *         
+     * @throws IllegalArgumentException if the two input tuples are different
+     *         sizes.
+     */
+    public static int compareTuples(Tuple t1, Tuple t2) {
+        return _compareTuples(t1, t2, false);
+    }
+
+
+    /**
+     * <p>
+     * Compares all columns of the two input tuples, in the order they appear
+     * within the tuples, and a value is returned to indicate the ordering.
+     * </p>
+     * <ul>
+     *   <li>Result &lt; 0 if <tt>t1</tt> &lt; <tt>t2</tt></li>
+     *   <li>Result == 0 if <tt>t1</tt> == <tt>t2</tt></li>
+     *   <li>Result &gt; 0 if <tt>t1</tt> &gt; <tt>t2</tt></li>
+     * </ul>
+     * <p>
+     * This method performs type-coercion between the values being compared, so
+     * that it may be used for evaluating general predicates.
+     * </p>
+     * <p>
+     * <b>This method differs from the {@link #compareTuples} method in that
+     * it allows {@code t1} and {@code t2} to have different numbers of
+     * columns.</b>  Tuples are compared in a way similar to strings, where if
+     * two different-length strings have the same values in the overlapping
+     * portion, the shorter string is defined to be "less than" the longer
+     * string.  This allows this comparison method to be used to do partial-key
+     * lookups against ordered indexes.
+     * </p>
      *
-     * @design (Donnie) This method is designed for index implementations; thus,
-     *         the schemas on the input tuples are expected to be the same and
-     *         no type-coercion is done.  At some point, however, we may want to
-     *         support more general tuple comparisons.
+     * @param t1 the first tuple to compare.  Must not be {@code null}.
+     * @param t2 the second tuple to compare.  Must not be {@code null}.
+     *
+     * @return a negative, positive, or zero value indicating the ordering of
+     *         the two inputs
+     */
+    public static int comparePartialTuples(Tuple t1, Tuple t2) {
+        return _compareTuples(t1, t2, true);
+    }
+
+
+    /**
+     * This is the private helper function that implements both the
+     * {@link #compareTuples} method and the {@link #comparePartialTuples}
+     * method.  Its behavior with respect to tuples with different numbers of
+     * columns is controlled with a Boolean argument.
+     *
+     * @param t1 the first tuple to compare.  Must not be {@code null}.
+     * 
+     * @param t2 the second tuple to compare.  Must not be {@code null}.
+     *
+     * @param allowSizeMismatch true if the two tuples are allowed to be
+     *        different sizes, or false if they must be the same size.
+     * 
+     * @return a negative, positive, or zero value indicating the ordering of
+     *         the two inputs
      */
     @SuppressWarnings("unchecked")
-    public static int compareTuples(Tuple t1, Tuple t2) {
+    private static int _compareTuples(Tuple t1, Tuple t2,
+                                      boolean allowSizeMismatch) {
 
-        if (t1.getColumnCount() != t2.getColumnCount())
-            throw new IllegalArgumentException("keys must be the same size");
+        if (!allowSizeMismatch && t1.getColumnCount() != t2.getColumnCount())
+            throw new IllegalArgumentException("tuples must be the same size");
 
         int compareResult = 0;
 
-        int size = t1.getColumnCount();
-        for (int i = 0; i < size && compareResult == 0; i++) {
-            Comparable valueA = (Comparable) t1.getColumnValue(i);
-            Comparable valueB = (Comparable) t2.getColumnValue(i);
+        int t1Size = t1.getColumnCount();
+        int t2Size = t2.getColumnCount();
+        
+        int i = 0;
+        while (compareResult == 0) {
+            // Examine the sizes first.
+            if (i >= t1Size) {
+                if (i >= t2Size) {
+                    // Everything in t1[0..t1Size) == t2[0..t1Size), and
+                    // t1Size == t2Size.  So, t1 == t2.
+
+                    assert compareResult == 0;
+                    assert t1Size == t2Size;
+
+                    break;
+                }
+                else {
+                    // Everything in t1[0..t1Size) == t2[0..t1Size), but
+                    // t1 is shorter than t2.  So, t1 < t2.
+                    compareResult = -1;
+                    break;
+                }
+            }
+            else if ( /* i < t1Size && */ i >= t2Size) {
+                // Everything in t1[0..t2Size) == t2[0..t2Size), but
+                // t2 is shorter than t1.  So, t1 > t2.
+                compareResult = 1;
+                break;
+            }
+            
+            // Now examine the values.
+
+            Object objA = t1.getColumnValue(i);
+            Object objB = t2.getColumnValue(i);
+            
+            TypeConverter.Pair p = TypeConverter.coerceComparison(objA, objB);
+            
+            Comparable valueA = (Comparable) objA;
+            Comparable valueB = (Comparable) objB;
 
             // Although it should be "unknown" when we compare two NULL values
             // for equality, we say they are equal so that they will all appear
@@ -232,5 +333,4 @@ public class TupleComparator implements Comparator<Tuple> {
 
         return compareResult;
     }
-
 }
