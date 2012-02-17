@@ -23,11 +23,10 @@ public class BTreeIndexVerifier {
     /** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(BTreeIndexVerifier.class);
 
-    
-    private static class ScanAbortedException extends RuntimeException {
-        // Nothing.
-    }
-    
+
+    /** This runtime exception class is used to abort the verification scan. */
+    private static class ScanAbortedException extends RuntimeException { }
+
 
     /**
      * This helper class is used to keep track of details of pages within the
@@ -79,29 +78,51 @@ public class BTreeIndexVerifier {
     }
 
 
+    /** A reference to the storage manager since we use it so much. */
     private StorageManager storageManager;
-    
-    
+
+
+    /** The details of the index to be verified. */
     private IndexFileInfo idxFileInfo;
 
-    
-    private DBFile dbFile;
-    
 
+    /** The database file that the index is stored in. */
+    private DBFile dbFile;
+
+
+    /**
+     * This collection maps individual B<sup>+</sup> tree pages to the details
+     * that the verifier collects for each page.
+     */
     private HashMap<Integer, PageInfo> pages;
 
 
+    /** The collection of errors found during the verification process. */
     private ArrayList<String> errors;
 
-    
-    
+
+    /**
+     * Initialize a verifier object to verify a specific index.
+     *
+     * @param idxFileInfo the details of the index to verify.
+     */
     public BTreeIndexVerifier(IndexFileInfo idxFileInfo) {
         storageManager = StorageManager.getInstance();
         this.idxFileInfo = idxFileInfo;
         dbFile = idxFileInfo.getDBFile();
     }
-    
-    
+
+
+    /**
+     * This method is the entry-point for the verification process.  It performs
+     * multiple passes through the index structure to identify various issues.
+     * Any errors that are identified are returned in the collection of error
+     * messages.
+     *
+     * @return a list of error messages describing issues found with the index.
+     *
+     * @throws IOException if an IO error occurs during the verification process
+     */
     public List<String> verify() throws IOException {
         errors = new ArrayList<String>();
 
@@ -159,6 +180,10 @@ public class BTreeIndexVerifier {
     }
 
 
+    /**
+     * This helper function traverses the B<sup>+</sup> tree structure,
+     * verifying various invariants that should hold on the index structure.
+     */
     private void scanTree(int pageNo, int parentPageNo,
                           Tuple parentLeftKey, Tuple parentRightKey)
         throws IOException {
@@ -169,7 +194,7 @@ public class BTreeIndexVerifier {
 
         if (info.numTreeReferences > 10) {
             errors.add(String.format("Pass 2:  Stopping scan!  I've visited " +
-                "page %d %d times; there may be a loop in your index structure.",
+                "page %d %d times; there may be a cycle in your index structure.",
                 pageNo, info.numTreeReferences));
             throw new ScanAbortedException();
         }
@@ -375,6 +400,13 @@ public class BTreeIndexVerifier {
             PageInfo info = pages.get(pageNo);
             info.numLeafListReferences++;
 
+            if (info.numLeafListReferences > 10) {
+                errors.add(String.format("Pass 3:  Stopping scan!  I've visited " +
+                    "leaf page %d %d times; there may be a cycle in your leaf list.",
+                    pageNo, info.numLeafListReferences));
+                throw new ScanAbortedException();
+            }
+
             LeafPage leafPage = new LeafPage(dbPage, idxFileInfo);
 
             for (int k = 0; k < leafPage.getNumEntries(); k++) {
@@ -438,6 +470,13 @@ public class BTreeIndexVerifier {
         while (emptyPageNo != 0) {
             PageInfo info = pages.get(emptyPageNo);
             info.numEmptyListReferences++;
+
+            if (info.numEmptyListReferences > 10) {
+                errors.add(String.format("Pass 4:  Stopping scan!  I've visited " +
+                    "empty page %d %d times; there may be a cycle in your empty list.",
+                    emptyPageNo, info.numEmptyListReferences));
+                throw new ScanAbortedException();
+            }
 
             if (info.pageType != BTreeIndexManager.BTREE_EMPTY_PAGE) {
                 errors.add(String.format("Page %d is in the empty-page list, " +
