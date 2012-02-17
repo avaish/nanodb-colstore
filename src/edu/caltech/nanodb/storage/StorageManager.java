@@ -5,6 +5,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 
+import edu.caltech.nanodb.relations.ColumnIndexes;
+import edu.caltech.nanodb.relations.TableSchema;
 import edu.caltech.nanodb.server.EventDispatcher;
 import org.apache.log4j.Logger;
 
@@ -622,12 +624,30 @@ public class StorageManager {
      *         table's backing storage.
      */
     public void dropTable(String tableName) throws IOException {
-        // TODO:  Purge all pages for this table out of the cache.  No point in saving them, of course.
+        // As odd as it might seem, we need to open the table so that we can
+        // drop all related objects, such as indexes on the table, etc.
+        TableFileInfo tblFileInfo = openTable(tableName);
+        
+        TableSchema schema = tblFileInfo.getSchema();
+        for (String indexName : schema.getIndexes().keySet())
+            dropIndex(tblFileInfo, indexName);
+
+        // Close the table.  This will purge out all dirty pages for the table
+        // as well.
+        closeTable(tblFileInfo);
 
         String tblFileName = getTableFileName(tableName);
         fileManager.deleteDBFile(tblFileName);
     }
 
+    
+    public void dropIndex(TableFileInfo tblFileInfo, String indexName)
+        throws IOException {
+
+
+    }
+    
+    
 
     /*========================================================================
      * CODE RELATED TO INDEX FILES
