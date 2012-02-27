@@ -40,12 +40,9 @@ public class NanoDBServer {
 
         logger.info("Initializing storage manager.");
         StorageManager.init();
-
-        logger.info("Initializing transaction manager.");
-        TransactionManager.init();
     }
 
-    
+
     public static Command parseCommand(String command)
         throws RecognitionException, TokenStreamException {
 
@@ -118,6 +115,7 @@ public class NanoDBServer {
             eventDispatch.fireAfterCommandExecuted(command);
         }
         catch (Exception e) {
+            logger.error("Command threw an exception!", e);
             result.recordFailure(e);
         }
         result.endExecution();

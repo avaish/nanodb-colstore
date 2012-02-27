@@ -8,6 +8,7 @@ import java.util.HashMap;
 import edu.caltech.nanodb.relations.ColumnIndexes;
 import edu.caltech.nanodb.relations.TableSchema;
 import edu.caltech.nanodb.server.EventDispatcher;
+import edu.caltech.nanodb.transactions.TransactionManager;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.indexes.IndexFileInfo;
@@ -165,10 +166,22 @@ public class StorageManager {
     private File baseDir;
 
 
+    /** The buffer manager stores data pages in memory, to avoid disk IOs. */
     private BufferManager bufferManager;
 
 
+    /**
+     * The file manager performs basic operations against the filesystem,
+     * without performing any buffering whatsoever.
+     */
     private FileManager fileManager;
+
+
+    /**
+     * If transactions are enabled, this will be the singleton transaction
+     * manager instance; otherwise, it will be {@code null}.
+     */
+    private TransactionManager transactionManager;
 
 
     /**
@@ -232,20 +245,27 @@ public class StorageManager {
     }
 
 
-    private void finishInit() {
-        initFileTypeManagers();
-    }
+    public void finishInit() throws IOException {
+        if (TransactionManager.isEnabled()) {
+            logger.info("Initializing transaction manager.");
+            transactionManager =
+                new TransactionManager(this, bufferManager, fileManager);
 
-
-    private void initFileTypeManagers() {
-        fileTypeManagers.put(DBFileType.WRITE_AHEAD_LOG_FILE,
-            new WALManager(this));
+            // This method opens the transaction-state file, performs any
+            // necessary recovery operations, and so forth.
+            transactionManager.initialize();
+        }
 
         fileTypeManagers.put(DBFileType.HEAP_DATA_FILE,
             new HeapFileTableManager(this));
 
         fileTypeManagers.put(DBFileType.BTREE_INDEX_FILE,
             new BTreeIndexManager(this));
+    }
+
+
+    public void addFileTypeManager(DBFileType type, Object manager) {
+        fileTypeManagers.put(type, manager);
     }
 
 
@@ -262,6 +282,28 @@ public class StorageManager {
      */
     public File getBaseDir() {
         return baseDir;
+    }
+
+
+    public TransactionManager getTransactionManager() {
+        return transactionManager;
+    }
+
+    
+    public DBFile createDBFile(String filename, DBFileType type)
+        throws IOException {
+
+        if (bufferManager.getFile(filename) != null) {
+            throw new IllegalStateException("A file " + filename +
+                " is already cached in the Buffer Manager!  Does it already exist?");
+        }
+
+        DBFile dbFile = fileManager.createDBFile(filename, type,
+            getCurrentPageSize());
+
+        bufferManager.addFile(dbFile);
+
+        return dbFile;
     }
 
 
@@ -423,9 +465,18 @@ public class StorageManager {
     }
 
 
+    public DBFile createWALFile(int fileNo) throws IOException {
+        String filename = getWALFileName(fileNo);
+        logger.debug("Creating WAL file " + filename);
+        return createDBFile(filename, DBFileType.WRITE_AHEAD_LOG_FILE);
+    }
+
+
     public DBFile openWALFile(int fileNo) throws IOException {
         String filename = getWALFileName(fileNo);
-        DBFile dbFile = fileManager.openDBFile(filename);
+        logger.debug("Opening WAL file " + filename);
+
+        DBFile dbFile = openDBFile(filename);
         DBFileType type = dbFile.getType();
 
         if (type != DBFileType.WRITE_AHEAD_LOG_FILE) {
@@ -446,12 +497,12 @@ public class StorageManager {
      * @throws IOException if an IO error occurs while attempting to sync the
      *         WAL file to disk.  If this occurs, the database is probably
      *         going to be broken.
-     */
     public void syncWALFile(DBFile walFile) throws IOException {
         // Flush all open pages for the WAL file, then sync the file to disk.
         bufferManager.flushDBFile(walFile);
         fileManager.syncDBFile(walFile);
     }
+     */
 
 
     /*========================================================================
@@ -734,6 +785,7 @@ public class StorageManager {
                 indexName = String.format(pattern, i);
                 indexFilename = getIndexFileName(indexName);
                 f = new File(baseDir, indexFilename);
+                i++;
             }
             while (!f.createNewFile());
         }

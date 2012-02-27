@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
 
+import edu.caltech.nanodb.transactions.TransactionManager;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.qeval.ColumnStats;
@@ -73,6 +74,13 @@ public class HeapFileTableManager implements TableManager {
 
 
     /**
+     * The table manager also uses the transaction manager a lot, so this is a
+     * cached reference to the singleton transaction manager instance.
+     */
+    private TransactionManager txnManager;
+
+
+    /**
      * A singleton instance of the blocked table-reader for heap files.  This
      * is initialized the first time {@link #getBlockedReader} is called.
      */
@@ -93,6 +101,9 @@ public class HeapFileTableManager implements TableManager {
             throw new IllegalArgumentException("storageManager cannot be null");
 
         this.storageManager = storageManager;
+
+        if (TransactionManager.isEnabled())
+            txnManager = storageManager.getTransactionManager();
     }
 
 
@@ -180,6 +191,9 @@ public class HeapFileTableManager implements TableManager {
         TableStats stats = new TableStats(schema.numColumns());
         tblFileInfo.setStats(stats);
         HeaderPage.setTableStats(headerPage, tblFileInfo);
+
+        if (txnManager != null)
+            txnManager.recordPageUpdate(headerPage);
     }
 
 
@@ -724,6 +738,8 @@ public class HeapFileTableManager implements TableManager {
             dbPage, slot, tupOffset, tup);
 
         DataPage.sanityCheck(dbPage);
+        if (txnManager != null)
+            txnManager.recordPageUpdate(dbPage);
 
         return pageTup;
     }
@@ -757,7 +773,10 @@ public class HeapFileTableManager implements TableManager {
             ptup.setColumnValue(colIndex, value);
         }
 
-        DataPage.sanityCheck(ptup.getDBPage());
+        DBPage dbPage = ptup.getDBPage();
+        DataPage.sanityCheck(dbPage);
+        if (txnManager != null)
+            txnManager.recordPageUpdate(dbPage);
     }
 
 
@@ -776,6 +795,9 @@ public class HeapFileTableManager implements TableManager {
         DataPage.deleteTuple(dbPage, ptup.getSlot());
 
         DataPage.sanityCheck(dbPage);
+
+        if (txnManager != null)
+            txnManager.recordPageUpdate(dbPage);
     }
 
 
@@ -866,6 +888,9 @@ public class HeapFileTableManager implements TableManager {
 
         DBPage headerPage = storageManager.loadDBPage(dbFile, 0);
         HeaderPage.setTableStats(headerPage, tblFileInfo);
+
+        if (txnManager != null)
+            txnManager.recordPageUpdate(headerPage);
     }
 
 

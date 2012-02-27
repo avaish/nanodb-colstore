@@ -1,9 +1,12 @@
 package edu.caltech.nanodb.storage;
 
 
+import edu.caltech.nanodb.client.SessionState;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -36,6 +39,9 @@ public class BufferManager {
     public static final String PROP_PAGECACHE_POLICY = "nanodb.pagecache.policy";
 
 
+    /**
+     * This helper class keeps track of a data page that is currently cached.
+     */
     private static class CachedPageInfo {
         public DBFile dbFile;
 
@@ -68,6 +74,45 @@ public class BufferManager {
     }
 
 
+    /**
+     * This helper class keeps track of a data page that is currently "pinned"
+     * or in use by a client.  This prevents the page from being flushed out
+     * of the cache while the client is using it.
+     */
+    private static class PinnedPageInfo {
+        /** The session ID of the session that has this page pinned. */
+        public int sessionID;
+
+        /** The page that is pinned. */
+        public DBPage dbPage;
+
+
+        public PinnedPageInfo(int sessionID, DBPage dbPage) {
+            this.sessionID = sessionID;
+            this.dbPage = dbPage;
+        }
+
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj instanceof PinnedPageInfo) {
+                PinnedPageInfo other = (PinnedPageInfo) obj;
+                return sessionID == other.sessionID &&
+                    dbPage.equals(other.dbPage);
+            }
+            return false;
+        }
+
+        @Override
+        public int hashCode() {
+            int hash = 7;
+            hash = 31 * hash + sessionID;
+            hash = 31 * hash + dbPage.hashCode();
+            return hash;
+        }
+    }
+
+
     /** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(BufferManager.class);
 
@@ -89,8 +134,30 @@ public class BufferManager {
     private LinkedHashMap<CachedPageInfo, DBPage> cachedPages;
 
 
+    /**
+     * This collection holds all pages that are pinned by various sessions
+     * that are currently accessing the database.
+     */
+    private HashSet<PinnedPageInfo> pinnedPages;
+    
+
+    /**
+     * This collection maps session IDs to the pages that each session has
+     * pinned.
+     */
+    private HashMap<Integer, HashSet<PinnedPageInfo>> pinnedPagesBySessionID;
+
+
+    /**
+     * This field records how many bytes are currently cached, in total.  Note
+     * that this does not currently keep track of clean copies of dirty pages.
+     */
     private long totalBytesCached;
 
+
+    /**
+     * This field records the maximum allowed cache size.
+     */
     private long maxCacheSize;
 
 
@@ -106,6 +173,9 @@ public class BufferManager {
             "lru".equals(replacementPolicy));
 
         totalBytesCached = 0;
+        
+        pinnedPages = new HashSet<PinnedPageInfo>();
+        pinnedPagesBySessionID = new HashMap<Integer, HashSet<PinnedPageInfo>>();
     }
 
 
@@ -208,6 +278,67 @@ public class BufferManager {
         
         cachedFiles.put(filename, dbFile);
     }
+    
+    
+    private void pinPage(DBPage dbPage) {
+        // Make sure this page is pinned by the session so that we don't
+        // flush it until the session is done with it.
+        
+        int sessionID = SessionState.get().getSessionID();
+        PinnedPageInfo pp = new PinnedPageInfo(sessionID, dbPage);
+        
+        // First, add it to the overall set of pinned pages.
+        
+        if (pinnedPages.add(pp)) {
+            dbPage.incPinCount();
+            logger.debug(String.format("Session %d is pinning page [%s,%d].  " +
+                "New pin-count is %d.", sessionID, dbPage.getDBFile(),
+                dbPage.getPageNo(), dbPage.getPinCount()));
+        }
+        
+        // Next, add it to the set of pages pinned by this particular session.
+        // (This makes it easier to unpin all pages used by this session.)
+        
+        HashSet<PinnedPageInfo> pinnedBySession =
+            pinnedPagesBySessionID.get(sessionID);
+        
+        if (pinnedBySession == null) {
+            pinnedBySession = new HashSet<PinnedPageInfo>();
+            pinnedPagesBySessionID.put(sessionID, pinnedBySession);
+        }
+
+        pinnedBySession.add(pp);
+    }
+
+
+    private void unpinPage(DBPage dbPage) {
+        // If the page is pinned by the session then unpin it.
+        int sessionID = SessionState.get().getSessionID();
+        PinnedPageInfo pp = new PinnedPageInfo(sessionID, dbPage);
+
+        // First, remove it from the overall set of pinned pages.
+        
+        if (pinnedPages.remove(pp)) {
+            dbPage.decPinCount();
+            logger.debug(String.format("Session %d is unpinning page " +
+                "[%s,%d].  New pin-count is %d.", sessionID, dbPage.getDBFile(),
+                dbPage.getPageNo(), dbPage.getPinCount()));
+        }
+
+        // Next, remove it from the set of pages pinned by this particular
+        // session.
+
+        HashSet<PinnedPageInfo> pinnedBySession =
+            pinnedPagesBySessionID.get(sessionID);
+        
+        if (pinnedBySession != null) {
+            pinnedBySession.remove(pp);
+
+            // If the set becomes empty, remove the hash-set for the session.
+            if (pinnedBySession.isEmpty())
+                pinnedPagesBySessionID.remove(sessionID);
+        }
+    }
 
 
     public DBPage getPage(DBFile dbFile, int pageNo) {
@@ -216,6 +347,12 @@ public class BufferManager {
         logger.debug(String.format(
             "Requested page [%s,%d] is%s in page-cache.",
             dbFile, pageNo, (dbPage != null ? "" : " NOT")));
+
+        if (dbPage != null) {
+            // Make sure this page is pinned by the session so that we don't
+            // flush it until the session is done with it.
+            pinPage(dbPage);
+        }
 
         return dbPage;
     }
@@ -251,6 +388,9 @@ public class BufferManager {
 
                 DBPage oldPage = entry.getValue();
 
+                if (oldPage.isPinned())  // Can't flush pages that are in use.
+                    continue;
+
                 logger.debug(String.format(
                     "    Evicting page [%s,%d] from page-cache to make room.",
                     oldPage.getDBFile(), oldPage.getPageNo()));
@@ -262,10 +402,15 @@ public class BufferManager {
 
                 entries.remove();
                 totalBytesCached -= oldPage.getPageSize();
+                oldPage.invalidate();
             }
         }
 
         cachedPages.put(cpi, dbPage);
+
+        // Make sure this page is pinned by the session so that we don't flush
+        // it until the session is done with it.
+        pinPage(dbPage);
     }
 
 
@@ -295,6 +440,7 @@ public class BufferManager {
                 // Remove the page from the cache.
                 entries.remove();
                 totalBytesCached -= oldPage.getPageSize();
+                oldPage.invalidate();
             }
         }
     }
@@ -323,6 +469,7 @@ public class BufferManager {
             // Remove the page from the cache.
             entries.remove();
             totalBytesCached -= oldPage.getPageSize();
+            oldPage.invalidate();
         }
     }
     

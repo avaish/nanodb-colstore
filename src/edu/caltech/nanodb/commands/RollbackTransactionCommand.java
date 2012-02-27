@@ -1,6 +1,7 @@
 package edu.caltech.nanodb.commands;
 
 
+import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.transactions.TransactionException;
 import edu.caltech.nanodb.transactions.TransactionManager;
 
@@ -17,7 +18,10 @@ public class RollbackTransactionCommand extends Command {
 
     public void execute() throws ExecutionException {
         // Roll back the transaction.
-        TransactionManager txnMgr = TransactionManager.getInstance();
+
+        TransactionManager txnMgr =
+            StorageManager.getInstance().getTransactionManager();
+
         try {
             txnMgr.rollbackTransaction();
         }

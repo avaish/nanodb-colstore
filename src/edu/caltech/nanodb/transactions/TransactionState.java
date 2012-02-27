@@ -28,6 +28,17 @@ public class TransactionState {
     private boolean userStartedTxn = false;
 
 
+    private boolean performedWrites = false;
+
+
+    /**
+     * This value indicates whether the current transaction has been logged
+     * to the write-ahead log yet.  We don't write the "T<sub>i</sub>:  start"
+     * record until the transaction performs its first write operation.
+     */
+    private boolean loggedTxnStart = false;
+
+
     private LogSequenceNumber lastLSN = null;
 
 
@@ -51,6 +62,26 @@ public class TransactionState {
     }
 
 
+    public boolean hasPerformedWrites() {
+        return performedWrites;
+    }
+
+
+    public void setPerformedWrites(boolean b) {
+        performedWrites = b;
+    }
+
+
+    public boolean hasLoggedTxnStart() {
+        return loggedTxnStart;
+    }
+
+
+    public void setLoggedTxnStart(boolean b) {
+        loggedTxnStart = b;
+    }
+
+
     public LogSequenceNumber getLastLSN() {
         return lastLSN;
     }
@@ -65,10 +96,31 @@ public class TransactionState {
         transactionID = NO_TRANSACTION;
         lastLSN = null;
         userStartedTxn = false;
+        performedWrites = false;
+        loggedTxnStart = false;
     }
 
 
     public boolean isTxnInProgress() {
         return (transactionID != NO_TRANSACTION);
+    }
+    
+    
+    @Override
+    public String toString() {
+        StringBuilder buf = new StringBuilder();
+        buf.append("TxnState[");
+        
+        if (transactionID == NO_TRANSACTION) {
+            buf.append("no transaction");
+        }
+        else {
+            buf.append(String.format(
+                "txnID=%d, userStarted=%s, loggedStart=%s, lastLSN=%s",
+                transactionID, userStartedTxn, loggedTxnStart, lastLSN));
+        }
+        buf.append(']');
+        
+        return buf.toString();
     }
 }

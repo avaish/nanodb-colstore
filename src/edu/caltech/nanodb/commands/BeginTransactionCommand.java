@@ -1,6 +1,7 @@
 package edu.caltech.nanodb.commands;
 
 
+import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.transactions.TransactionException;
 import edu.caltech.nanodb.transactions.TransactionManager;
 
@@ -17,8 +18,10 @@ public class BeginTransactionCommand extends Command {
 
     public void execute() throws ExecutionException {
         // Begin a transaction.
-        TransactionManager txnMgr = TransactionManager.getInstance();
-        
+
+        TransactionManager txnMgr =
+            StorageManager.getInstance().getTransactionManager();
+
         try {
             // Pass true for the "user-started transaction" flag, since the
             // user issued the command to do it!

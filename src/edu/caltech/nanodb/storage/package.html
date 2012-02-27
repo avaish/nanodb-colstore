@@ -1,6 +1,36 @@
 <html>
 <body>
+<p>
 This package contains the classes for the Storage Manager, which is responsible
 for how data is stored in and retrieved from database files.
+</p>
+
+<h2>Startup Sequence</h2>
+
+<p>
+The start-up sequence for the storage layer is as follows:
+</p>
+
+<ul>
+    <li>
+        <p>The Storage Manager is initialized first.</p>
+        <ol>
+            <li>The {@link edu.caltech.nanodb.storage.StorageManager#init}
+                method is invoked first.</li>
+            <li>The directory for NanoDB's data files is determined.</li>
+            <li>The {@link edu.caltech.nanodb.storage.StorageManager}
+                constructor is invoked.</li>
+            <li>The {@link edu.caltech.nanodb.storage.FileManager} is
+                initialized, with the appropriate data directory.</li>
+            <li>The {@link edu.caltech.nanodb.storage.BufferManager} is
+                initialized, wrapping the {@code FileManager}.</li>
+            <li>File-managers for table-files and index-files are initialized
+                at this point.  Generally they don't need to do anything at
+                initialization time; it's just a convenient time to initialize
+                them.</li>
+        </ol>
+    </li>
+</ul>
+
 </body>
 </html>

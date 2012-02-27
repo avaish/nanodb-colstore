@@ -1,12 +1,18 @@
 package edu.caltech.nanodb.storage;
 
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 
 import java.util.Arrays;
 
+import edu.caltech.nanodb.client.SessionState;
 import edu.caltech.nanodb.expressions.TypeConverter;
 import edu.caltech.nanodb.relations.ColumnType;
+import edu.caltech.nanodb.storage.writeahead.WALManager;
+import edu.caltech.nanodb.storage.writeahead.WALRecordType;
+import edu.caltech.nanodb.transactions.TransactionManager;
+import edu.caltech.nanodb.transactions.TransactionState;
 import org.apache.log4j.Logger;
 
 
@@ -51,6 +57,14 @@ public class DBPage {
     private int pageNo;
 
 
+    /**
+     * The pin-count of this page.  When nonzero, the page is not allowed to be
+     * flushed from the buffer manager since the page is being used by at least
+     * one session.
+     */
+    private int pinCount;
+
+
     /** This flag is true if this page has been modified in memory. */
     private boolean dirty;
 
@@ -90,6 +104,7 @@ public class DBPage {
 
         this.dbFile = dbFile;
         this.pageNo = pageNo;
+        pinCount = 0;
         dirty = false;
 
         // Allocate the space for the page data.
@@ -140,6 +155,31 @@ public class DBPage {
         return pageData.length;
     }
 
+    
+    public void incPinCount() {
+        pinCount++;
+    }
+    
+    
+    public void decPinCount() {
+        if (pinCount <= 0) {
+            throw new IllegalStateException(
+                "pinCount is not positive (value is " + pinCount + ")");
+        }
+
+        pinCount--;
+    }
+    
+    
+    public int getPinCount() {
+        return pinCount;
+    }
+
+
+    public boolean isPinned() {
+        return (pinCount > 0);
+    }
+    
 
     /**
      * Returns the byte-array of the page's data.  <b>Note that if any changes
@@ -196,6 +236,21 @@ public class DBPage {
         
         this.dirty = dirty;
     }
+
+
+    /**
+     * This method makes the {@code DBPage} invalid by clearing all of its
+     * internal references.  It is used by the Buffer Manager when a page is
+     * removed from the cache so that no other database code will continue to
+     * try to use the page.
+     */
+    public void invalidate() {
+        dbFile = null;
+        pageNo = -1;
+        pageData = null;
+        oldPageData = null;
+    }
+
 
     /*=============================*/
     /* TYPED DATA ACCESS FUNCTIONS */

@@ -13,9 +13,9 @@ import org.apache.commons.lang.ObjectUtils;
  *
  * <ul>
  *   <li>The file number of the write-ahead log file for the record (range:
- *       000000..999999)</li>
- *   <li>The page within the write-ahead log file (range:  0..65535)</li>
- *   <li>The offset within the page (range:  0..65535)</li>
+ *       00000..65535)</li>
+ *   <li>The offset of the log record from the start of the file
+ *       (range:  0..2<sup>31</sup>-1)</li>
  * </ul>
  */
 public class LogSequenceNumber
@@ -80,13 +80,25 @@ public class LogSequenceNumber
             throw new RuntimeException(e.getMessage(), e);
         }
     }
-    
-    
+
+
+    /**
+     * Returns the file number of the WAL file that this record is in.
+     *
+     * @return the file number of the WAL file that this record is in.
+     */
     public int getLogFileNo() {
         return logFileNo;
     }
 
-    
+
+    /**
+     * Returns the offset from the start of the WAL file that this record
+     * appears at.
+     *
+     * @return the offset from the start of the WAL file that this record
+     *         appears at.
+     */
     public int getFileOffset() {
         return fileOffset;
     }
@@ -103,6 +115,6 @@ public class LogSequenceNumber
     
     @Override
     public String toString() {
-        return String.format("LSN[%06d:%08d]", logFileNo, fileOffset);
+        return String.format("LSN[%05d:%08d]", logFileNo, fileOffset);
     }
 }
