@@ -42,10 +42,6 @@ public class WALManager {
     public static final String WAL_FILENAME_PATTERN = "wal-%05d.log";
 
 
-    /** This is a regex pattern for write-ahead log filenames. */
-    public static final String WAL_FILENAME_REGEX = "wal-(\\d)\\.log";
-
-
     /**
      * Maximum file number for a write-ahead log file.
      */
@@ -125,6 +121,11 @@ public class WALManager {
             if (transactionID > maxTransactionID)
                 maxTransactionID = transactionID;
         }
+        
+        
+        public LogSequenceNumber getLastLSN(int transactionID) {
+            return incompleteTxns.get(transactionID);
+        }
 
 
         /**
@@ -190,11 +191,16 @@ public class WALManager {
      * number, and returns the LSN where the next recovery process should start
      * from.
      *
-     * @param firstLSN the location in the write-ahead log where recovery should
-     *        start from
+     * @param firstLSN the location of the write-ahead log record where
+     *        recovery should start from
+     *
+     * @param nextLSN the location in the write-ahead log that is <em>just
+     *        past</em> the last valid log record in the WAL
      *
      * @return the new location where recovery should start from the next time
      *         recovery processing is performed
+     *         
+     * @throws IOException if an IO error occurs during recovery processing
      */
     public LogSequenceNumber doRecovery(LogSequenceNumber firstLSN,
         LogSequenceNumber nextLSN) throws IOException {
@@ -206,6 +212,10 @@ public class WALManager {
         this.nextLSN = nextLSN;
         performUndo(recoveryInfo);
 
+        // TODO:  Force the WAL out, up to the nextLSN value.
+        // TODO:  Flush and sync all table files.
+
+        // Undo processing will advance the nextLSN value.
         return this.nextLSN;
     }
 
@@ -243,24 +253,57 @@ public class WALManager {
             switch (type) {
             case START_TXN:
                 // Already handled by RecoveryInfo's updateInfo() operation.
+                logger.debug("Transaction " + transactionID + " is starting");
                 break;
 
             case COMMIT_TXN:
             case ABORT_TXN:
+                logger.debug("Transaction " + transactionID +
+                    " is completed (" + type + ")");
                 recoveryInfo.recordTxnCompleted(transactionID);
                 break;
 
             case UPDATE_PAGE:
             case UPDATE_PAGE_REDO_ONLY:
-                // TODO:  Reapply the changes to the specified file and page.
+                // Reapply the changes to the specified file and page.
 
+                String redoFilename = walReader.readVarString255();
+                int redoPageNo = walReader.readUnsignedShort();
 
+                DBFile redoFile = storageManager.openDBFile(redoFilename);
+                DBPage redoPage = storageManager.loadDBPage(redoFile, redoPageNo);
+
+                int numSegments = walReader.readUnsignedShort();
+
+                logger.debug(String.format(
+                    "Redoing changes to file %s, page %d (%d segments)",
+                    redoFile, redoPageNo, numSegments));
+
+                for (int iSeg = 0; iSeg < numSegments; iSeg++) {
+                    // Write the starting index within the page, and the amount of
+                    // data that will be recorded at that index.
+                    int index = walReader.readUnsignedShort();
+                    int size = walReader.readUnsignedShort();
+
+                    // If it's an UPDATE_PAGE record, skip over the undo data.
+                    if (type == WALRecordType.UPDATE_PAGE)
+                        walReader.movePosition(size);
+
+                    // Write the redo data into the page.
+                    byte[] redoData = new byte[size];
+                    walReader.read(redoData);
+                    redoPage.write(index, redoData);
+                }
+
+                // Finally, the update and redo-only update records store the
+                // size of the record (int) and the record type (byte), so
+                // skip past them.
+                walReader.movePosition(5);
 
                 break;
 
             default:
-                // TODO:  This should probably be a special kind of exception.
-                throw new IllegalStateException(
+                throw new WALFileException(
                     "Encountered unrecognized WAL record type " + type +
                     " at LSN " + currLSN + " during redo processing!");
             }
@@ -270,8 +313,7 @@ public class WALManager {
         }
         
         if (currLSN.compareTo(recoveryInfo.nextLSN) != 0) {
-            // TODO:  This should probably be a special kind of exception.
-            throw new IllegalStateException("Traversing WAL file didn't yield " +
+            throw new WALFileException("Traversing WAL file didn't yield " +
                 " the same ending LSN as in the transaction-state file.  WAL " +
                 " result:  " + currLSN + "  TxnState:  " + recoveryInfo.nextLSN);
         }
@@ -281,8 +323,148 @@ public class WALManager {
     }
 
 
-    private void performUndo(RecoveryInfo recoveryInfo) {
-        // TODO:  Perform undo processing on incomplete transactions.
+    private void performUndo(RecoveryInfo recoveryInfo) throws IOException {
+        LogSequenceNumber currLSN = recoveryInfo.nextLSN;
+        logger.debug("Starting undo processing at LSN " + currLSN);
+
+        LogSequenceNumber oldLSN = null;
+        DBFileReader walReader = null;
+        while (true) {
+            // Compute LSN of previous WAL record.  Start by getting the last
+            // byte of the previous WAL record.
+            int logFileNo = currLSN.getLogFileNo();
+            int offset = currLSN.getFileOffset() - 1;
+
+            // TODO:  wrap to previous WAL file if necessary.
+
+            if (oldLSN == null || oldLSN.getLogFileNo() != logFileNo)
+                walReader = getWALFileReader(currLSN);
+
+            // Read the parts of the log record that are always the same.
+            byte typeID = walReader.readByte();
+            WALRecordType type = WALRecordType.valueOf(typeID);
+
+            int startOffset;
+            switch (type) {
+            case START_TXN:
+                // Type (1B) + TransactionID (4B) + Type (1B) = 6 bytes
+                startOffset = offset - 6 + 1;
+                break;
+
+            case COMMIT_TXN:
+            case ABORT_TXN:
+                // Type (1B) + TransactionID (4B) + PrevLSN (2B+4B) + Type (1B)
+                // = 12 bytes
+                startOffset = offset - 12 + 1;
+                break;
+
+            case UPDATE_PAGE:
+            case UPDATE_PAGE_REDO_ONLY:
+                // For these records, the WAL record's size is stored
+                // immediately before the last type-byte.
+                walReader.movePosition(-5);
+                startOffset = walReader.readInt();
+                break;
+
+            default:
+                throw new WALFileException(
+                    "Encountered unrecognized WAL record type " + type +
+                        " at LSN " + currLSN + " during redo processing!");
+            }
+
+            currLSN = new LogSequenceNumber(logFileNo, startOffset);
+            if (currLSN.compareTo(recoveryInfo.firstLSN) < 0)
+                break;
+
+            int transactionID = walReader.readInt();
+            if (recoveryInfo.isTxnComplete(transactionID)) {
+                // The current transaction is already completed, so skip the
+                // record.
+                oldLSN = currLSN;
+                continue;
+            }
+
+            // Undo specific operations.
+            switch (type) {
+                case START_TXN:
+                    // Record that the transaction is aborted.
+                    writeTxnRecord(WALRecordType.ABORT_TXN, transactionID,
+                        recoveryInfo.getLastLSN(transactionID));
+
+                    logger.debug(String.format(
+                        "Undo phase:  aborted transaction %d", transactionID));
+                    recoveryInfo.recordTxnCompleted(transactionID);
+
+                    break;
+
+                case COMMIT_TXN:
+                case ABORT_TXN:
+                    // We shouldn't see these records, since this is supposedly
+                    // an incomplete transaction!
+                    throw new IllegalStateException("Saw a " + type +
+                        "WAL-record for supposedly incomplete transaction " +
+                        transactionID + "!");
+
+                case UPDATE_PAGE:
+                    // Undo the changes to the specified file and page.
+
+                    String undoFilename = walReader.readVarString255();
+                    int undoPageNo = walReader.readUnsignedShort();
+
+                    DBFile undoFile = storageManager.openDBFile(undoFilename);
+                    DBPage undoPage = storageManager.loadDBPage(undoFile, undoPageNo);
+
+                    // Read the number of segments in the redo/undo record, and
+                    // undo the writes.  While we do this, the data for a redo-only
+                    // record is also accumulated.
+
+                    int numSegments = walReader.readUnsignedShort();
+
+                    logger.debug(String.format(
+                        "Undoing changes to file %s, page %d (%d segments)",
+                        undoFile, undoPageNo, numSegments));
+
+                    byte[] redoOnlyData = applyUndoAndGenRedoOnlyData(walReader,
+                        undoPage, numSegments);
+
+                    // Finally, update the WAL with the redo-only record.
+                    writeRedoOnlyUpdatePageRecord(undoPage, numSegments, redoOnlyData);
+
+
+
+
+
+                    for (int iSeg = 0; iSeg < numSegments; iSeg++) {
+                        // Write the starting index within the page, and the amount of
+                        // data that will be recorded at that index.
+                        int index = walReader.readUnsignedShort();
+                        int size = walReader.readUnsignedShort();
+
+                        // Write the undo data into the page.
+                        byte[] undoData = new byte[size];
+                        walReader.read(undoData);
+                        undoPage.write(index, undoData);
+
+                        // Skip over the redo data.
+                        walReader.movePosition(size);
+                    }
+
+                    break;
+
+                case UPDATE_PAGE_REDO_ONLY:
+                    // We ignore redo-only updates during the undo phase.
+                    break;
+
+                default:
+                    throw new WALFileException(
+                        "Encountered unrecognized WAL record type " + type +
+                            " at LSN " + currLSN + " during undo processing!");
+            }
+
+            oldLSN = currLSN;
+        }
+
+        logger.debug("Undo processing is complete.");
     }
 
 
@@ -355,6 +537,72 @@ public class WALManager {
      * This function writes a transaction demarcation record
      * ({@link WALRecordType#START_TXN}, {@link WALRecordType#COMMIT_TXN}, or
      * {@link WALRecordType#ABORT_TXN}) to the write-ahead log.  The transaction
+     * state is passed explicitly so that this method can be used during
+     * recovery processing.  The alternate method
+     * {@link #writeTxnRecord(WALRecordType)} retrieves the transaction state
+     * from thread-local storage, and should be used during normal operation.
+     *
+     * @param type The type of the transaction demarcation to write, one of the
+     *        values {@link WALRecordType#START_TXN}, {@link WALRecordType#COMMIT_TXN},
+     *        or {@link WALRecordType#ABORT_TXN}.
+     *
+     * @param transactionID the transaction ID that the WAL record is for
+     *
+     * @param prevLSN the log sequence number of the transaction's immediately
+     *        previous WAL record, if the record type is either a commit or
+     *        abort record.
+     *                      
+     * @throws IOException if the write-ahead log can't be updated for some
+     *         reason.
+     *
+     * @throws IllegalArgumentException if <tt>type</tt> is <tt>null</tt>, or if
+     *         it isn't one of the values {@link WALRecordType#START_TXN},
+     *         {@link WALRecordType#COMMIT_TXN}, or {@link WALRecordType#ABORT_TXN}.
+     */
+    public synchronized void writeTxnRecord(WALRecordType type,
+        int transactionID, LogSequenceNumber prevLSN) throws IOException {
+
+        if (type != WALRecordType.START_TXN &&
+            type != WALRecordType.COMMIT_TXN &&
+            type != WALRecordType.ABORT_TXN) {
+            throw new IllegalArgumentException("Invalid record type " + type +
+                " passed to writeTxnRecord().");
+        }
+
+        if ((type == WALRecordType.COMMIT_TXN ||
+             type == WALRecordType.ABORT_TXN) && prevLSN == null) {
+            throw new IllegalArgumentException(
+                "prevLSN must be specified for records of type " + type);
+        }
+
+        logger.debug("Writing a " + type + " record for transaction " +
+            transactionID + " at LSN " + nextLSN);
+
+        // Record the WAL record.  First thing to do:  figure out where it goes.
+
+        DBFileWriter walWriter = getWALFileWriter(nextLSN);
+
+        walWriter.writeByte(type.getID());
+        walWriter.writeInt(transactionID);
+
+        if (type == WALRecordType.START_TXN) {
+            walWriter.writeByte(type.getID());
+        }
+        else {
+            walWriter.writeShort(prevLSN.getLogFileNo());
+            walWriter.writeInt(prevLSN.getFileOffset());
+            walWriter.writeByte(type.getID());
+        }
+
+        nextLSN = computeNextLSN(nextLSN.getLogFileNo(), walWriter.getPosition());
+        logger.debug("Next-LSN value is now " + nextLSN);
+    }
+
+
+    /**
+     * This function writes a transaction demarcation record
+     * ({@link WALRecordType#START_TXN}, {@link WALRecordType#COMMIT_TXN}, or
+     * {@link WALRecordType#ABORT_TXN}) to the write-ahead log.  The transaction
      * state is retrieved from thread-local storage so that it doesn't need to
      * be passed.
      *
@@ -372,13 +620,6 @@ public class WALManager {
     public synchronized void writeTxnRecord(WALRecordType type)
         throws IOException {
 
-        if (type != WALRecordType.START_TXN &&
-            type != WALRecordType.COMMIT_TXN &&
-            type != WALRecordType.ABORT_TXN) {
-            throw new IllegalArgumentException("Invalid record type " + type +
-                " passed to writeTxnRecord().");
-        }
-
         // Retrieve and verify the transaction state.
         TransactionState txnState = SessionState.get().getTxnState();
         if (!txnState.isTxnInProgress()) {
@@ -386,28 +627,7 @@ public class WALManager {
                 "No transaction is currently in progress!");
         }
 
-        logger.debug("Writing a " + type + " record for transaction " +
-            txnState.getTransactionID() + " at LSN " + nextLSN);
-
-        // Record the WAL record.  First thing to do:  figure out where it goes.
-
-        DBFileWriter walWriter = getWALFileWriter(nextLSN);
-
-        walWriter.writeByte(type.getID());
-        walWriter.writeInt(txnState.getTransactionID());
-
-        if (type == WALRecordType.START_TXN) {
-            walWriter.writeByte(type.getID());
-        }
-        else {
-            LogSequenceNumber prevLSN = txnState.getLastLSN();
-            walWriter.writeShort(prevLSN.getLogFileNo());
-            walWriter.writeInt(prevLSN.getFileOffset());
-            walWriter.writeByte(type.getID());
-        }
-
-        nextLSN = computeNextLSN(nextLSN.getLogFileNo(), walWriter.getPosition());
-        logger.debug("Next-LSN value is now " + nextLSN);
+        writeTxnRecord(type, txnState.getTransactionID(), txnState.getLastLSN());
 
         // In the case of committing, we need to sync the write-ahead log file
         // to the disk so that we can actually report the transaction as
@@ -550,6 +770,34 @@ public class WALManager {
     }
 
 
+    private byte[] applyUndoAndGenRedoOnlyData(DBFileReader walReader,
+        DBPage dbPage, int numSegments) throws IOException {
+
+        NoCopyByteArrayOutputStream redoOnlyBAOS =
+            new NoCopyByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(redoOnlyBAOS);
+
+        for (int i = 0; i < numSegments; i++) {
+            // Apply the undo data to the data page.
+            int start = walReader.readUnsignedShort();
+            int length = walReader.readUnsignedShort();
+
+            byte[] undoData = new byte[length];
+            walReader.read(undoData);
+            dbPage.write(start, undoData);
+
+            // Record what we wrote into the redo-only record data.
+            dos.writeShort(start);
+            dos.writeShort(length);
+            dos.write(undoData);
+        }
+
+        // Return the data that will appear in the redo-only record body.
+        dos.flush();
+        return redoOnlyBAOS.getBuf();
+    }
+
+
     /**
      * This method writes an update-page record to the write-ahead log,
      * including both undo and redo details.
@@ -564,8 +812,9 @@ public class WALManager {
      * @throws IllegalArgumentException if <tt>dbPage</tt> is <tt>null</tt>, or
      *         if <tt>changes</tt> is <tt>null</tt>.
      */
-    public synchronized void writeRedoOnlyUpdatePageRecord(DBPage dbPage,
-        int numSegments, byte[] changes) throws IOException {
+    public synchronized void writeRedoOnlyUpdatePageRecord(int transactionID,
+        LogSequenceNumber prevLSN, DBPage dbPage, int numSegments,
+        byte[] changes) throws IOException {
 
         if (dbPage == null)
             throw new IllegalArgumentException("dbPage must be specified");
@@ -573,22 +822,14 @@ public class WALManager {
         if (changes == null)
             throw new IllegalArgumentException("changes must be specified");
 
-        // Retrieve and verify the transaction state.
-        TransactionState txnState = SessionState.get().getTxnState();
-        if (!txnState.isTxnInProgress()) {
-            throw new IllegalStateException(
-                "No transaction is currently in progress!");
-        }
-
         // Record the WAL record.  First thing to do:  figure out where it goes.
 
         DBFileWriter walWriter = getWALFileWriter(nextLSN);
 
         walWriter.writeByte(WALRecordType.UPDATE_PAGE_REDO_ONLY.getID());
-        walWriter.writeInt(txnState.getTransactionID());
+        walWriter.writeInt(transactionID);
 
         // We need to store the previous log sequence number for this record.
-        LogSequenceNumber prevLSN = txnState.getLastLSN();
         walWriter.writeShort(prevLSN.getLogFileNo());
         walWriter.writeInt(prevLSN.getFileOffset());
 
@@ -606,6 +847,22 @@ public class WALManager {
         walWriter.writeByte(WALRecordType.UPDATE_PAGE_REDO_ONLY.getID());
 
         nextLSN = computeNextLSN(nextLSN.getLogFileNo(), walWriter.getPosition());
+    }
+    
+    
+    public void writeRedoOnlyUpdatePageRecord(DBPage dbPage, int numSegments,
+                                              byte[] changes) throws IOException {
+
+        // Retrieve and verify the transaction state.
+        TransactionState txnState = SessionState.get().getTxnState();
+        if (!txnState.isTxnInProgress()) {
+            throw new IllegalStateException(
+                "No transaction is currently in progress!");
+        }
+
+        writeRedoOnlyUpdatePageRecord(txnState.getTransactionID(),
+            txnState.getLastLSN(), dbPage, numSegments, changes);
+
         txnState.setLastLSN(nextLSN);
     }
 
@@ -634,8 +891,9 @@ public class WALManager {
             WALRecordType type = WALRecordType.valueOf(walReader.readByte());
             int recordTxnID = walReader.readInt();
             if (recordTxnID != transactionID) {
-                throw new RuntimeException(
-                    "FATAL ERROR:  Write-ahead log is corrupt!");
+                throw new WALFileException(String.format("Sent to WAL record " +
+                    "for transaction %d at LSN %s, during rollback of " +
+                    "transaction %d.", recordTxnID, lsn, transactionID));
             }
 
             if (type == WALRecordType.START_TXN) {
@@ -656,35 +914,19 @@ public class WALManager {
                 String filename = walReader.readVarString255();
                 int pageNo = walReader.readUnsignedShort();
 
-                int numSegments = walReader.readUnsignedShort();
-
-                // Open the specified file and retrieve the data page,
-                // then apply the undo data to the page.
-
-                NoCopyByteArrayOutputStream redoOnlyBAOS =
-                    new NoCopyByteArrayOutputStream();
-                DataOutputStream dos = new DataOutputStream(redoOnlyBAOS);
-
+                // Open the specified file and retrieve the data page to undo.
                 DBFile dbFile = storageManager.openDBFile(filename);
                 DBPage dbPage = storageManager.loadDBPage(dbFile, pageNo);
-                byte[] data = dbPage.getPageData();
 
-                for (int i = 0; i < numSegments; i++) {
-                    // Apply the undo data to the data page.
-                    int start = walReader.readUnsignedShort();
-                    int length = walReader.readUnsignedShort();
-                    walReader.read(data, start, length);
+                // Read the number of segments in the redo/undo record, and
+                // undo the writes.  While we do this, the data for a redo-only
+                // record is also accumulated.
+                int numSegments = walReader.readUnsignedShort();
+                byte[] redoOnlyData = applyUndoAndGenRedoOnlyData(walReader,
+                    dbPage, numSegments);
 
-                    // Record what we wrote for the redo-only record.
-                    dos.writeShort(start);
-                    dos.writeShort(length);
-                    dos.write(data, start, length);
-                }
-
-                // Write a redo-only update record to the end of the WAL.
-                dos.flush();
-                writeRedoOnlyUpdatePageRecord(dbPage, numSegments,
-                    redoOnlyBAOS.getBuf());
+                // Finally, update the WAL with the redo-only record.
+                writeRedoOnlyUpdatePageRecord(dbPage, numSegments, redoOnlyData);
             }
             else {
                 logger.warn(String.format("Encountered unexpected WAL-record " +
