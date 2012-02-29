@@ -1,19 +1,14 @@
 package edu.caltech.nanodb.storage;
 
 
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-
 import java.util.Arrays;
 
-import edu.caltech.nanodb.client.SessionState;
+import org.apache.log4j.Logger;
+
 import edu.caltech.nanodb.expressions.TypeConverter;
 import edu.caltech.nanodb.relations.ColumnType;
-import edu.caltech.nanodb.storage.writeahead.WALManager;
-import edu.caltech.nanodb.storage.writeahead.WALRecordType;
-import edu.caltech.nanodb.transactions.TransactionManager;
-import edu.caltech.nanodb.transactions.TransactionState;
-import org.apache.log4j.Logger;
+import edu.caltech.nanodb.storage.writeahead.LogSequenceNumber;
 
 
 /**
@@ -69,6 +64,16 @@ public class DBPage {
     private boolean dirty;
 
 
+    /**
+     * For dirty pages, this field is set to the Log Sequence Number of the
+     * write-ahead log record corresponding to the most recent write to the
+     * page.  When the page is being flushed back to disk, the write-ahead log
+     * must be written to at least this point, or else the write-ahead logging
+     * rule will be violated.
+     */
+    private LogSequenceNumber pageLSN;
+
+
     /** The actual data for the table-page. */
     private byte[] pageData;
 
@@ -106,6 +111,7 @@ public class DBPage {
         this.pageNo = pageNo;
         pinCount = 0;
         dirty = false;
+        pageLSN = null;
 
         // Allocate the space for the page data.
         pageData = new byte[dbFile.getPageSize()];
@@ -232,9 +238,22 @@ public class DBPage {
             // Page is being changed from dirty to clean.  Clear out the old
             // page data since we don't need it anymore.
             oldPageData = null;
+
+            // Clear out the page-LSN value as well.
+            pageLSN = null;
         }
         
         this.dirty = dirty;
+    }
+
+
+    public LogSequenceNumber getPageLSN() {
+        return pageLSN;
+    }
+
+
+    public void setPageLSN(LogSequenceNumber lsn) {
+        pageLSN = lsn;
     }
 
 

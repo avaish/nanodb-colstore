@@ -57,11 +57,19 @@ public class WALManager {
 
 
     /**
-     * This is the file-offset of the first log entry in a WAL file.  It must
-     * be at least 2, so that the file's type and page-size can be stored in
-     * the first two bytes.
+     * This is the file-offset just past the last byte written in the previous
+     * WAL file, or 0 for the first WAL file.  The value is an integer,
+     * occupying 4 bytes.
      */
-    public static final int WAL_FILE_INITIAL_OFFSET = 2;
+    public static final int OFFSET_PREV_FILE_END = 2;
+
+
+    /**
+     * This is the file-offset of the first log entry in a WAL file.
+     */
+    public static final int OFFSET_FIRST_RECORD = 6;
+
+
 
     
     public static class RecoveryInfo {
@@ -96,9 +104,9 @@ public class WALManager {
 
             this.firstLSN = firstLSN;
             this.nextLSN = nextLSN;
-            
+
             this.maxTransactionID = -1;
-            
+
             incompleteTxns = new HashMap<Integer, LogSequenceNumber>();
         }
 
@@ -166,23 +174,35 @@ public class WALManager {
     }
 
 
+    private StorageManager storageManager;
+
+
+    /**
+     * This object holds the log sequence number of the first write-ahead log
+     * record where recovery would need to start from.
+     */
+    private LogSequenceNumber firstLSN;
+
+
     /**
      * This object holds the log sequence number where the next write-ahead log
      * record will be written.
      */
-    LogSequenceNumber nextLSN;
+    private LogSequenceNumber nextLSN;
 
 
-    private StorageManager storageManager;
-    
-    
-    private BufferManager bufferManager;
-
-
-    public WALManager(StorageManager storageManager,
-                      BufferManager bufferManager) {
+    public WALManager(StorageManager storageManager) {
         this.storageManager = storageManager;
-        this.bufferManager = bufferManager;
+    }
+
+
+    public LogSequenceNumber getFirstLSN() {
+        return firstLSN;
+    }
+
+
+    public LogSequenceNumber getNextLSN() {
+        return nextLSN;
     }
 
 
@@ -191,32 +211,48 @@ public class WALManager {
      * number, and returns the LSN where the next recovery process should start
      * from.
      *
-     * @param firstLSN the location of the write-ahead log record where
+     * @param storedFirstLSN the location of the write-ahead log record where
      *        recovery should start from
      *
-     * @param nextLSN the location in the write-ahead log that is <em>just
-     *        past</em> the last valid log record in the WAL
+     * @param storedNextLSN the location in the write-ahead log that is
+     *        <em>just past</em> the last valid log record in the WAL
      *
      * @return the new location where recovery should start from the next time
      *         recovery processing is performed
      *         
      * @throws IOException if an IO error occurs during recovery processing
      */
-    public LogSequenceNumber doRecovery(LogSequenceNumber firstLSN,
-        LogSequenceNumber nextLSN) throws IOException {
+    public RecoveryInfo doRecovery(LogSequenceNumber storedFirstLSN,
+        LogSequenceNumber storedNextLSN) throws IOException {
 
         RecoveryInfo recoveryInfo = new RecoveryInfo(firstLSN, nextLSN);
+        this.firstLSN = storedFirstLSN;
+        this.nextLSN = storedNextLSN;
+
+        if (firstLSN.equals(nextLSN)) {
+            // No recovery necessary!  Just return the passed-in info.
+            return recoveryInfo;
+        }
 
         performRedo(recoveryInfo);
-
-        this.nextLSN = nextLSN;
         performUndo(recoveryInfo);
 
-        // TODO:  Force the WAL out, up to the nextLSN value.
-        // TODO:  Flush and sync all table files.
+        // Force the WAL out, up to the nextLSN value.  Then, flush and sync all
+        // table files.
+        storageManager.forceWAL(nextLSN);
+        storageManager.closeAllOpenTables();  // TODO:  not just tables!  and sync them too!
 
-        // Undo processing will advance the nextLSN value.
-        return this.nextLSN;
+        // At this point, all files in the database should be in sync with
+        // the entirety of the write-ahead log.  So, update the firstLSN value
+        // and update the transaction state file again.  (This won't write out
+        // any WAL records, but it will write and sync the txn-state file.)
+        firstLSN = nextLSN;
+        storageManager.forceWAL(nextLSN);
+
+        recoveryInfo.firstLSN = firstLSN;
+        recoveryInfo.nextLSN = nextLSN;
+
+        return recoveryInfo;
     }
 
 
@@ -329,39 +365,75 @@ public class WALManager {
 
         LogSequenceNumber oldLSN = null;
         DBFileReader walReader = null;
-        while (true) {
+        while (recoveryInfo.hasIncompleteTxns()) {
             // Compute LSN of previous WAL record.  Start by getting the last
             // byte of the previous WAL record.
             int logFileNo = currLSN.getLogFileNo();
-            int offset = currLSN.getFileOffset() - 1;
+            int fileOffset = currLSN.getFileOffset();
 
-            // TODO:  wrap to previous WAL file if necessary.
+            // Wrap to the previous WAL file if necessary, and if there is one.
+            if (fileOffset == OFFSET_FIRST_RECORD) {
+                // Need to read the "previous WAL file's last offset" value
+                // from the current WAL file.
+                walReader = getWALFileReader(currLSN);
+                walReader.setPosition(OFFSET_PREV_FILE_END);
+                int prevFileEndOffset = walReader.readInt();
+                if (prevFileEndOffset == 0) {
+                    logger.debug("Reached the very start of the write-ahead log!");
+                    break;
+                }
 
+                // Need to go back to the previous WAL file.
+                logFileNo--;
+                if (logFileNo < 0)  // Did we wrap around?
+                    logFileNo = MAX_WAL_FILE_NUMBER;
+
+                currLSN = new LogSequenceNumber(logFileNo, prevFileEndOffset);
+                fileOffset = currLSN.getFileOffset();
+            }
+            else if (fileOffset < OFFSET_FIRST_RECORD) {
+                // This would be highly unusual, but would indicate either a
+                // bug in the undo record-traversal, or a corrupt WAL file.
+                throw new WALFileException(String.format("Overshot the start " +
+                    "of WAL file %d's records; ended up at file-position %d",
+                    logFileNo, fileOffset));
+            }
+
+            if (currLSN.compareTo(recoveryInfo.firstLSN) <= 0)
+                break;
+            
             if (oldLSN == null || oldLSN.getLogFileNo() != logFileNo)
                 walReader = getWALFileReader(currLSN);
 
-            // Read the parts of the log record that are always the same.
+            // Move backward one byte in the WAL file to read the previous
+            // record's type ID.
+            walReader.movePosition(-1);
             byte typeID = walReader.readByte();
             WALRecordType type = WALRecordType.valueOf(typeID);
 
+            // Compute the start of the previous record based on its type and
+            // other details.
             int startOffset;
             switch (type) {
             case START_TXN:
                 // Type (1B) + TransactionID (4B) + Type (1B) = 6 bytes
-                startOffset = offset - 6 + 1;
+                startOffset = fileOffset - 6 + 1;
                 break;
 
             case COMMIT_TXN:
             case ABORT_TXN:
                 // Type (1B) + TransactionID (4B) + PrevLSN (2B+4B) + Type (1B)
                 // = 12 bytes
-                startOffset = offset - 12 + 1;
+                startOffset = fileOffset - 12 + 1;
                 break;
 
             case UPDATE_PAGE:
             case UPDATE_PAGE_REDO_ONLY:
-                // For these records, the WAL record's size is stored
-                // immediately before the last type-byte.
+                // For these records, the WAL record's start offset is stored
+                // immediately before the last type-byte.  We go back 5 bytes
+                // because reading the type ID moves the position forward by
+                // 1 byte, and then we also have to get to the start of the
+                // 4-byte starting offset.
                 walReader.movePosition(-5);
                 startOffset = walReader.readInt();
                 break;
@@ -372,10 +444,15 @@ public class WALManager {
                         " at LSN " + currLSN + " during redo processing!");
             }
 
+            // Construct a new LSN pointing to the previous record.  If this
+            // happens to be before the range that we are using for recovery,
+            // we're done with undo-processing.
             currLSN = new LogSequenceNumber(logFileNo, startOffset);
             if (currLSN.compareTo(recoveryInfo.firstLSN) < 0)
                 break;
 
+            // Read the transaction ID.  If it's for a completed transaction,
+            // we skip over the record.
             int transactionID = walReader.readInt();
             if (recoveryInfo.isTxnComplete(transactionID)) {
                 // The current transaction is already completed, so skip the
@@ -384,7 +461,11 @@ public class WALManager {
                 continue;
             }
 
-            // Undo specific operations.
+            // Undo specific operations.  Note that we don't have to set the
+            // reader's position to anything special at the end of each record,
+            // since the above code will always properly move to the appropriate
+            // position for the previous record, based on the value of currLSN.
+
             switch (type) {
                 case START_TXN:
                     // Record that the transaction is aborted.
@@ -427,27 +508,8 @@ public class WALManager {
                     byte[] redoOnlyData = applyUndoAndGenRedoOnlyData(walReader,
                         undoPage, numSegments);
 
-                    // Finally, update the WAL with the redo-only record.
+                    // Update the WAL with the redo-only record.
                     writeRedoOnlyUpdatePageRecord(undoPage, numSegments, redoOnlyData);
-
-
-
-
-
-                    for (int iSeg = 0; iSeg < numSegments; iSeg++) {
-                        // Write the starting index within the page, and the amount of
-                        // data that will be recorded at that index.
-                        int index = walReader.readUnsignedShort();
-                        int size = walReader.readUnsignedShort();
-
-                        // Write the undo data into the page.
-                        byte[] undoData = new byte[size];
-                        walReader.read(undoData);
-                        undoPage.write(index, undoData);
-
-                        // Skip over the redo data.
-                        walReader.movePosition(size);
-                    }
 
                     break;
 
@@ -478,7 +540,7 @@ public class WALManager {
 
             // Need to make sure we skip past the file type and size at the
             // start of the data file.
-            fileOffset = WAL_FILE_INITIAL_OFFSET;
+            fileOffset = OFFSET_FIRST_RECORD;
         }
         return new LogSequenceNumber(fileNo, fileOffset);
     }
@@ -509,6 +571,7 @@ public class WALManager {
         }
         catch (FileNotFoundException e) {
             walFile = storageManager.createWALFile(fileNo);
+            // TODO:  Write the previous WAL file's last file-offset into the new WAL file's start.
         }
 
         DBFileWriter writer = new DBFileWriter(walFile);
@@ -596,6 +659,17 @@ public class WALManager {
 
         nextLSN = computeNextLSN(nextLSN.getLogFileNo(), walWriter.getPosition());
         logger.debug("Next-LSN value is now " + nextLSN);
+
+        // In the case of committing, we need to sync the write-ahead log file
+        // to the disk so that we can actually report the transaction as
+        // "committed".  We do this after updating the nextLSN value so that we
+        // can guarantee that the *entire* commit-record is written to disk.
+        if (type == WALRecordType.COMMIT_TXN) {
+            // Sync the write-ahead log to disk, up to the LSN of the commit
+            // record in the WAL.
+            storageManager.forceWAL(nextLSN);
+        }
+
     }
 
 
@@ -628,20 +702,7 @@ public class WALManager {
         }
 
         writeTxnRecord(type, txnState.getTransactionID(), txnState.getLastLSN());
-
-        // In the case of committing, we need to sync the write-ahead log file
-        // to the disk so that we can actually report the transaction as
-        // "committed".
-        if (type == WALRecordType.COMMIT_TXN) {
-            // Sync the write-ahead log to disk.
-            // TODO storageManager.syncWALFile(walFile);
-
-            // TODO:  This should probably be done by the transaction manager.
-            txnState.clear();
-        }
-        else {
-            txnState.setLastLSN(nextLSN);
-        }
+        txnState.setLastLSN(nextLSN);
     }
 
 
@@ -765,6 +826,10 @@ public class WALManager {
         walWriter.writeInt(nextLSN.getFileOffset());
         walWriter.writeByte(WALRecordType.UPDATE_PAGE.getID());
 
+        // Store the LSN of the change on the page.
+        nextLSN.setRecordSize(walWriter.getPosition() - nextLSN.getFileOffset());
+        dbPage.setPageLSN(nextLSN);
+
         nextLSN = computeNextLSN(nextLSN.getLogFileNo(), walWriter.getPosition());
         txnState.setLastLSN(nextLSN);
     }
@@ -799,13 +864,25 @@ public class WALManager {
 
 
     /**
-     * This method writes an update-page record to the write-ahead log,
-     * including both undo and redo details.
+     * This method writes a redo-only update-page record to the write-ahead log,
+     * including only redo details.  The transaction state is passed explicitly
+     * so that this method can be used during recovery processing.  The
+     * alternate method
+     * {@link #writeRedoOnlyUpdatePageRecord(DBPage, int, byte[])} retrieves
+     * the transaction state from thread-local storage, and should be used
+     * during normal operation.
+     *
+     * @param transactionID the transaction ID that the WAL record is for.
+     *
+     * @param prevLSN the log sequence number of the transaction's immediately
+     *        previous WAL record.
      *
      * @param dbPage The data page whose changes are to be recorded in the log.
-     * @param numSegments The number of segments in the change-data to record.
-     * @param changes The actual changes themselves, serialized to a byte array.
      *
+     * @param numSegments The number of segments in the change-data to record.
+     *
+     * @param changes The actual changes themselves, serialized to a byte array.
+
      * @throws IOException if the write-ahead log cannot be updated for some
      *         reason.
      *
@@ -845,6 +922,10 @@ public class WALManager {
 
         walWriter.writeInt(nextLSN.getFileOffset());
         walWriter.writeByte(WALRecordType.UPDATE_PAGE_REDO_ONLY.getID());
+
+        // Store the LSN of the change on the page.
+        nextLSN.setRecordSize(walWriter.getPosition() - nextLSN.getFileOffset());
+        dbPage.setPageLSN(nextLSN);
 
         nextLSN = computeNextLSN(nextLSN.getLogFileNo(), walWriter.getPosition());
     }

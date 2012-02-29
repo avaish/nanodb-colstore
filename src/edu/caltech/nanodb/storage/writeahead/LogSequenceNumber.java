@@ -27,7 +27,11 @@ public class LogSequenceNumber
     /** The offset of the log record from the start of the file. */
     private int fileOffset;
 
-    
+
+    /** The size of the record that this LSN points to, in bytes. */
+    private int recordSize;
+
+
     public LogSequenceNumber(int logFileNo, int fileOffset) {
         if (logFileNo < 0 || logFileNo > WALManager.MAX_WAL_FILE_NUMBER) {
             throw new IllegalArgumentException(String.format(
@@ -40,6 +44,7 @@ public class LogSequenceNumber
 
         this.logFileNo = logFileNo;
         this.fileOffset = fileOffset;
+        recordSize = -1;
     }
     
     
@@ -101,6 +106,16 @@ public class LogSequenceNumber
      */
     public int getFileOffset() {
         return fileOffset;
+    }
+
+
+    public void setRecordSize(int size) {
+        recordSize = size;
+    }
+
+
+    public int getRecordSize() {
+        return recordSize;
     }
 
 

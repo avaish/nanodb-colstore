@@ -8,6 +8,7 @@ import java.util.HashMap;
 import edu.caltech.nanodb.relations.ColumnIndexes;
 import edu.caltech.nanodb.relations.TableSchema;
 import edu.caltech.nanodb.server.EventDispatcher;
+import edu.caltech.nanodb.storage.writeahead.LogSequenceNumber;
 import edu.caltech.nanodb.transactions.TransactionManager;
 import org.apache.log4j.Logger;
 
@@ -248,8 +249,7 @@ public class StorageManager {
     public void finishInit() throws IOException {
         if (TransactionManager.isEnabled()) {
             logger.info("Initializing transaction manager.");
-            transactionManager =
-                new TransactionManager(this, bufferManager, fileManager);
+            transactionManager = new TransactionManager(this, fileManager);
 
             // This method opens the transaction-state file, performs any
             // necessary recovery operations, and so forth.
@@ -492,17 +492,18 @@ public class StorageManager {
      * This method closes a table file that is currently open, possibly flushing
      * any dirty pages to the table's storage in the process.
      *
-     * @param walFile the WAL file to sync to disk
+     * @param lsn All WAL data up to this value must be forced to disk and
+     *        sync'd.  This value may be one past the end of the current WAL
+     *        file during normal operation.
      *
-     * @throws IOException if an IO error occurs while attempting to sync the
-     *         WAL file to disk.  If this occurs, the database is probably
+     * @throws IOException if an IO error occurs while attempting to force the
+     *         WAL file to disk.  If a failure occurs, the database is probably
      *         going to be broken.
-    public void syncWALFile(DBFile walFile) throws IOException {
-        // Flush all open pages for the WAL file, then sync the file to disk.
-        bufferManager.flushDBFile(walFile);
-        fileManager.syncDBFile(walFile);
-    }
      */
+    public void forceWAL(LogSequenceNumber lsn) throws IOException {
+        // Flush all open pages for the WAL file, then sync the file to disk.
+        // TODO:  IMPLEMENT
+    }
 
 
     /*========================================================================

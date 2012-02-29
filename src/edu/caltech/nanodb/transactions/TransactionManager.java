@@ -5,7 +5,6 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import edu.caltech.nanodb.storage.BufferManager;
 import edu.caltech.nanodb.storage.DBFile;
 import edu.caltech.nanodb.storage.DBFileType;
 import edu.caltech.nanodb.storage.DBPage;
@@ -49,11 +48,8 @@ public class TransactionManager {
 
     
     private StorageManager storageManager;
-    
-    
-    private BufferManager bufferManager;
-    
-    
+
+
     private FileManager fileManager;
     
     
@@ -68,17 +64,15 @@ public class TransactionManager {
     private AtomicInteger nextTxnID;
 
 
-    public TransactionManager(StorageManager storageManager,
-        BufferManager bufferManager, FileManager fileManager) {
+    public TransactionManager(StorageManager storageManager, FileManager fileManager) {
 
         this.storageManager = storageManager;
-        this.bufferManager = bufferManager;
         this.fileManager = fileManager;
 
         this.nextTxnID = new AtomicInteger();
 
         // TODO:  Pass buffer manager to the WAL manager too
-        walManager = new WALManager(storageManager, bufferManager);
+        walManager = new WALManager(storageManager);
         storageManager.addFileTypeManager(DBFileType.WRITE_AHEAD_LOG_FILE, walManager);
     }
 
@@ -88,10 +82,13 @@ public class TransactionManager {
      * the transaction manager to use for providing transaction atomicity and
      * durability.
      *
+     * @return a {@code DBFile} object for the newly created and initialized
+     *         transaction-state file.
+     *
      * @throws IOException if the transaction-state file can't be created for
      *         some reason.
      */
-    public DBFile createTxnStateFile() throws IOException {
+    private TransactionStatePage createTxnStateFile() throws IOException {
         // Create a brand new transaction-state file for the Transaction Manager
         // to use.
 
@@ -104,18 +101,52 @@ public class TransactionManager {
 
         // Set the "next transaction ID" value to an initial default.
         txnState.setNextTransactionID(1);
+        nextTxnID.set(1);
 
         // Set the "first LSN" and "next LSN values to initial defaults.
         LogSequenceNumber lsn =
-            new LogSequenceNumber(0, WALManager.WAL_FILE_INITIAL_OFFSET);
+            new LogSequenceNumber(0, WALManager.OFFSET_FIRST_RECORD);
 
         txnState.setFirstLSN(lsn);
         txnState.setNextLSN(lsn);
+        // firstLSN = lsn;
 
+        // TODO:  Find a way to do this through the storage manager.
         fileManager.saveDBPage(dbpTxnState);
         fileManager.syncDBFile(dbfTxnState);
+        
+        return txnState;
+    }
 
-        return dbfTxnState;
+
+    private TransactionStatePage loadTxnStateFile() throws IOException {
+        DBFile dbfTxnState = storageManager.openDBFile(TXNSTATE_FILENAME);
+        DBPage dbpTxnState = storageManager.loadDBPage(dbfTxnState, 0);
+        TransactionStatePage txnState = new TransactionStatePage(dbpTxnState);
+
+        // Set the "next transaction ID" value properly.
+        nextTxnID.set(txnState.getNextTransactionID());
+
+        // Retrieve the "first LSN" and "next LSN values so we know the range of
+        // the write-ahead log that we need to apply for recovery.
+        // firstLSN = txnState.getFirstLSN();
+
+        return txnState;
+    }
+
+
+    private void storeTxnStateToFile() throws IOException {
+        DBFile dbfTxnState = storageManager.openDBFile(TXNSTATE_FILENAME);
+        DBPage dbpTxnState = storageManager.loadDBPage(dbfTxnState, 0);
+        TransactionStatePage txnState = new TransactionStatePage(dbpTxnState);
+        
+        txnState.setNextTransactionID(nextTxnID.get());
+        txnState.setFirstLSN(walManager.getFirstLSN());
+        txnState.setNextLSN(walManager.getNextLSN());
+
+        // TODO:  Find a way to do this through the storage manager.
+        fileManager.saveDBPage(dbpTxnState);
+        fileManager.syncDBFile(dbfTxnState);
     }
 
 
@@ -126,39 +157,39 @@ public class TransactionManager {
         // Read the transaction-state file so we can initialize the
         // Transaction Manager.
 
-        DBFile dbfTxnState;
+        TransactionStatePage txnState;
         try {
-            dbfTxnState = storageManager.openDBFile(TXNSTATE_FILENAME);
+            txnState = loadTxnStateFile();
         }
         catch (FileNotFoundException e) {
-            // TODO:  If we find any other files in the data directory, we
-            //        really should fail initialization, because the old files
-            //        may have been created without transaction processing...
+            // BUGBUG:  If we find any other files in the data directory, we
+            //          really should fail initialization, because the old files
+            //          may have been created without transaction processing...
 
             logger.info("Couldn't find transaction-state file " +
                 TXNSTATE_FILENAME + ", creating.");
 
-            dbfTxnState = createTxnStateFile();
+            txnState = createTxnStateFile();
         }
 
-        DBPage dbpTxnState = storageManager.loadDBPage(dbfTxnState, 0);
-        TransactionStatePage txnState = new TransactionStatePage(dbpTxnState);
+        // Perform recovery, and get the new "first LSN" value
 
-        // Set the "next transaction ID" value properly.
-        nextTxnID.set(txnState.getNextTransactionID());
-
-        // Retrieve the "first LSN" and "next LSN values so we know the range of
-        // the write-ahead log that we need to apply for recovery.
         LogSequenceNumber firstLSN = txnState.getFirstLSN();
         LogSequenceNumber nextLSN = txnState.getNextLSN();
 
-        // Perform recovery, and get the new "first LSN" value
-        // TODO:  This probably needs to be a "recovery info" object, because we need the next transaction-ID too.
-        LogSequenceNumber newFirstLSN = walManager.doRecovery(firstLSN, nextLSN);
+        WALManager.RecoveryInfo recoveryInfo =
+            walManager.doRecovery(firstLSN, nextLSN);
 
-        // TODO:  Set the "next transaction ID" value based on what recovery found
+        // Set the "next transaction ID" value based on what recovery found
+        int recNextTxnID = recoveryInfo.maxTransactionID + 1;
+        if (recNextTxnID != -1 && recNextTxnID + 1 > nextTxnID.get()) {
+            logger.info("Advancing NextTransactionID from " +
+                nextTxnID.get() + " to " + recNextTxnID);
+            nextTxnID.set(recNextTxnID);
+        }
 
-        // TODO:  Update and sync the transaction state if any changes were made.
+        // Update and sync the transaction state if any changes were made.
+        storeTxnStateToFile();
 
         // Register the component that manages indexes when tables are modified.
         EventDispatcher.getInstance().addCommandEventListener(
@@ -172,10 +203,11 @@ public class TransactionManager {
      * what transaction ID to start with the next time.
      *
      * @return the next transaction ID to use
-     */
+     *
     public int getNextTxnID() {
         return nextTxnID.get();
     }
+    */
 
 
     /**
@@ -245,8 +277,10 @@ public class TransactionManager {
         
         if (txnState.hasLoggedTxnStart()) {
             // Must record the transaction as committed to the write-ahead log.
+            // Then, we must force the WAL to include this commit record.
             try {
                 walManager.writeTxnRecord(WALRecordType.COMMIT_TXN);
+                storageManager.forceWAL(walManager.getNextLSN());
             }
             catch (IOException e) {
                 throw new TransactionException("Couldn't commit transaction " +
