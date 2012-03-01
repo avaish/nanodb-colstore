@@ -7,12 +7,14 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
-import edu.caltech.nanodb.storage.writeahead.LogSequenceNumber;
+import edu.caltech.nanodb.transactions.TransactionManager;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.client.SessionState;
+import edu.caltech.nanodb.storage.writeahead.LogSequenceNumber;
 
 
 /**
@@ -21,8 +23,6 @@ import edu.caltech.nanodb.client.SessionState;
  *
  * @todo Add integrity checks, e.g. to make sure every cached page's file
  *       appears in the collection of cached files.
- *
- * @todo Provide ways to close out files, i.e. flush them from the file-cache.
  */
 public class BufferManager {
 
@@ -136,15 +136,7 @@ public class BufferManager {
      * is currently working with, so that they don't continually need to be
      * reloaded.
      */
-    private LinkedHashMap<CachedPageInfo, DBPage> cachedDataPages;
-
-
-    /**
-     * This collection holds write-ahead log pages that the database is
-     * currently working with, so that they don't continually need to be
-     * reloaded.
-     */
-    private LinkedHashMap<CachedPageInfo, DBPage> cachedWALPages;
+    private LinkedHashMap<CachedPageInfo, DBPage> cachedPages;
 
 
     /**
@@ -182,10 +174,8 @@ public class BufferManager {
         cachedFiles = new LinkedHashMap<String, DBFile>();
 
         String replacementPolicy = configureReplacementPolicy();
-        cachedDataPages = new LinkedHashMap<CachedPageInfo, DBPage>(16, 0.75f,
+        cachedPages = new LinkedHashMap<CachedPageInfo, DBPage>(16, 0.75f,
             "lru".equals(replacementPolicy));
-
-        cachedWALPages = new LinkedHashMap<CachedPageInfo, DBPage>();
 
         totalBytesCached = 0;
         
@@ -286,7 +276,7 @@ public class BufferManager {
                 "File cache already contains file " + filename);
         }
         
-        // TODO:  If we want to keep a cap on how many files are opened, we
+        // NOTE:  If we want to keep a cap on how many files are opened, we
         //        would do that here.
 
         logger.debug(String.format( "Adding file %s to file-cache.", filename));
@@ -295,7 +285,7 @@ public class BufferManager {
     }
     
     
-    private void pinPage(DBPage dbPage) {
+    public void pinPage(DBPage dbPage) {
         // Make sure this page is pinned by the session so that we don't
         // flush it until the session is done with it.
         
@@ -326,7 +316,7 @@ public class BufferManager {
     }
 
 
-    private void unpinPage(DBPage dbPage) {
+    public void unpinPage(DBPage dbPage) {
         // If the page is pinned by the session then unpin it.
         int sessionID = SessionState.get().getSessionID();
         PinnedPageInfo pp = new PinnedPageInfo(sessionID, dbPage);
@@ -356,8 +346,38 @@ public class BufferManager {
     }
 
 
+    /**
+     * This method unpins all pages pinned by the current session.  This is
+     * generally done at the end of each transaction so that pages aren't
+     * pinned forever, and can actually be evicted from the buffer manager.
+     */
+    public void unpinAllPages() {
+        // Unpin all pages pinned by this session.
+        int sessionID = SessionState.get().getSessionID();
+
+        // Remove the set of pages pinned by this session, and save the
+        // return-value so we can iterate through it and unpin each page.
+        HashSet<PinnedPageInfo> pinnedBySession =
+            pinnedPagesBySessionID.remove(sessionID);
+
+        // If no pages pinned, we're done.
+        if (pinnedBySession == null)
+            return;
+
+        for (PinnedPageInfo pp : pinnedBySession) {
+            DBPage dbPage = pp.dbPage;
+
+            pinnedPages.remove(pp);
+            dbPage.decPinCount();
+            logger.debug(String.format("Session %d is unpinning page " +
+                "[%s,%d].  New pin-count is %d.", sessionID, dbPage.getDBFile(),
+                dbPage.getPageNo(), dbPage.getPinCount()));
+        }
+    }
+
+
     public DBPage getPage(DBFile dbFile, int pageNo) {
-        DBPage dbPage = cachedDataPages.get(new CachedPageInfo(dbFile, pageNo));
+        DBPage dbPage = cachedPages.get(new CachedPageInfo(dbFile, pageNo));
 
         logger.debug(String.format(
             "Requested page [%s,%d] is%s in page-cache.",
@@ -378,25 +398,21 @@ public class BufferManager {
             throw new IllegalArgumentException("dbPage cannot be null");
 
         DBFile dbFile = dbPage.getDBFile();
-        DBFileType fileType = dbFile.getType();
         int pageNo = dbPage.getPageNo();
 
         CachedPageInfo cpi = new CachedPageInfo(dbFile, pageNo);
-        if (cachedDataPages.containsKey(cpi)) {
+        if (cachedPages.containsKey(cpi)) {
             throw new IllegalStateException(String.format(
                 "Page cache already contains page [%s,%d]", dbFile, pageNo));
         }
-        
+
         logger.debug(String.format("Adding page [%s,%d] to page-cache.",
             dbFile, pageNo));
 
         int pageSize = dbPage.getPageSize();
         ensureSpaceAvailable(pageSize);
 
-        if (fileType == DBFileType.WRITE_AHEAD_LOG_FILE)
-            cachedWALPages.put(cpi, dbPage);
-        else
-            cachedDataPages.put(cpi, dbPage);
+        cachedPages.put(cpi, dbPage);
 
         // Make sure this page is pinned by the session so that we don't flush
         // it until the session is done with it.
@@ -427,11 +443,11 @@ public class BufferManager {
 
         ArrayList<DBPage> dirtyPages = new ArrayList<DBPage>();
 
-        if (!cachedDataPages.isEmpty()) {
+        if (!cachedPages.isEmpty()) {
             // The cache will be too large after adding this page.
 
             Iterator<Map.Entry<CachedPageInfo, DBPage>> entries =
-                cachedDataPages.entrySet().iterator();
+                cachedPages.entrySet().iterator();
 
             while (entries.hasNext() &&
                 bytesRequired + totalBytesCached > maxCacheSize) {
@@ -462,40 +478,208 @@ public class BufferManager {
         }
 
         // If we have any dirty data pages, they need to be flushed to disk.
-        // However, we must ensure that we follow the Write Ahead Logging Rule,
-        // by forcing the WAL out to disk for the maximum page-LSN of any of
-        // these dirty pages.
-        if (!dirtyPages.isEmpty()) {
-            // First, find out how much of the WAL must be forced to allow
-            // these pages to be written back to disk.
-            LogSequenceNumber maxLSN = null;
-            for (DBPage dbPage : dirtyPages) {
-                LogSequenceNumber pageLSN = dbPage.getPageLSN();
-                if (maxLSN == null || pageLSN.compareTo(maxLSN) > 0)
-                    maxLSN = pageLSN;
-            }
-            
-            // Force the WAL out to the specified point.
-            StorageManager.getInstance().forceWAL(maxLSN);
-            
-            // Finally, we can write out each dirty page.
-            for (DBPage dbPage : dirtyPages) {
-                fileManager.saveDBPage(dbPage);
-                dbPage.invalidate();
-            }
-        }
+        writeDirtyPages(dirtyPages, /* invalidate */ true);
 
         if (bytesRequired + totalBytesCached > maxCacheSize)
             logger.warn("Buffer manager is currently using too much space.");
     }
 
 
+    private void writeDirtyPages(List<DBPage> dirtyPages, boolean invalidate)
+        throws IOException {
+
+        // Make sure that we follow the Write Ahead Logging Rule, by forcing
+        // the WAL out to disk for the maximum page-LSN of any of these pages.
+        if (!dirtyPages.isEmpty()) {
+            // First, find out how much of the WAL must be forced to allow
+            // these pages to be written back to disk.
+            LogSequenceNumber maxLSN = null;
+            for (DBPage dbPage : dirtyPages) {
+                DBFileType type = dbPage.getDBFile().getType();
+                if (type == DBFileType.WRITE_AHEAD_LOG_FILE ||
+                    type == DBFileType.TXNSTATE_FILE) {
+                    // We don't log changes to these files.
+                    continue;
+                }
+                
+                LogSequenceNumber pageLSN = dbPage.getPageLSN();
+                if (maxLSN == null || pageLSN.compareTo(maxLSN) > 0)
+                    maxLSN = pageLSN;
+            }
+
+            if (maxLSN != null) {
+                // Force the WAL out to the specified point.
+                TransactionManager txnMgr =
+                    StorageManager.getInstance().getTransactionManager();
+                if (txnMgr != null)
+                    txnMgr.forceWAL(maxLSN);
+            }
+
+            // Finally, we can write out each dirty page.
+            for (DBPage dbPage : dirtyPages) {
+                fileManager.saveDBPage(dbPage);
+
+                if (invalidate)
+                    dbPage.invalidate();
+            }
+        }
+    }
+
+
+    /**
+     * This method writes all dirty pages in the specified file, optionally
+     * syncing the file after performing the write.  The pages are not removed
+     * from the buffer manager after writing them; their dirty state is simply
+     * cleared.
+     *
+     * @param dbFile the file whose dirty pages should be written to disk
+     *
+     * @param minPageNo dirty pages with a page-number less than this value
+     *        will not be written to disk
+     *
+     * @param maxPageNo dirty pages with a page-number greater than this value
+     *        will not be written to disk
+     *
+     * @param sync If true then the database file will be sync'd to disk;
+     *        if false then no sync will occur.  The sync will always occur,
+     *        in case dirty pages had previously been flushed to disk without
+     *        syncing.
+     *
+     * @throws IOException if an IO error occurs while updating the write-ahead
+     *         log, or while writing the file's contents.
+     */
+    public void writeDBFile(DBFile dbFile, int minPageNo, int maxPageNo,
+                            boolean sync) throws IOException {
+
+        logger.info(String.format("Writing all dirty pages for file %s to disk%s.",
+            dbFile, (sync ? "(with sync)" : "")));
+
+        Iterator<Map.Entry<CachedPageInfo, DBPage>> entries =
+            cachedPages.entrySet().iterator();
+
+        ArrayList<DBPage> dirtyPages = new ArrayList<DBPage>();
+
+        while (entries.hasNext()) {
+            Map.Entry<CachedPageInfo, DBPage> entry = entries.next();
+
+            CachedPageInfo info = entry.getKey();
+            if (dbFile.equals(info.dbFile)) {
+                DBPage oldPage = entry.getValue();
+                if (!oldPage.isDirty())
+                    continue;
+
+                int pageNo = oldPage.getPageNo();
+                if (pageNo < minPageNo || pageNo > maxPageNo)
+                    continue;
+
+                logger.debug(String.format("    Saving page [%s,%d] to disk.",
+                    oldPage.getDBFile(), oldPage.getPageNo()));
+
+                dirtyPages.add(oldPage);
+            }
+        }
+
+        writeDirtyPages(dirtyPages, /* invalidate */ false);
+
+        if (sync) {
+            logger.debug("Syncing file " + dbFile);
+            fileManager.syncDBFile(dbFile);
+        }
+    }
+
+
+    /**
+     * This method writes all dirty pages in the specified file, optionally
+     * syncing the file after performing the write.  The pages are not removed
+     * from the buffer manager after writing them; their dirty state is simply
+     * cleared.
+     *
+     * @param dbFile the file whose dirty pages should be written to disk
+     *
+     * @param sync If true then the database file will be sync'd to disk;
+     *        if false then no sync will occur.  The sync will always occur,
+     *        in case dirty pages had previously been flushed to disk without
+     *        syncing.
+     *
+     * @throws IOException if an IO error occurs while updating the write-ahead
+     *         log, or while writing the file's contents.
+     */
+    public void writeDBFile(DBFile dbFile, boolean sync) throws IOException {
+        writeDBFile(dbFile, 0, Integer.MAX_VALUE, sync);
+    }
+
+
+    /**
+     * This method writes all dirty pages in the buffer manager to disk.  The
+     * pages are not removed from the buffer manager after writing them; their
+     * dirty state is simply cleared.
+     * 
+     * @param sync if true, this method will sync all files in which dirty pages
+     *        were found, with the exception of WAL files and the
+     *        transaction-state file.  If false, no file syncing will be
+     *        performed.
+     *
+     * @throws IOException if an IO error occurs while updating the write-ahead
+     *         log, or while writing the file's contents.
+     */
+    public void writeAll(boolean sync) throws IOException {
+        logger.info("Writing ALL dirty pages in the Buffer Manager to disk.");
+
+        Iterator<Map.Entry<CachedPageInfo, DBPage>> entries =
+            cachedPages.entrySet().iterator();
+
+        ArrayList<DBPage> dirtyPages = new ArrayList<DBPage>();
+        HashSet<DBFile> dirtyFiles = new HashSet<DBFile>();
+
+        while (entries.hasNext()) {
+            Map.Entry<CachedPageInfo, DBPage> entry = entries.next();
+
+            DBPage oldPage = entry.getValue();
+            if (!oldPage.isDirty())
+                continue;
+
+            DBFile dbFile = oldPage.getDBFile();
+            DBFileType type = dbFile.getType();
+            if (type != DBFileType.WRITE_AHEAD_LOG_FILE &&
+                type != DBFileType.TXNSTATE_FILE) {
+                dirtyFiles.add(oldPage.getDBFile());
+            }
+
+            logger.debug(String.format("    Saving page [%s,%d] to disk.",
+                dbFile, oldPage.getPageNo()));
+
+            dirtyPages.add(oldPage);
+        }
+
+        writeDirtyPages(dirtyPages, /* invalidate */ false);
+        
+        if (sync) {
+            logger.debug("Synchronizing all files containing dirty pages to disk.");
+            for (DBFile dbFile : dirtyFiles)
+                fileManager.syncDBFile(dbFile);
+        }
+    }
+
+    /**
+     * This method removes all cached pages in the specified file from the
+     * buffer manager, writing out any dirty pages in the process.  This method
+     * is not generally recommended to be used, as it basically defeats the
+     * purpose of the buffer manager in the first place; rather, the
+     * {@link #writeDBFile} method should be used instead.
+     *
+     * @param dbFile the file whose pages should be flushed from the cache
+     *
+     * @throws IOException if an IO error occurs while updating the write-ahead
+     *         log, or the file's contents
+     */
     public void flushDBFile(DBFile dbFile) throws IOException {
         logger.info("Flushing all pages for file " + dbFile +
             " from the Buffer Manager.");
 
         Iterator<Map.Entry<CachedPageInfo, DBPage>> entries =
-            cachedDataPages.entrySet().iterator();
+            cachedPages.entrySet().iterator();
+
+        ArrayList<DBPage> dirtyPages = new ArrayList<DBPage>();
 
         while (entries.hasNext()) {
             Map.Entry<CachedPageInfo, DBPage> entry = entries.next();
@@ -509,24 +693,43 @@ public class BufferManager {
                     oldPage.getDBFile(), oldPage.getPageNo()));
 
                 if (oldPage.isDirty()) {
-                    logger.debug("    Evicted page is dirty; saving to disk.");
-                    fileManager.saveDBPage(oldPage);
+                    logger.debug("    Evicted page is dirty; must save to disk.");
+                    dirtyPages.add(oldPage);
+                }
+                else {
+                    // If the page is unmodified, we don't need to save it.
+                    // Just invalidate it so nobody can use the object anymore.
+                    oldPage.invalidate();
                 }
 
                 // Remove the page from the cache.
                 entries.remove();
                 totalBytesCached -= oldPage.getPageSize();
-                oldPage.invalidate();
             }
         }
+
+        writeDirtyPages(dirtyPages, /* invalidate */ true);
     }
 
 
+    /**
+     * This method removes all cached pages from the buffer manager, writing
+     * out any dirty pages in the process.  This method is not generally
+     * recommended to be used, as it basically defeats the purpose of the
+     * buffer manager in the first place; rather, the {@link #writeAll} method
+     * should be used instead.  However, this method is useful to cause certain
+     * performance issues to manifest with individual commands.
+     *
+     * @throws IOException if an IO error occurs while updating the write-ahead
+     *         log, or the file's contents
+     */
     public void flushAll() throws IOException {
         logger.info("Flushing ALL database pages from the Buffer Manager.");
 
         Iterator<Map.Entry<CachedPageInfo, DBPage>> entries =
-            cachedDataPages.entrySet().iterator();
+            cachedPages.entrySet().iterator();
+
+        ArrayList<DBPage> dirtyPages = new ArrayList<DBPage>();
 
         while (entries.hasNext()) {
             Map.Entry<CachedPageInfo, DBPage> entry = entries.next();
@@ -538,15 +741,21 @@ public class BufferManager {
                 oldPage.getDBFile(), oldPage.getPageNo()));
 
             if (oldPage.isDirty()) {
-                logger.debug("    Evicted page is dirty; saving to disk.");
-                fileManager.saveDBPage(oldPage);
+                logger.debug("    Evicted page is dirty; must save to disk.");
+                dirtyPages.add(oldPage);
+            }
+            else {
+                // If the page is unmodified, we don't need to save it.
+                // Just invalidate it so nobody can use the object anymore.
+                oldPage.invalidate();
             }
 
             // Remove the page from the cache.
             entries.remove();
             totalBytesCached -= oldPage.getPageSize();
-            oldPage.invalidate();
         }
+
+        writeDirtyPages(dirtyPages, /* invalidate */ true);
     }
     
     

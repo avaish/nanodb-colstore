@@ -8,6 +8,7 @@ import edu.caltech.nanodb.commands.CommitTransactionCommand;
 import edu.caltech.nanodb.commands.RollbackTransactionCommand;
 import edu.caltech.nanodb.server.CommandEventListener;
 import edu.caltech.nanodb.server.EventDispatchException;
+import edu.caltech.nanodb.storage.BufferManager;
 import edu.caltech.nanodb.storage.StorageManager;
 import org.apache.log4j.Logger;
 
@@ -22,6 +23,19 @@ public class TransactionStateUpdater implements CommandEventListener {
     /** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(TransactionStateUpdater.class);
 
+    
+    private TransactionManager transactionManager;
+
+
+    private BufferManager bufferManager;
+    
+    
+    public TransactionStateUpdater(TransactionManager transactionManager,
+                                   BufferManager bufferManager) {
+        this.transactionManager = transactionManager;
+        this.bufferManager = bufferManager;
+    }
+    
     
     @Override
     public void beforeCommandExecuted(Command cmd) throws EventDispatchException {
@@ -44,9 +58,7 @@ public class TransactionStateUpdater implements CommandEventListener {
             // Start one!
             try {
                 logger.debug("No transaction is in progress; auto-starting one!");
-                TransactionManager txnMgr =
-                    StorageManager.getInstance().getTransactionManager();
-                txnMgr.startTransaction(false);
+                transactionManager.startTransaction(false);
             }
             catch (TransactionException e) {
                 throw new EventDispatchException(e);
@@ -75,14 +87,16 @@ public class TransactionStateUpdater implements CommandEventListener {
                 try {
                     logger.debug("An auto-started transaction is in progress;" +
                         " committing it!");
-                    TransactionManager txnMgr =
-                        StorageManager.getInstance().getTransactionManager();
-                    txnMgr.commitTransaction();
+                    transactionManager.commitTransaction();
                 }
                 catch (TransactionException e) {
                     throw new EventDispatchException(e);
                 }
             }
         }
+
+        // Always unpin all pages that the client has pinned during the command.
+        // This way they can be evicted from the cache if necessary.
+        bufferManager.unpinAllPages();
     }
 }

@@ -1,18 +1,18 @@
 package edu.caltech.nanodb.storage.writeahead;
 
 
-import edu.caltech.nanodb.storage.BufferManager;
-import org.apache.log4j.Logger;
-
 import java.io.DataOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 
-import java.util.HashMap;
+import edu.caltech.nanodb.transactions.TransactionManager;
+import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.client.SessionState;
+import edu.caltech.nanodb.storage.BufferManager;
 import edu.caltech.nanodb.storage.DBFile;
 import edu.caltech.nanodb.storage.DBFileReader;
+import edu.caltech.nanodb.storage.DBFileType;
 import edu.caltech.nanodb.storage.DBFileWriter;
 import edu.caltech.nanodb.storage.DBPage;
 import edu.caltech.nanodb.storage.StorageManager;
@@ -70,111 +70,23 @@ public class WALManager {
     public static final int OFFSET_FIRST_RECORD = 6;
 
 
-
-    
-    public static class RecoveryInfo {
-        /** This is the log sequence number to start recovery processing from. */
-        public LogSequenceNumber firstLSN;
-
-
-        /**
-         * This is the "next LSN", one past the last valid log sequence number
-         * found in the write-ahead logs.
-         */
-        public LogSequenceNumber nextLSN;
-
-
-        /**
-         * This is the maximum transaction ID seen in the write-ahead logs.
-         * The next transaction ID used by the database system will be one more
-         * than this value.
-         */
-        public int maxTransactionID;
-        
-        /**
-         * This is the set of incomplete transactions found during recovery
-         * processing, along with the last log sequence number seen for each
-         * transaction.
-         */
-        public HashMap<Integer, LogSequenceNumber> incompleteTxns;
-
-
-        public RecoveryInfo(LogSequenceNumber firstLSN,
-                            LogSequenceNumber nextLSN) {
-
-            this.firstLSN = firstLSN;
-            this.nextLSN = nextLSN;
-
-            this.maxTransactionID = -1;
-
-            incompleteTxns = new HashMap<Integer, LogSequenceNumber>();
-        }
-
-
-        /**
-         * This helper method updates the recovery information with the
-         * specified transaction ID and log sequence number.  The requirement is
-         * that this method is only used during redo processing; we expect that
-         * log sequence numbers are monotonically increasing.
-         *
-         * @param transactionID the ID of the transaction that appears in the
-         *        current write-ahead log record
-         *
-         * @param lsn the log sequence number of the current write-ahead log
-         *        record
-         */
-        public void updateInfo(int transactionID, LogSequenceNumber lsn) {
-            incompleteTxns.put(transactionID, lsn);
-
-            if (transactionID > maxTransactionID)
-                maxTransactionID = transactionID;
-        }
-        
-        
-        public LogSequenceNumber getLastLSN(int transactionID) {
-            return incompleteTxns.get(transactionID);
-        }
-
-
-        /**
-         * This helper function records that the specified transaction is
-         * completed in the write-ahead log.  Specifically, the transaction is
-         * removed from the set of incomplete transactions.
-         *
-         * @param transactionID the transaction to record as completed
-         */
-        public void recordTxnCompleted(int transactionID) {
-            incompleteTxns.remove(transactionID);
-        }
-
-
-        /**
-         * Returns true if there are any incomplete transactions, or false if
-         * all transactions are completed.
-         *
-         * @return true if there are any incomplete transactions, or false if
-         *         all transactions are completed.
-         */
-        public boolean hasIncompleteTxns() {
-            return !incompleteTxns.isEmpty();
-        }
-
-
-        /**
-         * Returns true if the specified transaction is complete, or false if
-         * it appears in the set of incomplete transactions.
-         *
-         * @param transactionID the transaction to check for completion status
-         *
-         * @return true if the transaction is complete, or false otherwise
-         */
-        public boolean isTxnComplete(int transactionID) {
-            return !incompleteTxns.containsKey(transactionID);
-        }
+    /**
+     * This static helper method simply takes a WAL file number and translates
+     * it into a corresponding filename based on that number.
+     *
+     * @param fileNo the WAL file number to get the filename for
+     *
+     * @return the string file-name for the corresponding WAL file
+     */
+    public static String getWALFileName(int fileNo) {
+        return String.format(WAL_FILENAME_PATTERN, fileNo);
     }
 
 
     private StorageManager storageManager;
+    
+    
+    private BufferManager bufferManager;
 
 
     /**
@@ -191,8 +103,33 @@ public class WALManager {
     private LogSequenceNumber nextLSN;
 
 
-    public WALManager(StorageManager storageManager) {
+    public WALManager(StorageManager storageManager,
+                      BufferManager bufferManager) {
         this.storageManager = storageManager;
+        this.bufferManager = bufferManager;
+    }
+
+
+    public DBFile createWALFile(int fileNo) throws IOException {
+        String filename = getWALFileName(fileNo);
+        logger.debug("Creating WAL file " + filename);
+        return storageManager.createDBFile(filename, DBFileType.WRITE_AHEAD_LOG_FILE);
+    }
+
+
+    public DBFile openWALFile(int fileNo) throws IOException {
+        String filename = getWALFileName(fileNo);
+        logger.debug("Opening WAL file " + filename);
+
+        DBFile dbFile = storageManager.openDBFile(filename);
+        DBFileType type = dbFile.getType();
+
+        if (type != DBFileType.WRITE_AHEAD_LOG_FILE) {
+            throw new IOException(String.format(
+                "File %s is not of WAL-file type.", filename));
+        }
+
+        return dbFile;
     }
 
 
@@ -237,17 +174,19 @@ public class WALManager {
         performRedo(recoveryInfo);
         performUndo(recoveryInfo);
 
-        // Force the WAL out, up to the nextLSN value.  Then, flush and sync all
-        // table files.
-        storageManager.forceWAL(nextLSN);
-        storageManager.closeAllOpenTables();  // TODO:  not just tables!  and sync them too!
+        TransactionManager txnMgr = storageManager.getTransactionManager();
+
+        // Force the WAL out, up to the nextLSN value.  Then, write all dirty
+        // data pages, and sync all of the affected files.
+        txnMgr.forceWAL(nextLSN);
+        bufferManager.writeAll(true);
 
         // At this point, all files in the database should be in sync with
         // the entirety of the write-ahead log.  So, update the firstLSN value
         // and update the transaction state file again.  (This won't write out
         // any WAL records, but it will write and sync the txn-state file.)
         firstLSN = nextLSN;
-        storageManager.forceWAL(nextLSN);
+        txnMgr.forceWAL(nextLSN);
 
         recoveryInfo.firstLSN = firstLSN;
         recoveryInfo.nextLSN = nextLSN;
@@ -547,9 +486,15 @@ public class WALManager {
 
 
     /**
-     * Opens the WAL file specified by the given log sequence number, and seeks
-     * to the offset specified in the log sequence number.
-     * 
+     * This method opens the WAL file specified in the passed-in Log Sequence
+     * Number, wraps it with a {@link DBFileWriter} so that it can be read and
+     * written, and then seeks to the specified file offset.
+     *
+     * Because we are writing, the file may not yet exist.  In that case, this
+     * method will also create a new WAL file for the specified file number,
+     * initializing it with the proper values, and then seeking to the location
+     * where the first WAL record may be written.
+     *
      * @param lsn The log sequence number specifying the WAL file and the offset
      *            in the WAL file to go to.
      *
@@ -567,10 +512,11 @@ public class WALManager {
 
         DBFile walFile;
         try {
-            walFile = storageManager.openWALFile(fileNo);
+            walFile = openWALFile(fileNo);
         }
         catch (FileNotFoundException e) {
-            walFile = storageManager.createWALFile(fileNo);
+            logger.debug("WAL file doesn't exist!  WAL is expanding into a new file.");
+            walFile = createWALFile(fileNo);
             // TODO:  Write the previous WAL file's last file-offset into the new WAL file's start.
         }
 
@@ -581,19 +527,36 @@ public class WALManager {
     }
 
 
+    /**
+     * This method opens the WAL file specified in the passed-in Log Sequence
+     * Number, wraps it with a {@link DBFileReader} so that it can be read from,
+     * and then seeks to the specified file offset.
+     *
+     * Since we are reading, the expectation is that the file already
+     * exists, so a {@link java.io.FileNotFoundException} will be thrown if it
+     * does not exist.
+     *
+     * @param lsn The log sequence number specifying the WAL file and the offset
+     *            in the WAL file to go to.
+     *
+     * @return the WAL file, with the file position moved to the specified
+     *         offset.
+     *
+     * @throws IOException if an IO error occurs while opening the WAL file,
+     *         such as the required file not actually existing.
+     */
     private DBFileReader getWALFileReader(LogSequenceNumber lsn)
         throws IOException {
 
         int fileNo = lsn.getLogFileNo();
         int offset = lsn.getFileOffset();
 
-        DBFile walFile = storageManager.openWALFile(fileNo);
+        DBFile walFile = openWALFile(fileNo);
         DBFileReader reader = new DBFileReader(walFile);
         reader.setPosition(offset);
 
         return reader;
     }
-
 
 
     /**
@@ -659,17 +622,6 @@ public class WALManager {
 
         nextLSN = computeNextLSN(nextLSN.getLogFileNo(), walWriter.getPosition());
         logger.debug("Next-LSN value is now " + nextLSN);
-
-        // In the case of committing, we need to sync the write-ahead log file
-        // to the disk so that we can actually report the transaction as
-        // "committed".  We do this after updating the nextLSN value so that we
-        // can guarantee that the *entire* commit-record is written to disk.
-        if (type == WALRecordType.COMMIT_TXN) {
-            // Sync the write-ahead log to disk, up to the LSN of the commit
-            // record in the WAL.
-            storageManager.forceWAL(nextLSN);
-        }
-
     }
 
 

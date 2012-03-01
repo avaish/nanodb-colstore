@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
 
-import edu.caltech.nanodb.transactions.TransactionManager;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.qeval.ColumnStats;
@@ -74,13 +73,6 @@ public class HeapFileTableManager implements TableManager {
 
 
     /**
-     * The table manager also uses the transaction manager a lot, so this is a
-     * cached reference to the singleton transaction manager instance.
-     */
-    private TransactionManager txnManager;
-
-
-    /**
      * A singleton instance of the blocked table-reader for heap files.  This
      * is initialized the first time {@link #getBlockedReader} is called.
      */
@@ -101,9 +93,6 @@ public class HeapFileTableManager implements TableManager {
             throw new IllegalArgumentException("storageManager cannot be null");
 
         this.storageManager = storageManager;
-
-        if (TransactionManager.isEnabled())
-            txnManager = storageManager.getTransactionManager();
     }
 
 
@@ -192,8 +181,7 @@ public class HeapFileTableManager implements TableManager {
         tblFileInfo.setStats(stats);
         HeaderPage.setTableStats(headerPage, tblFileInfo);
 
-        if (txnManager != null)
-            txnManager.recordPageUpdate(headerPage);
+        storageManager.releaseDBPage(headerPage);
     }
 
 
@@ -386,6 +374,8 @@ public class HeapFileTableManager implements TableManager {
         // Read in the table's statistics.
         tblFileInfo.setStats(HeaderPage.getTableStats(headerPage, tblFileInfo));
         logger.debug(tblFileInfo.getStats());
+
+        storageManager.releaseDBPage(headerPage);
     }
 
 
@@ -471,6 +461,7 @@ public class HeapFileTableManager implements TableManager {
 
     @Override
     public void beforeCloseTable(TableFileInfo tblFileInfo) throws IOException {
+        // Do nothing.
     }
 
 
@@ -521,6 +512,9 @@ public class HeapFileTableManager implements TableManager {
                     return new HeapFilePageTuple(tblFileInfo, dbPage, iSlot,
                         offset);
                 }
+
+                // If we got here, the page has no tuples.  Release the page.
+                storageManager.releaseDBPage(dbPage);
             }
         }
         catch (EOFException e) {
@@ -627,7 +621,11 @@ public class HeapFileTableManager implements TableManager {
             // tuple in that page.
 
             try {
-                dbPage = storageManager.loadDBPage(dbFile, dbPage.getPageNo() + 1);
+                DBPage nextDBPage =
+                    storageManager.loadDBPage(dbFile, dbPage.getPageNo() + 1);
+                storageManager.releaseDBPage(dbPage);
+                dbPage = nextDBPage;
+
                 nextSlot = 0;
             }
             catch (EOFException e) {
@@ -715,6 +713,7 @@ public class HeapFileTableManager implements TableManager {
 
             // If we reached this point then the page doesn't have enough
             // space, so go on to the next data page.
+            storageManager.releaseDBPage(dbPage);
             dbPage = null;
             pageNo++;
         }
@@ -738,8 +737,7 @@ public class HeapFileTableManager implements TableManager {
             dbPage, slot, tupOffset, tup);
 
         DataPage.sanityCheck(dbPage);
-        if (txnManager != null)
-            txnManager.recordPageUpdate(dbPage);
+        storageManager.releaseDBPage(dbPage);
 
         return pageTup;
     }
@@ -775,8 +773,7 @@ public class HeapFileTableManager implements TableManager {
 
         DBPage dbPage = ptup.getDBPage();
         DataPage.sanityCheck(dbPage);
-        if (txnManager != null)
-            txnManager.recordPageUpdate(dbPage);
+        storageManager.releaseDBPage(dbPage);
     }
 
 
@@ -796,8 +793,7 @@ public class HeapFileTableManager implements TableManager {
 
         DataPage.sanityCheck(dbPage);
 
-        if (txnManager != null)
-            txnManager.recordPageUpdate(dbPage);
+        storageManager.releaseDBPage(dbPage);
     }
 
 
@@ -851,7 +847,9 @@ public class HeapFileTableManager implements TableManager {
             }
 
             // Done with this data page.  Move on to the next one.
-            dbPage = blockedReader.getNextDataPage(tblFileInfo, dbPage);
+            DBPage nextDBPage = blockedReader.getNextDataPage(tblFileInfo, dbPage);
+            storageManager.releaseDBPage(dbPage);
+            dbPage = nextDBPage;
         }
 
         float avgTupleSize = 0;
@@ -889,8 +887,7 @@ public class HeapFileTableManager implements TableManager {
         DBPage headerPage = storageManager.loadDBPage(dbFile, 0);
         HeaderPage.setTableStats(headerPage, tblFileInfo);
 
-        if (txnManager != null)
-            txnManager.recordPageUpdate(headerPage);
+        storageManager.releaseDBPage(headerPage);
     }
 
 

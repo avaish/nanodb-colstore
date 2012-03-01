@@ -5,21 +5,17 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 
-import edu.caltech.nanodb.relations.ColumnIndexes;
-import edu.caltech.nanodb.relations.TableSchema;
-import edu.caltech.nanodb.server.EventDispatcher;
-import edu.caltech.nanodb.storage.writeahead.LogSequenceNumber;
-import edu.caltech.nanodb.transactions.TransactionManager;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.indexes.IndexFileInfo;
 import edu.caltech.nanodb.indexes.IndexManager;
-
 import edu.caltech.nanodb.relations.TableConstraintType;
-
+import edu.caltech.nanodb.relations.TableSchema;
+import edu.caltech.nanodb.server.EventDispatcher;
 import edu.caltech.nanodb.storage.btreeindex.BTreeIndexManager;
 import edu.caltech.nanodb.storage.heapfile.HeapFileTableManager;
 import edu.caltech.nanodb.storage.writeahead.WALManager;
+import edu.caltech.nanodb.transactions.TransactionManager;
 
 
 /**
@@ -249,7 +245,7 @@ public class StorageManager {
     public void finishInit() throws IOException {
         if (TransactionManager.isEnabled()) {
             logger.info("Initializing transaction manager.");
-            transactionManager = new TransactionManager(this, fileManager);
+            transactionManager = new TransactionManager(this, bufferManager);
 
             // This method opens the transaction-state file, performs any
             // necessary recovery operations, and so forth.
@@ -455,54 +451,13 @@ public class StorageManager {
     }
 
 
-    /*========================================================================
-     * CODE RELATED TO THE WRITE-AHEAD LOG
-     */
+    public void releaseDBPage(DBPage dbPage) throws IOException {
+        // If the page is dirty, record its changes to the write-ahead log.
+        if (transactionManager != null)
+            transactionManager.recordPageUpdate(dbPage);
 
-
-    public static String getWALFileName(int fileNo) {
-        return String.format(WALManager.WAL_FILENAME_PATTERN, fileNo);
-    }
-
-
-    public DBFile createWALFile(int fileNo) throws IOException {
-        String filename = getWALFileName(fileNo);
-        logger.debug("Creating WAL file " + filename);
-        return createDBFile(filename, DBFileType.WRITE_AHEAD_LOG_FILE);
-    }
-
-
-    public DBFile openWALFile(int fileNo) throws IOException {
-        String filename = getWALFileName(fileNo);
-        logger.debug("Opening WAL file " + filename);
-
-        DBFile dbFile = openDBFile(filename);
-        DBFileType type = dbFile.getType();
-
-        if (type != DBFileType.WRITE_AHEAD_LOG_FILE) {
-            throw new IOException(String.format(
-                "File %s is not of WAL-file type.", filename));
-        }
-
-        return dbFile;
-    }
-
-
-    /**
-     * This method closes a table file that is currently open, possibly flushing
-     * any dirty pages to the table's storage in the process.
-     *
-     * @param lsn All WAL data up to this value must be forced to disk and
-     *        sync'd.  This value may be one past the end of the current WAL
-     *        file during normal operation.
-     *
-     * @throws IOException if an IO error occurs while attempting to force the
-     *         WAL file to disk.  If a failure occurs, the database is probably
-     *         going to be broken.
-     */
-    public void forceWAL(LogSequenceNumber lsn) throws IOException {
-        // Flush all open pages for the WAL file, then sync the file to disk.
-        // TODO:  IMPLEMENT
+        // Finally, unpin the page so that it may be evicted.
+        bufferManager.unpinPage(dbPage);
     }
 
 

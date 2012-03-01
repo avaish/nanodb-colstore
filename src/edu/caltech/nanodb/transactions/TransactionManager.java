@@ -5,16 +5,20 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import edu.caltech.nanodb.storage.DBFile;
-import edu.caltech.nanodb.storage.DBFileType;
-import edu.caltech.nanodb.storage.DBPage;
-import edu.caltech.nanodb.storage.FileManager;
-import edu.caltech.nanodb.storage.StorageManager;
-import edu.caltech.nanodb.storage.writeahead.LogSequenceNumber;
 import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.client.SessionState;
+
 import edu.caltech.nanodb.server.EventDispatcher;
+
+import edu.caltech.nanodb.storage.BufferManager;
+import edu.caltech.nanodb.storage.DBFile;
+import edu.caltech.nanodb.storage.DBFileType;
+import edu.caltech.nanodb.storage.DBPage;
+import edu.caltech.nanodb.storage.StorageManager;
+
+import edu.caltech.nanodb.storage.writeahead.LogSequenceNumber;
+import edu.caltech.nanodb.storage.writeahead.RecoveryInfo;
 import edu.caltech.nanodb.storage.writeahead.WALManager;
 import edu.caltech.nanodb.storage.writeahead.WALRecordType;
 
@@ -50,7 +54,7 @@ public class TransactionManager {
     private StorageManager storageManager;
 
 
-    private FileManager fileManager;
+    private BufferManager bufferManager;
     
     
     private WALManager walManager;
@@ -64,15 +68,21 @@ public class TransactionManager {
     private AtomicInteger nextTxnID;
 
 
-    public TransactionManager(StorageManager storageManager, FileManager fileManager) {
+    /**
+     * This is the last value of nextLSN saved to the transaction-state file.
+     */
+    private LogSequenceNumber txnStateNextLSN;
+
+
+    public TransactionManager(StorageManager storageManager,
+                              BufferManager bufferManager) {
 
         this.storageManager = storageManager;
-        this.fileManager = fileManager;
+        this.bufferManager = bufferManager;
 
         this.nextTxnID = new AtomicInteger();
 
-        // TODO:  Pass buffer manager to the WAL manager too
-        walManager = new WALManager(storageManager);
+        walManager = new WALManager(storageManager, bufferManager);
         storageManager.addFileTypeManager(DBFileType.WRITE_AHEAD_LOG_FILE, walManager);
     }
 
@@ -109,12 +119,10 @@ public class TransactionManager {
 
         txnState.setFirstLSN(lsn);
         txnState.setNextLSN(lsn);
-        // firstLSN = lsn;
+        txnStateNextLSN = lsn;
 
-        // TODO:  Find a way to do this through the storage manager.
-        fileManager.saveDBPage(dbpTxnState);
-        fileManager.syncDBFile(dbfTxnState);
-        
+        bufferManager.writeDBFile(dbfTxnState, /* sync */ true);
+
         return txnState;
     }
 
@@ -129,7 +137,7 @@ public class TransactionManager {
 
         // Retrieve the "first LSN" and "next LSN values so we know the range of
         // the write-ahead log that we need to apply for recovery.
-        // firstLSN = txnState.getFirstLSN();
+        txnStateNextLSN = txnState.getNextLSN();
 
         return txnState;
     }
@@ -139,14 +147,12 @@ public class TransactionManager {
         DBFile dbfTxnState = storageManager.openDBFile(TXNSTATE_FILENAME);
         DBPage dbpTxnState = storageManager.loadDBPage(dbfTxnState, 0);
         TransactionStatePage txnState = new TransactionStatePage(dbpTxnState);
-        
+
         txnState.setNextTransactionID(nextTxnID.get());
         txnState.setFirstLSN(walManager.getFirstLSN());
-        txnState.setNextLSN(walManager.getNextLSN());
+        txnState.setNextLSN(txnStateNextLSN);
 
-        // TODO:  Find a way to do this through the storage manager.
-        fileManager.saveDBPage(dbpTxnState);
-        fileManager.syncDBFile(dbfTxnState);
+        bufferManager.writeDBFile(dbfTxnState, /* sync */ true);
     }
 
 
@@ -177,8 +183,7 @@ public class TransactionManager {
         LogSequenceNumber firstLSN = txnState.getFirstLSN();
         LogSequenceNumber nextLSN = txnState.getNextLSN();
 
-        WALManager.RecoveryInfo recoveryInfo =
-            walManager.doRecovery(firstLSN, nextLSN);
+        RecoveryInfo recoveryInfo = walManager.doRecovery(firstLSN, nextLSN);
 
         // Set the "next transaction ID" value based on what recovery found
         int recNextTxnID = recoveryInfo.maxTransactionID + 1;
@@ -193,7 +198,7 @@ public class TransactionManager {
 
         // Register the component that manages indexes when tables are modified.
         EventDispatcher.getInstance().addCommandEventListener(
-            new TransactionStateUpdater());
+            new TransactionStateUpdater(this, bufferManager));
     }
 
 
@@ -280,7 +285,7 @@ public class TransactionManager {
             // Then, we must force the WAL to include this commit record.
             try {
                 walManager.writeTxnRecord(WALRecordType.COMMIT_TXN);
-                storageManager.forceWAL(walManager.getNextLSN());
+                forceWAL(walManager.getNextLSN());
             }
             catch (IOException e) {
                 throw new TransactionException("Couldn't commit transaction " +
@@ -333,5 +338,61 @@ public class TransactionManager {
         // current transaction state.
         logger.debug("Transaction completed, resetting transaction state.");
         txnState.clear();
+    }
+
+
+    /**
+     * This method closes a table file that is currently open, possibly flushing
+     * any dirty pages to the table's storage in the process.
+     *
+     * @param lsn All WAL data up to this value must be forced to disk and
+     *        sync'd.  This value may be one past the end of the current WAL
+     *        file during normal operation.
+     *
+     * @throws IOException if an IO error occurs while attempting to force the
+     *         WAL file to disk.  If a failure occurs, the database is probably
+     *         going to be broken.
+     */
+    public void forceWAL(LogSequenceNumber lsn) throws IOException {
+        // If the WAL has already been forced out past the specified LSN,
+        // we don't need to do anything.
+        if (txnStateNextLSN.compareTo(lsn) >= 0) {
+            logger.debug(String.format("Request to force WAL to LSN %s " +
+                "unnecessary; already forced to %s.", lsn, txnStateNextLSN));
+
+            return;
+        }
+
+        // Flush all dirty pages for the write-ahead log, then sync the WAL to
+        // disk.
+
+        // Go through all WAL files that we need to sync the entirety of, and
+        // write/sync them.
+        for (int fileNo = txnStateNextLSN.getLogFileNo();
+             fileNo < lsn.getLogFileNo(); fileNo++) {
+
+            String walFileName = WALManager.getWALFileName(fileNo);
+            DBFile walFile = bufferManager.getFile(walFileName);
+            if (walFile != null)
+                bufferManager.writeDBFile(walFile, /* sync */ true);
+        }
+
+        // For the last WAL file, we only need to write out pages up to the
+        // specified LSN's page number.
+        String walFileName = WALManager.getWALFileName(lsn.getLogFileNo());
+        DBFile walFile = bufferManager.getFile(walFileName);
+        if (walFile != null) {
+            int lastPosition = lsn.getFileOffset() + lsn.getRecordSize();
+            int pageNo = lastPosition % walFile.getPageSize();
+            bufferManager.writeDBFile(walFile, 0, pageNo, /* sync */ true);
+        }
+
+        // Finally, update the transaction state to record the specified LSN
+        // that was written out.  This call also syncs the file; at that point,
+        // the WAL is officially updated.
+        txnStateNextLSN = lsn;
+        storeTxnStateToFile();
+
+        logger.debug("WAL was successfully forced to LSN " + lsn);
     }
 }

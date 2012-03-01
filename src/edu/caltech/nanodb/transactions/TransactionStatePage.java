@@ -6,8 +6,24 @@ import edu.caltech.nanodb.storage.writeahead.LogSequenceNumber;
 
 
 /**
- * This class wraps the checkpoint page to provide basic operations necessary
- * for reading and storing essential values.
+ * This class wraps the transaction-state page to provide basic operations
+ * necessary for reading and storing essential values.  The values stored in
+ * the transaction-state file are as follows:
+ * <ul>
+ * <li><b>Next Transaction ID.</b>  This is the next transaction ID, as
+ *     recorded by the database at the last point this file was saved.</li>
+ * <li><b>First Log Sequence Number (LSN).</b>  This is the LSN in the
+ *     write-ahead log (WAL) where recovery should start from.  It denotes a
+ *     point in time where all table files and the WAL are completely in sync
+ *     with each other.  Since NanoDB doesn't support checkpointing (yet), this
+ *     value is usually updated after recovery is completed, and also upon
+ *     proper shutdown of the database.</li>
+ * <li><b>Next LSN.</b>  This value is one byte past the last valid WAL record
+ *     that has been successfully written <u>and sync'd</u> to the write-ahead
+ *     log.  Note that this value may be behind the
+ *     {@link edu.caltech.nanodb.storage.writeahead.WALManager#nextLSN} value
+ *     stored in memory.</li>
+ * </ul>
  */
 public class TransactionStatePage {
 
