@@ -462,18 +462,18 @@ public class BufferManager {
                     "    Evicting page [%s,%d] from page-cache to make room.",
                     oldPage.getDBFile(), oldPage.getPageNo()));
 
+                entries.remove();
+                totalBytesCached -= oldPage.getPageSize();
+
+                // If the page is dirty, we need to write its data to disk before
+                // invalidating it.  Otherwise, just invalidate it.
                 if (oldPage.isDirty()) {
                     logger.debug("    Evicted page is dirty; must save to disk.");
                     dirtyPages.add(oldPage);
                 }
                 else {
-                    // If the page is unmodified, we don't need to save it.
-                    // Just invalidate it so nobody can use the object anymore.
                     oldPage.invalidate();
                 }
-
-                entries.remove();
-                totalBytesCached -= oldPage.getPageSize();
             }
         }
 
@@ -552,7 +552,7 @@ public class BufferManager {
                             boolean sync) throws IOException {
 
         logger.info(String.format("Writing all dirty pages for file %s to disk%s.",
-            dbFile, (sync ? "(with sync)" : "")));
+            dbFile, (sync ? " (with sync)" : "")));
 
         Iterator<Map.Entry<CachedPageInfo, DBPage>> entries =
             cachedPages.entrySet().iterator();
@@ -665,7 +665,9 @@ public class BufferManager {
      * buffer manager, writing out any dirty pages in the process.  This method
      * is not generally recommended to be used, as it basically defeats the
      * purpose of the buffer manager in the first place; rather, the
-     * {@link #writeDBFile} method should be used instead.
+     * {@link #writeDBFile} method should be used instead.  There is a specific
+     * situation in which it is used, when a file is being removed from the
+     * Buffer Manager by the Storage Manager.
      *
      * @param dbFile the file whose pages should be flushed from the cache
      *
@@ -692,19 +694,19 @@ public class BufferManager {
                     "    Evicting page [%s,%d] from page-cache.",
                     oldPage.getDBFile(), oldPage.getPageNo()));
 
+                // Remove the page from the cache.
+                entries.remove();
+                totalBytesCached -= oldPage.getPageSize();
+
+                // If the page is dirty, we need to write its data to disk before
+                // invalidating it.  Otherwise, just invalidate it.
                 if (oldPage.isDirty()) {
                     logger.debug("    Evicted page is dirty; must save to disk.");
                     dirtyPages.add(oldPage);
                 }
                 else {
-                    // If the page is unmodified, we don't need to save it.
-                    // Just invalidate it so nobody can use the object anymore.
                     oldPage.invalidate();
                 }
-
-                // Remove the page from the cache.
-                entries.remove();
-                totalBytesCached -= oldPage.getPageSize();
             }
         }
 
@@ -718,7 +720,9 @@ public class BufferManager {
      * recommended to be used, as it basically defeats the purpose of the
      * buffer manager in the first place; rather, the {@link #writeAll} method
      * should be used instead.  However, this method is useful to cause certain
-     * performance issues to manifest with individual commands.
+     * performance issues to manifest with individual commands, and the Storage
+     * Manager also uses it during shutdown processing to ensure all data is
+     * saved to disk.
      *
      * @throws IOException if an IO error occurs while updating the write-ahead
      *         log, or the file's contents
@@ -740,28 +744,62 @@ public class BufferManager {
                 "    Evicting page [%s,%d] from page-cache.",
                 oldPage.getDBFile(), oldPage.getPageNo()));
 
+            // Remove the page from the cache.
+            entries.remove();
+            totalBytesCached -= oldPage.getPageSize();
+
+            // If the page is dirty, we need to write its data to disk before
+            // invalidating it.  Otherwise, just invalidate it.
             if (oldPage.isDirty()) {
                 logger.debug("    Evicted page is dirty; must save to disk.");
                 dirtyPages.add(oldPage);
             }
             else {
-                // If the page is unmodified, we don't need to save it.
-                // Just invalidate it so nobody can use the object anymore.
                 oldPage.invalidate();
             }
-
-            // Remove the page from the cache.
-            entries.remove();
-            totalBytesCached -= oldPage.getPageSize();
         }
 
         writeDirtyPages(dirtyPages, /* invalidate */ true);
     }
-    
-    
+
+
+    /**
+     * This method removes a file from the cache, first flushing all pages from
+     * the file out of the cache.  This operation is used by the Storage Manager
+     * to close a data file.
+     *
+     * @param dbFile the file to remove from the cache.
+     *
+     * @throws IOException if an IO error occurs while writing out dirty pages
+     */
     public void removeDBFile(DBFile dbFile) throws IOException {
         logger.info("Removing DBFile " + dbFile + " from buffer manager");
         flushDBFile(dbFile);
         cachedFiles.remove(dbFile.getDataFile().getName());
+    }
+
+
+    /**
+     * This method removes ALL files from the cache, first flushing all pages
+     * from the cache so that any dirty pages will be saved to disk (possibly
+     * updating the write-ahead log in the process).  This operation is used by
+     * the Storage Manager during shutdown.
+     *
+     * @return a list of the files that were in the cache, so that they can be
+     *         used by the caller if necessary (e.g. to sync and close each one)
+     *
+     * @throws IOException if an IO error occurs while writing out dirty pages
+     */
+    public List<DBFile> removeAll() throws IOException {
+        logger.info("Removing ALL DBFiles from buffer manager");
+
+        // Flush all pages, ensuring that dirty pages will be written too.
+        flushAll();
+
+        // Get the list of DBFiles we had in the cache, then clear the cache.
+        ArrayList<DBFile> dbFiles = new ArrayList<DBFile>(cachedFiles.values());
+        cachedFiles.clear();
+
+        return dbFiles;
     }
 }

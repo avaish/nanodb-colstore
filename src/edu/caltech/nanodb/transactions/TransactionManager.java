@@ -182,12 +182,14 @@ public class TransactionManager {
 
         LogSequenceNumber firstLSN = txnState.getFirstLSN();
         LogSequenceNumber nextLSN = txnState.getNextLSN();
+        logger.debug(String.format("Txn State has FirstLSN = %s, NextLSN = %s",
+            firstLSN, nextLSN));
 
         RecoveryInfo recoveryInfo = walManager.doRecovery(firstLSN, nextLSN);
 
         // Set the "next transaction ID" value based on what recovery found
         int recNextTxnID = recoveryInfo.maxTransactionID + 1;
-        if (recNextTxnID != -1 && recNextTxnID + 1 > nextTxnID.get()) {
+        if (recNextTxnID != -1 && recNextTxnID > nextTxnID.get()) {
             logger.info("Advancing NextTransactionID from " +
                 nextTxnID.get() + " to " + recNextTxnID);
             nextTxnID.set(recNextTxnID);
@@ -393,6 +395,12 @@ public class TransactionManager {
         txnStateNextLSN = lsn;
         storeTxnStateToFile();
 
-        logger.debug("WAL was successfully forced to LSN " + lsn);
+        logger.debug(String.format("WAL was successfully forced to LSN %s " +
+            "(plus %d bytes)", lsn, lsn.getRecordSize()));
+    }
+    
+    
+    public void forceWAL() throws IOException {
+        forceWAL(walManager.getNextLSN());
     }
 }

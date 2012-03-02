@@ -4,6 +4,7 @@ package edu.caltech.nanodb.storage;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 
 import org.apache.log4j.Logger;
 
@@ -14,11 +15,11 @@ import edu.caltech.nanodb.relations.TableSchema;
 import edu.caltech.nanodb.server.EventDispatcher;
 import edu.caltech.nanodb.storage.btreeindex.BTreeIndexManager;
 import edu.caltech.nanodb.storage.heapfile.HeapFileTableManager;
-import edu.caltech.nanodb.storage.writeahead.WALManager;
 import edu.caltech.nanodb.transactions.TransactionManager;
 
 
 /**
+ *
  *
  * @todo This class requires synchronization, once we support multiple clients.
  */
@@ -266,8 +267,11 @@ public class StorageManager {
 
 
     private void shutdownStorage() throws IOException {
-        // TODO
-        closeAllOpenTables();
+        transactionManager.forceWAL();
+
+        List<DBFile> dbFiles = bufferManager.removeAll();
+        for (DBFile dbFile : dbFiles)
+            fileManager.closeDBFile(dbFile);
     }
 
 
@@ -375,11 +379,6 @@ public class StorageManager {
         }
 
         return (IndexManager) manager;
-    }
-
-
-    public WALManager getWALManager() {
-        return (WALManager) fileTypeManagers.get(DBFileType.WRITE_AHEAD_LOG_FILE);
     }
 
 
@@ -594,31 +593,6 @@ public class StorageManager {
         DBFileType type = dbFile.getType();
         getTableManager(type).beforeCloseTable(tblFileInfo);
         closeDBFile(dbFile);
-    }
-
-
-    /**
-     * This method closes all table files that are currently open, possibly
-     * flushing any dirty pages to disk in the process.
-     *
-     * @throws IOException if an IO error occurs while attempting to close
-     *         tables.  This could occur, for example, if dirty pages are being
-     *         flushed to disk and a write error occurs.
-     */
-    public void closeAllOpenTables() throws IOException {
-        // Flush all open database pages in the buffer manager.
-        bufferManager.flushAll();
-
-        for (TableFileInfo tblFileInfo : openTables.values()) {
-            // Let the table manager do any final cleanup necessary before
-            // closing the table.
-            DBFile dbFile = tblFileInfo.getDBFile();
-            DBFileType type = dbFile.getType();
-            getTableManager(type).beforeCloseTable(tblFileInfo);
-            closeDBFile(dbFile);
-        }
-
-        openTables.clear();
     }
 
 

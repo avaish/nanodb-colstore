@@ -13,11 +13,6 @@ write-ahead log format is designed with several goals in mind:
         allowing fast rollback of transaction modifications.</li>
     <li>The entire log file can be efficiently traversed both forward and
         backward, which is necessary during recovery processing.</li>
-    <!--
-    <li>The log-record format is also chosen to be relatively space efficient;
-        a lot of space can be used up by "previous LSN" values if not
-        careful.</li>
-    -->
 </ul>
 
 <p>
@@ -25,7 +20,7 @@ To implement all of these features, the log record format is somewhat complex:
 </p>
 
 <dl>
-    <dt>&lt;<i>T<sub>i</sub></i> start&gt;</dt>
+    <dt>&lt;<i>T<sub>i</sub></i> start&gt; (6 bytes)</dt>
     <dd>
         Start-transaction records don't require a "previous LSN" value, because
         there is no previous LSN for the transaction.  Thus, the format is as
@@ -42,12 +37,12 @@ To implement all of these features, the log record format is somewhat complex:
 
     <dt>&lt;<i>T<sub>i</sub></i> update <i>P</i> &rarr; <i>P'</i>&gt;</dt>
     <dd>
-        Update records record modifications to data pages.  We record changes on
+        Update records store modifications to data pages.  We record changes on
         the page-level for a variety of reasons.  First, in some situations the
         old value or the new value is actually missing, e.g. in the cases of an
         insert or a delete.  Also, we don't want the WAL to be tied to specific
-        data-file formats; we would like to use the WAL for logging index changes
-        as well as table changes.  The format is as follows:
+        data-file formats; we would like to use the WAL for logging index
+        changes as well as table changes.  The format is as follows:
         <table>
             <tr><th>Size</th><th>Description</th></tr>
 

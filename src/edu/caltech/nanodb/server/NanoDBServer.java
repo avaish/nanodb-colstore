@@ -6,16 +6,16 @@ import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.log4j.Logger;
+
 import antlr.RecognitionException;
 import antlr.TokenStreamException;
+
 import edu.caltech.nanodb.commands.Command;
 import edu.caltech.nanodb.commands.SelectCommand;
 import edu.caltech.nanodb.sqlparse.NanoSqlLexer;
 import edu.caltech.nanodb.sqlparse.NanoSqlParser;
-import org.apache.log4j.Logger;
-
 import edu.caltech.nanodb.storage.StorageManager;
-import edu.caltech.nanodb.transactions.TransactionManager;
 
 
 /**
@@ -119,18 +119,6 @@ public class NanoDBServer {
             result.recordFailure(e);
         }
         result.endExecution();
-
-        // TODO:  Persist all database changes.  The buffer manager still
-        //        isn't quite intelligent enough to handle table files
-        //        across multiple commands without flushing, yet...
-        try {
-            StorageManager.getInstance().closeAllOpenTables();
-        }
-        catch (IOException e) {
-            System.out.println("IO error while closing open tables:  " +
-                e.getMessage());
-            logger.error("IO error while closing open tables", e);
-        }
 
         return result;
     }
