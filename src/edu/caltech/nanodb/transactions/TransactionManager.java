@@ -44,8 +44,13 @@ public class TransactionManager {
     public static final String TXNSTATE_FILENAME = "txnstate.dat";
 
 
-
-    
+    /**
+     * Returns true if the transaction processing system is enabled, or false
+     * otherwise.
+     *
+     * @return true if the transaction processing system is enabled, or false
+     *         otherwise.
+     */
     public static boolean isEnabled() {
         return "on".equalsIgnoreCase(System.getProperty(PROP_TXNS, "on"));
     }
@@ -344,8 +349,9 @@ public class TransactionManager {
 
 
     /**
-     * This method closes a table file that is currently open, possibly flushing
-     * any dirty pages to the table's storage in the process.
+     * This method forces the write-ahead log out to at least the specified
+     * log sequence number, syncing the log to ensure that all essential
+     * records have reached the disk itself.
      *
      * @param lsn All WAL data up to this value must be forced to disk and
      *        sync'd.  This value may be one past the end of the current WAL
@@ -385,7 +391,7 @@ public class TransactionManager {
         DBFile walFile = bufferManager.getFile(walFileName);
         if (walFile != null) {
             int lastPosition = lsn.getFileOffset() + lsn.getRecordSize();
-            int pageNo = lastPosition % walFile.getPageSize();
+            int pageNo = lastPosition / walFile.getPageSize();
             bufferManager.writeDBFile(walFile, 0, pageNo, /* sync */ true);
         }
 

@@ -1,6 +1,7 @@
 package edu.caltech.nanodb.storage.writeahead;
 
 
+import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -18,7 +19,6 @@ import edu.caltech.nanodb.storage.DBPage;
 import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.transactions.TransactionState;
 import edu.caltech.nanodb.util.ArrayUtil;
-import edu.caltech.nanodb.util.NoCopyByteArrayOutputStream;
 
 
 /**
@@ -898,8 +898,7 @@ public class WALManager {
     private byte[] applyUndoAndGenRedoOnlyData(DBFileReader walReader,
         DBPage dbPage, int numSegments) throws IOException {
 
-        NoCopyByteArrayOutputStream redoOnlyBAOS =
-            new NoCopyByteArrayOutputStream();
+        ByteArrayOutputStream redoOnlyBAOS = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(redoOnlyBAOS);
 
         for (int i = 0; i < numSegments; i++) {
@@ -923,7 +922,7 @@ public class WALManager {
 
         // Return the data that will appear in the redo-only record body.
         dos.flush();
-        return redoOnlyBAOS.getBuf();
+        return redoOnlyBAOS.toByteArray();
     }
 
 

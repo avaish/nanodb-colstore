@@ -100,7 +100,7 @@ public class ExclusiveClient {
                 Command cmd = parser.command_semicolon();
                 logger.debug("Parsed command:  " + cmd);
 
-                if (cmd instanceof ExitCommand)
+                if (cmd == null || cmd instanceof ExitCommand)
                     break;
 
                 NanoDBServer.doCommand(cmd, false);

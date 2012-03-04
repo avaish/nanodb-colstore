@@ -8,13 +8,6 @@ package edu.caltech.nanodb.storage.writeahead;
  */
 public enum WALRecordType {
     /**
-     * This value is to indicate "no record."  When traversing a log backwards,
-     * if we see a record-type value of this, we just go back another byte until
-     * we reach one of the subsequent values.
-     */
-    NOP(0),
-
-    /**
      * The record represents a "&lt;<i>T<sub>i</sub></i>:  start
      * transaction&gt;" record.
      */
@@ -22,7 +15,7 @@ public enum WALRecordType {
 
     /**
      * The record represents a "&lt;<i>T<sub>i</sub></i>:  update <i>P</i>
-     * &rarr; <i>P'</i>&gt;" record.
+     * &rarr; <i>P'</i> &gt;" record.
      */
     UPDATE_PAGE(2),
 

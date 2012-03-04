@@ -41,7 +41,15 @@ public class DBFileReader {
 
     /** The database file being read by this reader. */
     protected DBFile dbFile;
-    
+
+
+    /**
+     * A flag controlling whether the file being read should be extended as
+     * it is read.  The reader is expected to not extend the file, but the
+     * {@link DBFileWriter}, a subclass of this class, sets this flag to true.
+     */
+    protected boolean extendFile = false;
+
 
     /** The page-size of the database file being read from. */
     protected int pageSize;
@@ -171,7 +179,7 @@ public class DBFileReader {
             return;
 
         // Need to load the required DBPage.
-        dbPage = storageManager.loadDBPage(dbFile, pageNo);
+        dbPage = storageManager.loadDBPage(dbFile, pageNo, extendFile);
     }
 
 

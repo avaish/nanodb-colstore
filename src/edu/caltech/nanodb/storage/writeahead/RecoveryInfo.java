@@ -68,6 +68,18 @@ public class RecoveryInfo {
     }
 
 
+    /**
+     * This helper method returns the last log sequence number seen for
+     * the specified transaction.  It is used during undo processing to
+     * allow subsequent WAL records to refer to the earlier WAL records
+     * that appear for the transaction.
+     *
+     * @param transactionID the ID of the transaction to get the most
+     *        recent LSN for
+     *
+     * @return the last log sequence number seen for the specified
+     *         transaction
+     */
     public LogSequenceNumber getLastLSN(int transactionID) {
         return incompleteTxns.get(transactionID);
     }
