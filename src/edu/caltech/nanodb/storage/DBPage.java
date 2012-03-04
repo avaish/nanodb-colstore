@@ -210,6 +210,14 @@ public class DBPage {
         return oldPageData;
     }
 
+    
+    public void syncOldPageData() {
+        if (oldPageData == null)
+            throw new IllegalStateException("No old page data to sync");
+        
+        System.arraycopy(pageData, 0, oldPageData, 0, pageData.length);
+    }
+    
 
     /**
      * Returns true if the page's data has been changed in memory; false
@@ -1060,5 +1068,34 @@ public class DBPage {
         }
 
         return dataSize;
+    }
+
+
+    public String toFormattedString() {
+        StringBuilder buf = new StringBuilder();
+
+        int pageSize = dbFile.getPageSize();
+        buf.append(String.format("DBPage[file=%s, pageNo=%d, pageSize=%d",
+            dbFile, pageNo, pageSize));
+
+        buf.append("\npageData =");
+        for (int i = 0; i < pageSize; i++) {
+            if (i % 32 == 0)
+                buf.append("\n                ");
+
+            buf.append(String.format(" %02X", pageData[i]));
+        }
+
+        buf.append("\noldPageData =");
+        for (int i = 0; i < pageSize; i++) {
+            if (i % 32 == 0)
+                buf.append("\n                ");
+
+            buf.append(String.format(" %02x", oldPageData[i]));
+        }
+
+        buf.append("\n]");
+
+        return buf.toString();
     }
 }

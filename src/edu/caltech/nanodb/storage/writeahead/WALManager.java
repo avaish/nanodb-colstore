@@ -777,6 +777,41 @@ public class WALManager {
         byte[] oldData = dbPage.getOldPageData();
         byte[] newData = dbPage.getPageData();
         int pageSize = dbPage.getPageSize();
+
+        /***
+         * DEBUG:  Show the contents of the old and new pages.
+         * This is *really* useful debugging code, so I don't want to throw it
+         * away, but I don't rightly know where or how to enable/disable it.
+        int i = 0;
+        while (i < pageSize) {
+            boolean same = true;
+            for (int j = 0; j < 32; j++) {
+                if (oldData[i + j] != newData[i + j]) {
+                    same = false;
+                    break;
+                }
+            }
+
+            if (!same) {
+                System.err.printf("%04X OLD: ", i);
+                for (int j = 0; j < 32; j++)
+                    System.err.printf(" %02X", oldData[i + j]);
+                System.err.println();
+
+                System.err.printf("%04X NEW: ", i);
+                for (int j = 0; j < 32; j++) {
+                    if (newData[i + j] != oldData[i + j])
+                        System.err.printf(" %02X", newData[i + j]);
+                    else
+                        System.err.print(" ..");
+                }
+                System.err.println();
+            }
+
+            i += 32;
+        }
+         */
+
         int numSegments = 0;
         int index = 0;
         while (index < pageSize) {

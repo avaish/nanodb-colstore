@@ -55,13 +55,6 @@ public class DBFileReader {
     protected int pageSize;
 
 
-    /**
-     * This is a mask we can use to take the position and turn it into a page
-     * number and an offset within the page.
-     */
-    protected int pageOffsetMask;
-    
-
     /** The last page used for reading the database file. */
     protected DBPage dbPage;
     
@@ -88,7 +81,6 @@ public class DBFileReader {
 
         // The presumption is that page sizes are a power of two.
         pageSize = dbFile.getPageSize();
-        pageOffsetMask = pageSize - 1;
     }
 
 
@@ -145,7 +137,7 @@ public class DBFileReader {
      *         currently falls within
      */
     protected int getPositionPageNo() {
-        return position & ~pageOffsetMask;
+        return position / pageSize;
     }
 
 
@@ -157,7 +149,7 @@ public class DBFileReader {
      *         value currently falls at
      */
     protected int getPositionPageOffset() {
-        return position & pageOffsetMask;
+        return position % pageSize;
     }
 
 

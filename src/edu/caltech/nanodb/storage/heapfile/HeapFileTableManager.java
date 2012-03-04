@@ -181,7 +181,8 @@ public class HeapFileTableManager implements TableManager {
         tblFileInfo.setStats(stats);
         HeaderPage.setTableStats(headerPage, tblFileInfo);
 
-        storageManager.releaseDBPage(headerPage);
+        storageManager.logDBPageWrite(headerPage);
+        storageManager.unpinDBPage(headerPage);
     }
 
 
@@ -375,7 +376,7 @@ public class HeapFileTableManager implements TableManager {
         tblFileInfo.setStats(HeaderPage.getTableStats(headerPage, tblFileInfo));
         logger.debug(tblFileInfo.getStats());
 
-        storageManager.releaseDBPage(headerPage);
+        storageManager.unpinDBPage(headerPage);
     }
 
 
@@ -513,8 +514,8 @@ public class HeapFileTableManager implements TableManager {
                         offset);
                 }
 
-                // If we got here, the page has no tuples.  Release the page.
-                storageManager.releaseDBPage(dbPage);
+                // If we got here, the page has no tuples.  Unpin the page.
+                storageManager.unpinDBPage(dbPage);
             }
         }
         catch (EOFException e) {
@@ -623,7 +624,7 @@ public class HeapFileTableManager implements TableManager {
             try {
                 DBPage nextDBPage =
                     storageManager.loadDBPage(dbFile, dbPage.getPageNo() + 1);
-                storageManager.releaseDBPage(dbPage);
+                storageManager.unpinDBPage(dbPage);
                 dbPage = nextDBPage;
 
                 nextSlot = 0;
@@ -713,7 +714,7 @@ public class HeapFileTableManager implements TableManager {
 
             // If we reached this point then the page doesn't have enough
             // space, so go on to the next data page.
-            storageManager.releaseDBPage(dbPage);
+            storageManager.unpinDBPage(dbPage);
             dbPage = null;
             pageNo++;
         }
@@ -737,7 +738,9 @@ public class HeapFileTableManager implements TableManager {
             dbPage, slot, tupOffset, tup);
 
         DataPage.sanityCheck(dbPage);
-        storageManager.releaseDBPage(dbPage);
+        storageManager.logDBPageWrite(dbPage);
+        // TODO:  Really shouldn't unpin the page; the caller will want it.
+        // TODO:  Maybe need to change how we do this to make unpinning easier.
 
         return pageTup;
     }
@@ -773,7 +776,8 @@ public class HeapFileTableManager implements TableManager {
 
         DBPage dbPage = ptup.getDBPage();
         DataPage.sanityCheck(dbPage);
-        storageManager.releaseDBPage(dbPage);
+        storageManager.logDBPageWrite(dbPage);
+        storageManager.unpinDBPage(dbPage);
     }
 
 
@@ -793,7 +797,8 @@ public class HeapFileTableManager implements TableManager {
 
         DataPage.sanityCheck(dbPage);
 
-        storageManager.releaseDBPage(dbPage);
+        storageManager.logDBPageWrite(dbPage);
+        storageManager.unpinDBPage(dbPage);
     }
 
 
@@ -848,7 +853,7 @@ public class HeapFileTableManager implements TableManager {
 
             // Done with this data page.  Move on to the next one.
             DBPage nextDBPage = blockedReader.getNextDataPage(tblFileInfo, dbPage);
-            storageManager.releaseDBPage(dbPage);
+            storageManager.unpinDBPage(dbPage);
             dbPage = nextDBPage;
         }
 
@@ -887,7 +892,8 @@ public class HeapFileTableManager implements TableManager {
         DBPage headerPage = storageManager.loadDBPage(dbFile, 0);
         HeaderPage.setTableStats(headerPage, tblFileInfo);
 
-        storageManager.releaseDBPage(headerPage);
+        storageManager.logDBPageWrite(headerPage);
+        storageManager.unpinDBPage(headerPage);
     }
 
 

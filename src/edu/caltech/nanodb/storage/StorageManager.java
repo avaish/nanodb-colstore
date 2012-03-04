@@ -449,13 +449,16 @@ public class StorageManager {
         return loadDBPage(dbFile, pageNo, false);
     }
 
-
-    public void releaseDBPage(DBPage dbPage) throws IOException {
+    
+    public void logDBPageWrite(DBPage dbPage) throws IOException {
         // If the page is dirty, record its changes to the write-ahead log.
         if (transactionManager != null)
             transactionManager.recordPageUpdate(dbPage);
+    }
+    
 
-        // Finally, unpin the page so that it may be evicted.
+    public void unpinDBPage(DBPage dbPage) {
+        // Unpin the page so that it may be evicted.
         bufferManager.unpinPage(dbPage);
     }
 
