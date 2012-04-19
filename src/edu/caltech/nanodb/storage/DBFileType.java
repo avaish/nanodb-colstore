@@ -34,7 +34,14 @@ public enum DBFileType {
      * Represents a write-ahead log file used for transaction processing and
      * recovery.
      */
-    WRITE_AHEAD_LOG_FILE(21);
+    WRITE_AHEAD_LOG_FILE(21),
+    
+    
+    /**
+     * Represents a column store data file, which contains data from a column
+     * of a table in a space efficient manner.
+     */
+    COLUMNSTORE_DATA_FILE(30);
 
 
     private int id;

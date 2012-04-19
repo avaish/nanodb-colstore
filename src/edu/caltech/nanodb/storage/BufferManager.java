@@ -32,8 +32,8 @@ public class BufferManager {
      */
     public static final String PROP_PAGECACHE_SIZE = "nanodb.pagecache.size";
 
-    /** The default page-cache size is defined to be 1MB. */
-    public static final long DEFAULT_PAGECACHE_SIZE = 1024 * 1024;
+    /** The default page-cache size is defined to be 4MB. */
+    public static final long DEFAULT_PAGECACHE_SIZE = 4 * 1024 * 1024;
 
 
     /**
