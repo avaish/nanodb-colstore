@@ -401,6 +401,7 @@ create_colstore returns [CreateColStoreCommand c]
   :
   CREATE COLSTORE name=dbobj_ident FROM filename=file_name
   { c = new CreateColStoreCommand(name, filename); }
+  table_decl[c]
   ;
   
 
