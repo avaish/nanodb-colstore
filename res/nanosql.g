@@ -39,6 +39,7 @@ tokens {
   BEGIN       = "begin";
   BETWEEN     = "between";
   BY          = "by";
+  COLSTORE    = "colstore";
   COLUMN      = "column";
   COMMIT      = "commit";
   CONSTRAINT  = "constraint";
@@ -193,6 +194,21 @@ dbobj_ident returns [String s] { s = null; } :
     i:IDENT { s = i.getText(); }
   | qi:QUOTED_IDENT { s = qi.getText(); } ;
 
+/**
+ * FIle names may be of the form <tt>file</tt>, or
+ * <tt>file.ext</tt>.
+ */
+file_name returns [String s]
+  {
+    s = null;
+    String n1 = null;
+    String n2 = null;
+  }
+  :
+  n1=dbobj_ident { s = n1; }
+  ( PERIOD n2=dbobj_ident { s = n1 + "." + n2; } )?
+  ;
+
 
 /**
  * Column names may be of the form <tt>colName</tt>, or
@@ -216,7 +232,7 @@ column_name returns [ColumnName cn]
  * configured.
  */
 create_stmt returns [Command c] { c = null; } :
-  c=create_table | c=create_view | c=create_index ;
+  c=create_table | c=create_view | c=create_index | c=create_colstore;
 
 
 //===== TABLES ============================
@@ -376,6 +392,17 @@ create_view returns [CreateViewCommand c]
   { c = new CreateViewCommand(name, sc); }
   ;
 
+create_colstore returns [CreateColStoreCommand c]
+  {
+	c = null;
+	String name = null;
+	String filename = null;
+  }
+  :
+  CREATE COLSTORE name=dbobj_ident FROM filename=file_name
+  { c = new CreateColStoreCommand(name, filename); }
+  ;
+  
 
 create_index returns [CreateIndexCommand c]
   {
