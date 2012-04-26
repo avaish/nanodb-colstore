@@ -503,7 +503,11 @@ public class StorageManager {
         String tblFileName = getTableFileName(tableName);
 
         // TODO:  the file-type should be specified in the TableFileInfo object
-        DBFileType type = DBFileType.HEAP_DATA_FILE;
+        DBFileType type = tblFileInfo.getFileType();
+        
+        if (type == DBFileType.COLUMNSTORE_DATA_FILE)
+        	pageSize = DBFile.MAX_PAGESIZE;
+        
         TableManager tblManager = getTableManager(type);
 
         DBFile dbFile = fileManager.createDBFile(tblFileName, type, pageSize);

@@ -29,6 +29,10 @@ public class TableFileInfo {
 
     /** The table manager used to access this table file. */
     private TableManager tableManager;
+    
+    
+    /** The file type of the DBFile(s). */
+    private DBFileType fileType;
 
 
     /**
@@ -148,4 +152,14 @@ public class TableFileInfo {
 
         this.stats = stats;
     }
+
+
+	public DBFileType getFileType() {
+		return fileType;
+	}
+
+
+	public void setFileType(DBFileType fileType) {
+		this.fileType = fileType;
+	}
 }
