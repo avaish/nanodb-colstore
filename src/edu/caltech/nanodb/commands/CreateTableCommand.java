@@ -19,6 +19,7 @@ import edu.caltech.nanodb.relations.KeyColumnIndexes;
 import edu.caltech.nanodb.relations.TableConstraintType;
 import edu.caltech.nanodb.relations.TableSchema;
 
+import edu.caltech.nanodb.storage.DBFileType;
 import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.storage.TableFileInfo;
 
@@ -52,6 +53,13 @@ public class CreateTableCommand extends Command {
     /** List of constraints for the new table. */
     private List<ConstraintDecl> constraints = new ArrayList<ConstraintDecl>();
 
+    /**
+     * Useful for subclassing.
+     */
+    public CreateTableCommand()
+    {
+    	super(Command.Type.DDL);
+    }
 
     /**
      * Create a new object representing a <tt>CREATE TABLE</tt> statement.
@@ -68,7 +76,7 @@ public class CreateTableCommand extends Command {
         if (tableName == null)
             throw new IllegalArgumentException("tableName cannot be null");
 
-        this.tableName = tableName;
+        this.setTableName(tableName);
         this.temporary = temporary;
         this.ifNotExists = ifNotExists;
     }
@@ -86,12 +94,12 @@ public class CreateTableCommand extends Command {
         if (colInfo == null)
             throw new IllegalArgumentException("colInfo cannot be null");
 
-        if (!tableName.equals(colInfo.getTableName())) {
-            colInfo = new ColumnInfo(colInfo.getName(), tableName,
+        if (!getTableName().equals(colInfo.getTableName())) {
+            colInfo = new ColumnInfo(colInfo.getName(), getTableName(),
                 colInfo.getType());
         }
 
-        columnInfos.add(colInfo);
+        getColumnInfos().add(colInfo);
     }
 
 
@@ -107,7 +115,7 @@ public class CreateTableCommand extends Command {
         if (con == null)
             throw new IllegalArgumentException("con cannot be null");
 
-        constraints.add(con);
+        getConstraints().add(con);
     }
 
 
@@ -116,14 +124,14 @@ public class CreateTableCommand extends Command {
 
         // See if the table already exists.
         if (ifNotExists) {
-            logger.debug("Checking if table " + tableName + " already exists.");
+            logger.debug("Checking if table " + getTableName() + " already exists.");
 
             try {
-                storageManager.openTable(tableName);
+                storageManager.openTable(getTableName());
 
                 // If we got here then the table exists.  Skip the operation.
                 out.printf("Table %s already exists; skipping create-table.%n",
-                    tableName);
+                    getTableName());
                 return;
             }
             catch (FileNotFoundException e) {
@@ -133,17 +141,18 @@ public class CreateTableCommand extends Command {
                 // Some other unexpected exception occurred.  Report an error.
                 throw new ExecutionException(
                     "Exception while trying to determine if table " +
-                    tableName + " exists.", e);
+                    getTableName() + " exists.", e);
             }
         }
 
         // Set up the table-file info based on the command details.
 
         logger.debug("Creating a TableFileInfo object describing the new table " +
-            tableName + ".");
-        TableFileInfo tblFileInfo = new TableFileInfo(tableName);
+            getTableName() + ".");
+        TableFileInfo tblFileInfo = new TableFileInfo(getTableName());
+        tblFileInfo.setFileType(DBFileType.HEAP_DATA_FILE);
         TableSchema schema = tblFileInfo.getSchema();
-        for (ColumnInfo colInfo : columnInfos) {
+        for (ColumnInfo colInfo : getColumnInfos()) {
             try {
                 schema.addColumnInfo(colInfo);
             }
@@ -157,7 +166,7 @@ public class CreateTableCommand extends Command {
         // verify the constraints.
         HashMap<String, TableSchema> referencedTables =
             new HashMap<String, TableSchema>();
-        for (ConstraintDecl cd: constraints) {
+        for (ConstraintDecl cd: getConstraints()) {
             if (cd.getType() == TableConstraintType.FOREIGN_KEY) {
                 String refTableName = cd.getRefTable();
                 try {
@@ -182,26 +191,26 @@ public class CreateTableCommand extends Command {
         }
         catch (IOException e) {
             throw new ExecutionException(
-                "Couldn't initialize all constraints on table " + tableName, e);
+                "Couldn't initialize all constraints on table " + getTableName(), e);
         }
 
         // Get the table manager and create the table.
 
-        logger.debug("Creating the new table " + tableName + " on disk.");
+        logger.debug("Creating the new table " + getTableName() + " on disk.");
         try {
             storageManager.createTable(tblFileInfo);
         }
         catch (IOException ioe) {
-            throw new ExecutionException("Could not create table \"" + tableName +
+            throw new ExecutionException("Could not create table \"" + getTableName() +
                 "\".  See nested exception for details.", ioe);
         }
-        logger.debug("New table " + tableName + " is created!");
+        logger.debug("New table " + getTableName() + " is created!");
 
-        out.println("Created table:  " + tableName);
+        out.println("Created table:  " + getTableName());
     }
     
     
-    private void initTableConstraints(StorageManager storageManager,
+    protected void initTableConstraints(StorageManager storageManager,
         TableFileInfo tblFileInfo, HashMap<String, TableSchema> referencedTables)
         throws ExecutionException, IOException {
 
@@ -211,7 +220,7 @@ public class CreateTableCommand extends Command {
         TableSchema schema = tblFileInfo.getSchema();
         HashSet<String> constraintNames = new HashSet<String>();
 
-        for (ConstraintDecl cd : constraints) {
+        for (ConstraintDecl cd : getConstraints()) {
             // Make sure that if constraint names are specified, every
             // constraint is actually uniquely named.
             if (cd.getName() != null) {
@@ -229,7 +238,7 @@ public class CreateTableCommand extends Command {
 
                 // Make the index, then store the index name on the key object.
 
-                IndexInfo info = new IndexInfo(tableName, schema, pk, true);
+                IndexInfo info = new IndexInfo(getTableName(), schema, pk, true);
                 info.setConstraintType(TableConstraintType.PRIMARY_KEY);
 
                 IndexFileInfo idxFileInfo =
@@ -249,7 +258,7 @@ public class CreateTableCommand extends Command {
 
                 // Make the index, then store the index name on the key object.
 
-                IndexInfo info = new IndexInfo(tableName, schema, ck, true);
+                IndexInfo info = new IndexInfo(getTableName(), schema, ck, true);
                 info.setConstraintType(TableConstraintType.UNIQUE);
 
                 IndexFileInfo idxFileInfo =
@@ -292,7 +301,7 @@ public class CreateTableCommand extends Command {
 
     @Override
     public String toString() {
-        return "CreateTable[" + tableName + "]";
+        return "CreateTable[" + getTableName() + "]";
     }
 
 
@@ -308,13 +317,13 @@ public class CreateTableCommand extends Command {
         strBuf.append(toString());
         strBuf.append('\n');
 
-        for (ColumnInfo colInfo : columnInfos) {
+        for (ColumnInfo colInfo : getColumnInfos()) {
             strBuf.append('\t');
             strBuf.append(colInfo.toString());
             strBuf.append('\n');
         }
 
-        for (ConstraintDecl con : constraints) {
+        for (ConstraintDecl con : getConstraints()) {
             strBuf.append('\t');
             strBuf.append(con.toString());
             strBuf.append('\n');
@@ -322,4 +331,28 @@ public class CreateTableCommand extends Command {
 
         return strBuf.toString();
     }
+
+	public String getTableName() {
+		return tableName;
+	}
+
+	public void setTableName(String tableName) {
+		this.tableName = tableName;
+	}
+
+	public List<ColumnInfo> getColumnInfos() {
+		return columnInfos;
+	}
+
+	public void setColumnInfos(List<ColumnInfo> columnInfos) {
+		this.columnInfos = columnInfos;
+	}
+
+	public List<ConstraintDecl> getConstraints() {
+		return constraints;
+	}
+
+	public void setConstraints(List<ConstraintDecl> constraints) {
+		this.constraints = constraints;
+	}
 }
