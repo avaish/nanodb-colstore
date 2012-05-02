@@ -20,6 +20,7 @@ import edu.caltech.nanodb.relations.TableConstraintType;
 import edu.caltech.nanodb.relations.TableSchema;
 
 import edu.caltech.nanodb.storage.DBFileType;
+import edu.caltech.nanodb.storage.FileAnalyzer;
 import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.storage.TableFileInfo;
 
@@ -54,6 +55,15 @@ public class CreateColStoreCommand extends CreateTableCommand {
 	@Override
 	public void execute() throws ExecutionException {
 		// Analyze file
+		try 
+		{
+			FileAnalyzer analyzer = new FileAnalyzer(fileName);
+			analyzer.analyze(getColumnInfos());
+		}
+		catch (IOException e1) {
+			throw new ExecutionException("There was an error analyzing the data file.");
+		}
+		
 		// Tell storageManager to make colstore table
 		StorageManager storageManager = StorageManager.getInstance();
 
