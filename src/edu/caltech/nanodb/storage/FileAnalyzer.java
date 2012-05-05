@@ -17,6 +17,7 @@ public class FileAnalyzer {
 	private static Logger logger = Logger.getLogger(FileAnalyzer.class);
 	private String filename;
 	private BufferedReader fileReader;
+	private String[] encodings;
 	
 	public FileAnalyzer(String name) throws FileNotFoundException
 	{
@@ -36,6 +37,7 @@ public class FileAnalyzer {
 			columnCount = rowArray.length;
 		}
 		
+		String[] names = new String[columnCount];
 		HashSet[] sets = new HashSet[columnCount];
 		int[] sort = new int[columnCount];
 		int[] runs = new int[columnCount];
@@ -43,7 +45,11 @@ public class FileAnalyzer {
 		int[] distincts = new int[columnCount];
 		String[] prev = new String[columnCount];
 		boolean[] onruns = new boolean[columnCount];
+		encodings = new String[columnCount];
 		
+		names = row.split(",");
+		
+		row = fileReader.readLine();
 		while (row != null)
 		{
 			logger.debug(row);
@@ -149,12 +155,51 @@ public class FileAnalyzer {
 				}
 				prev[i] = rowArray[i];
 				distincts[i] = sets[i].size();
-				logger.debug("Count for column " + i + ": " + counts[i]);
-				logger.debug("Uniques for column " + i + ": " + distincts[i]);
-				logger.debug("Sort for column " + i + ": " + sort[i]);
-				logger.debug("Run for column " + i + ": " + runs[i]);
 			}
 			row = fileReader.readLine();
+		}
+		for (int i = 0; i < columnCount; i++)
+		{
+			logger.debug(names[i] + ": Count: " + counts[i] + ", with " + 
+				distincts[i] + " unique values and " + runs[i] + " values " + 
+				"part of runs.");
+			logger.debug(names[i] + ": Cardinality: " + 
+				(distincts[i] / (float) counts[i]) + ". Locality: " + 
+				(runs[i] / (float) counts[i]) + ".");
+			if (sort[i] == -1)
+				logger.debug(names[i] + ": Sorted decreasing");
+			else if (sort[i] == 0)
+				logger.debug(names[i] + ": One valued");
+			else if (sort[i] == 1)
+				logger.debug(names[i] + ": Sorted increasing");
+			else
+				logger.debug(names[i] + ": Not sorted");
+			
+			if (sort[i] != 2)
+			{
+				if ((runs[i] / (float) counts[i]) > 0.75)
+				{
+					encodings[i] = "RLE";
+				}
+				else
+				{
+					encodings[i] = "Bit-string";
+				}
+			}
+			else
+			{
+				if ((runs[i] / (float) counts[i]) > 0.75)
+				{
+					encodings[i] = "Dictionary";
+				}
+				else
+				{
+					encodings[i] = "Uncompressed";
+				}
+			}
+			logger.debug(names[i] + ": Encoding: " + encodings[i]);
+			
+			logger.debug(" ");
 		}
 	}
 }
