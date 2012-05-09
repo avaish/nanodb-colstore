@@ -112,6 +112,16 @@ public class TableFileInfo {
             throw new IllegalStateException("This object already has a dbFile!");
 
         this.dbFiles.set(0, dbFile);
+        this.dbFileCount = 1;
+    }
+    
+    
+    public void addDBFile(DBFile dbFile) {
+    	if (dbFile == null)
+            throw new IllegalArgumentException("dbFile must not be null!");
+    	
+    	this.dbFiles.add(dbFile);
+    	this.dbFileCount++;
     }
 
 
@@ -167,5 +177,16 @@ public class TableFileInfo {
 
 	public void setFileType(DBFileType fileType) {
 		this.fileType = fileType;
+	}
+
+
+	public DBFile getDBFile(int i) {
+		return dbFiles.get(i);
+	}
+
+
+	public ArrayList<DBFile> dbFiles() {
+		// TODO Auto-generated method stub
+		return dbFiles;
 	}
 }

@@ -514,25 +514,26 @@ public class StorageManager {
         
         TableManager tblManager = getTableManager(type);
 
+        
+        DBFile dbFile = fileManager.createDBFile(tblFileName, type, pageSize);
+        	logger.debug("Created new DBFile for table " + tableName +
+        	" at path " + dbFile.getDataFile());
+
+        tblFileInfo.setDBFile(dbFile);
         if (type == DBFileType.COLUMNSTORE_DATA_FILE)
         {
         	TableSchema schema = tblFileInfo.getSchema();
         	for (int i = 0; i < schema.numColumns(); i++)
         	{
-        		DBFile dbFile = fileManager.createDBFileinDir(tableName, schema.getColumnInfo(i).
-        			getColumnName().toString() + ".tbl", type, pageSize);
+        		dbFile = fileManager.createDBFileinDir(tableName, 
+        			schema.getColumnInfo(i).getColumnName().toString() + ".tbl", 
+        			type, pageSize);
         		logger.debug("Created new DBFile for table " + tableName +
                 	" column " + schema.getColumnInfo(i).getColumnName() + 
                 	" at path " + dbFile.getDataFile());
+        		
+        		tblFileInfo.addDBFile(dbFile);
         	}
-        }
-        else
-        {
-        	DBFile dbFile = fileManager.createDBFile(tblFileName, type, pageSize);
-        	logger.debug("Created new DBFile for table " + tableName +
-        		" at path " + dbFile.getDataFile());
-
-            tblFileInfo.setDBFile(dbFile);
         }
 
         // Cache this table since it's now considered "open".
@@ -609,7 +610,10 @@ public class StorageManager {
         DBFile dbFile = tblFileInfo.getDBFile();
 
         // Flush all open pages for the table.
-        bufferManager.flushDBFile(dbFile);
+        for (DBFile dbf : tblFileInfo.dbFiles())
+        {
+        	bufferManager.flushDBFile(dbf);
+        }
 
         // Remove this table from the cache since it's about to be closed.
         openTables.remove(tblFileInfo.getTableName());
@@ -618,7 +622,11 @@ public class StorageManager {
         // the table.
         DBFileType type = dbFile.getType();
         getTableManager(type).beforeCloseTable(tblFileInfo);
-        closeDBFile(dbFile);
+        
+        for (DBFile dbf : tblFileInfo.dbFiles())
+        {
+        	closeDBFile(dbf);
+        }
     }
 
 
@@ -642,9 +650,16 @@ public class StorageManager {
         // Close the table.  This will purge out all dirty pages for the table
         // as well.
         closeTable(tblFileInfo);
-
-        String tblFileName = getTableFileName(tableName);
-        fileManager.deleteDBFile(tblFileName);
+        
+        for (DBFile dbf : tblFileInfo.dbFiles())
+        {
+        	fileManager.deleteDBFile(dbf);
+        }
+        
+        if (tblFileInfo.getFileType() == DBFileType.COLUMNSTORE_DATA_FILE)
+        {
+        	tblFileInfo.getDBFile(1).getDataFile().getParentFile().delete();
+        }
     }
 
     
