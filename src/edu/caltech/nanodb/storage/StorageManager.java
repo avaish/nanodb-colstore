@@ -14,6 +14,7 @@ import edu.caltech.nanodb.relations.TableConstraintType;
 import edu.caltech.nanodb.relations.TableSchema;
 import edu.caltech.nanodb.server.EventDispatcher;
 import edu.caltech.nanodb.storage.btreeindex.BTreeIndexManager;
+import edu.caltech.nanodb.storage.colstore.ColStoreTableManager;
 import edu.caltech.nanodb.storage.heapfile.HeapFileTableManager;
 import edu.caltech.nanodb.transactions.TransactionManager;
 
@@ -258,6 +259,9 @@ public class StorageManager {
 
         fileTypeManagers.put(DBFileType.BTREE_INDEX_FILE,
             new BTreeIndexManager(this));
+        
+        fileTypeManagers.put(DBFileType.COLUMNSTORE_DATA_FILE, 
+        	new ColStoreTableManager(this));
     }
 
 
@@ -510,14 +514,29 @@ public class StorageManager {
         
         TableManager tblManager = getTableManager(type);
 
-        DBFile dbFile = fileManager.createDBFile(tblFileName, type, pageSize);
-        logger.debug("Created new DBFile for table " + tableName +
-            " at path " + dbFile.getDataFile());
+        if (type == DBFileType.COLUMNSTORE_DATA_FILE)
+        {
+        	TableSchema schema = tblFileInfo.getSchema();
+        	for (int i = 0; i < schema.numColumns(); i++)
+        	{
+        		DBFile dbFile = fileManager.createDBFileinDir(tableName, schema.getColumnInfo(i).
+        			getColumnName().toString() + ".tbl", type, pageSize);
+        		logger.debug("Created new DBFile for table " + tableName +
+                	" column " + schema.getColumnInfo(i).getColumnName() + 
+                	" at path " + dbFile.getDataFile());
+        	}
+        }
+        else
+        {
+        	DBFile dbFile = fileManager.createDBFile(tblFileName, type, pageSize);
+        	logger.debug("Created new DBFile for table " + tableName +
+        		" at path " + dbFile.getDataFile());
+
+            tblFileInfo.setDBFile(dbFile);
+        }
 
         // Cache this table since it's now considered "open".
         openTables.put(tblFileInfo.getTableName(), tblFileInfo);
-
-        tblFileInfo.setDBFile(dbFile);
         tblFileInfo.setTableManager(tblManager);
 
         tblManager.initTableInfo(tblFileInfo);
