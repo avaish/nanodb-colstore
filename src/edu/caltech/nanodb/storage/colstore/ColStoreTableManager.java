@@ -26,6 +26,7 @@ import edu.caltech.nanodb.relations.Tuple;
 import edu.caltech.nanodb.storage.BlockedTableReader;
 import edu.caltech.nanodb.storage.DBFile;
 import edu.caltech.nanodb.storage.DBPage;
+import edu.caltech.nanodb.storage.FileAnalyzer;
 import edu.caltech.nanodb.storage.FilePointer;
 import edu.caltech.nanodb.storage.InvalidFilePointerException;
 import edu.caltech.nanodb.storage.PageReader;
@@ -34,6 +35,7 @@ import edu.caltech.nanodb.storage.PageWriter;
 import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.storage.TableFileInfo;
 import edu.caltech.nanodb.storage.TableManager;
+import edu.caltech.nanodb.storage.heapfile.HeapFileTableManager;
 
 
 /**
@@ -42,8 +44,22 @@ import edu.caltech.nanodb.storage.TableManager;
  */
 public class ColStoreTableManager implements TableManager {
 
+	/** A logging object for reporting anything interesting that happens. */
+    private static Logger logger = Logger.getLogger(ColStoreTableManager.class);
+
+    
+    /**
+     * The table manager uses the storage manager a lot, so it caches a reference
+     * to the singleton instance of the storage manager at initialization.
+     */
+    private StorageManager storageManager;
+    
+	
 	public ColStoreTableManager(StorageManager storageManager) {
-		// TODO Auto-generated constructor stub
+		if (storageManager == null)
+            throw new IllegalArgumentException("storageManager cannot be null");
+
+        this.storageManager = storageManager;
 	}
 
 	@Override
@@ -121,6 +137,15 @@ public class ColStoreTableManager implements TableManager {
 	public BlockedTableReader getBlockedReader() {
 		// TODO Auto-generated method stub
 		return null;
+	}
+
+	public void writeTable(FileAnalyzer analyzer, TableFileInfo tblFileInfo) {
+		for (int i = 0; i < tblFileInfo.getSchema().numColumns(); i++)
+		{
+			// Get the column's DBFile
+			DBFile dbFile = tblFileInfo.getDBFile(i + 1);
+			logger.debug("Filling " + dbFile);
+		}
 	}
 	
 }

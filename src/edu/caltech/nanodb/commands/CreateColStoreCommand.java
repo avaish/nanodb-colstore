@@ -23,6 +23,7 @@ import edu.caltech.nanodb.storage.DBFileType;
 import edu.caltech.nanodb.storage.FileAnalyzer;
 import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.storage.TableFileInfo;
+import edu.caltech.nanodb.storage.colstore.ColStoreTableManager;
 
 
 /**
@@ -55,9 +56,10 @@ public class CreateColStoreCommand extends CreateTableCommand {
 	@Override
 	public void execute() throws ExecutionException {
 		// Analyze file
+		FileAnalyzer analyzer;
 		try 
 		{
-			FileAnalyzer analyzer = new FileAnalyzer(fileName);
+			analyzer = new FileAnalyzer(fileName);
 			analyzer.analyze(getColumnInfos());
 		}
 		catch (IOException e1) {
@@ -126,6 +128,8 @@ public class CreateColStoreCommand extends CreateTableCommand {
         }
         logger.debug("New table " + getTableName() + " is created!");
 
+        ((ColStoreTableManager) tblFileInfo.getTableManager()).writeTable(analyzer, tblFileInfo);
+        
         out.println("Created table:  " + getTableName());
 	}
 }

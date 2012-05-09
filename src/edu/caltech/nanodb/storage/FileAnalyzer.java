@@ -18,6 +18,7 @@ public class FileAnalyzer {
 	private String filename;
 	private BufferedReader fileReader;
 	private String[] encodings;
+	private BufferedReader[] readers;
 	
 	public FileAnalyzer(String name) throws FileNotFoundException
 	{
@@ -46,6 +47,7 @@ public class FileAnalyzer {
 		String[] prev = new String[columnCount];
 		boolean[] onruns = new boolean[columnCount];
 		encodings = new String[columnCount];
+		readers = new BufferedReader[columnCount];
 		
 		names = row.split(",");
 		
@@ -201,5 +203,10 @@ public class FileAnalyzer {
 			
 			logger.debug(" ");
 		}
+	}
+	
+	public String getNextBlock(int column, ColumnInfo colInfo)
+	{
+		return filename;
 	}
 }
