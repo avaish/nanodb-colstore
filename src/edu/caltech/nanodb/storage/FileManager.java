@@ -100,6 +100,23 @@ public class FileManager {
         logger.debug("Creating new database file " + f + ".");
         return initDBFile(f, type, pageSize);
     }
+    
+    
+    public DBFile createDBFileinDir(String dir, String filename, DBFileType type, 
+    	int pageSize) throws IOException {
+    	
+    	File fdir = new File(baseDir, dir);
+    	
+    	if (!fdir.exists())
+    		fdir.mkdir();
+
+        File f = new File(fdir, filename);
+        if (f.exists())
+            throw new IOException("File " + f + " already exists!");
+
+        logger.debug("Creating new database file " + f + ".");
+        return initDBFile(f, type, pageSize);
+    }
 
 
     public DBFile initDBFile(File f, DBFileType type, int pageSize)
