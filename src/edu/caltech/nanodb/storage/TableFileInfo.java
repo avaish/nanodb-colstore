@@ -1,6 +1,8 @@
 package edu.caltech.nanodb.storage;
 
 
+import java.util.ArrayList;
+
 import edu.caltech.nanodb.qeval.TableStats;
 import edu.caltech.nanodb.relations.TableSchema;
 
@@ -39,7 +41,10 @@ public class TableFileInfo {
      * If the table file has been opened, this is the actual data file that
      * the table is stored in.  Otherwise, this will be <tt>null</tt>.
      */
-    private DBFile dbFile;
+    private ArrayList<DBFile> dbFiles = new ArrayList<DBFile>();
+    
+    
+    private int dbFileCount = 0;
 
 
     /**
@@ -58,7 +63,8 @@ public class TableFileInfo {
             tableName = UNNAMED_TABLE;
 
         this.tableName = tableName;
-        this.dbFile = dbFile;
+        this.dbFiles.add(dbFile);
+        this.dbFileCount = 1;
 
         schema = new TableSchema();
         stats = new TableStats(schema.numColumns());
@@ -86,7 +92,7 @@ public class TableFileInfo {
      *         <tt>null</tt> if it hasn't yet been set.
      */
     public DBFile getDBFile() {
-        return dbFile;
+        return dbFiles.get(0);
     }
 
 
@@ -102,10 +108,10 @@ public class TableFileInfo {
         if (dbFile == null)
             throw new IllegalArgumentException("dbFile must not be null!");
 
-        if (this.dbFile != null)
+        if (this.dbFiles.get(0) != null)
             throw new IllegalStateException("This object already has a dbFile!");
 
-        this.dbFile = dbFile;
+        this.dbFiles.set(0, dbFile);
     }
 
 
