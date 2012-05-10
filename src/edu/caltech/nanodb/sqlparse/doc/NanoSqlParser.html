@@ -75,6 +75,7 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 	|	<a href="NanoSqlParser.html#create_view">create_view</a> 
 	|	<a href="NanoSqlParser.html#create_index">create_index</a> 
 	|	<a href="NanoSqlParser.html#create_colstore">create_colstore</a> 
+	|	<a href="NanoSqlParser.html#create_table_from_file">create_table_from_file</a> 
 	;
 
 
@@ -258,6 +259,11 @@ Definition of parser NanoSqlParser, which is a subclass of LLkParser.
 
 <a name="create_colstore">create_colstore</a>
 	:	CREATE COLSTORE <a href="NanoSqlParser.html#dbobj_ident">dbobj_ident</a> FROM <a href="NanoSqlParser.html#file_name">file_name</a> <a href="NanoSqlParser.html#table_decl">table_decl</a> 
+	;
+
+
+<a name="create_table_from_file">create_table_from_file</a>
+	:	CREATE STORE <a href="NanoSqlParser.html#dbobj_ident">dbobj_ident</a> FROM <a href="NanoSqlParser.html#file_name">file_name</a> <a href="NanoSqlParser.html#table_decl">table_decl</a> 
 	;
 
 

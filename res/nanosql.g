@@ -92,6 +92,7 @@ tokens {
   SOME        = "some";
   START       = "start";
   STDDEV      = "stddev";
+  STORE       = "store";
   SUM         = "sum";
   TABLE       = "table";
   TO          = "to";
@@ -232,7 +233,11 @@ column_name returns [ColumnName cn]
  * configured.
  */
 create_stmt returns [Command c] { c = null; } :
-  c=create_table | c=create_view | c=create_index | c=create_colstore;
+  c=create_table 
+  | c=create_view 
+  | c=create_index 
+  | c=create_colstore 
+  | c=create_table_from_file;
 
 
 //===== TABLES ============================
@@ -251,6 +256,19 @@ create_table returns [CreateTableCommand c]
   { c = new CreateTableCommand(name, temp, ifNotExists); }
   table_decl[c]
   ;
+  
+create_table_from_file returns [CreateTableFromFileCommand c]
+  {
+    c = null;
+    String name = null;
+	String filename = null;
+  }
+  :
+  CREATE STORE name=dbobj_ident FROM filename=file_name
+  { c = new CreateTableFromFileCommand(name, filename); }
+  table_decl[c]
+  ;
+
 
 /**
  * Parse a comma-delimited list of column-declarations, and add them to the

@@ -152,6 +152,7 @@ public class CreateTableCommand extends Command {
         TableFileInfo tblFileInfo = new TableFileInfo(getTableName());
         tblFileInfo.setFileType(DBFileType.HEAP_DATA_FILE);
         TableSchema schema = tblFileInfo.getSchema();
+        logger.debug(schema);
         for (ColumnInfo colInfo : getColumnInfos()) {
             try {
                 schema.addColumnInfo(colInfo);
@@ -161,6 +162,8 @@ public class CreateTableCommand extends Command {
                     colInfo.getName() + "\".", iae);
             }
         }
+        
+        logger.debug(schema);
 
         // Open all tables referenced by foreign-key constraints, so that we can
         // verify the constraints.

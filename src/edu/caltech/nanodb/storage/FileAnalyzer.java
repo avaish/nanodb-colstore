@@ -205,8 +205,17 @@ public class FileAnalyzer {
 		}
 	}
 	
-	public String getNextBlock(int column, ColumnInfo colInfo)
+	public Object[] getNextBlock(int column, ColumnInfo colInfo)
 	{
-		return filename;
+		return null;
+	}
+
+	public String getEncoding(int i) {
+		return encodings[i];
+	}
+
+	public void generateTuples(TableFileInfo tblFileInfo) throws FileNotFoundException {
+		BufferedReader reader = new BufferedReader(
+			new FileReader("input_datafiles/" + filename));
 	}
 }

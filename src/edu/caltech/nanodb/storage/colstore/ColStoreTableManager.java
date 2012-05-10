@@ -46,6 +46,10 @@ public class ColStoreTableManager implements TableManager {
 
 	/** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(ColStoreTableManager.class);
+    
+    public static final int COMP_OFFSET = 2;
+    
+    public static final int RLE_COMP = 1;
 
     
     /**
