@@ -46,10 +46,6 @@ public class ColStoreTableManager implements TableManager {
 
 	/** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(ColStoreTableManager.class);
-    
-    public static final int COMP_OFFSET = 2;
-    
-    public static final int RLE_COMP = 1;
 
     
     /**
@@ -143,13 +139,57 @@ public class ColStoreTableManager implements TableManager {
 		return null;
 	}
 
-	public void writeTable(FileAnalyzer analyzer, TableFileInfo tblFileInfo) {
+	public void writeTable(FileAnalyzer analyzer, TableFileInfo tblFileInfo) throws IOException {
 		for (int i = 0; i < tblFileInfo.getSchema().numColumns(); i++)
 		{
-			// Get the column's DBFile
+			// Get the column's DBFile and ColInfo
 			DBFile dbFile = tblFileInfo.getDBFile(i + 1);
-			logger.debug("Filling " + dbFile);
+			ColumnInfo colInfo = tblFileInfo.getSchema().getColumnInfo(i);
+			switch (analyzer.getEncoding(i)) {
+			case RLE:
+				writeRLE(dbFile, analyzer, i, colInfo);
+			}
 		}
 	}
 	
+	private void writeRLE(DBFile file, FileAnalyzer analyzer, int index, 
+		ColumnInfo info) throws IOException {
+		
+		DBPage dbPage = storageManager.loadDBPage(file, 0);
+		RLEPage.initNewPage(dbPage);
+		
+		int position = 0;
+		// Start creating RLE block
+		
+		String object = analyzer.getNextObject(index);
+		
+		while (object != null) {
+			int start = position;
+			int count = 1;
+			
+			String compare = analyzer.getNextObject(index);
+			
+			while (compare != null && compare.equals(object)) {
+				count++;
+				position++;
+				compare = analyzer.getNextObject(index);
+			}
+			
+			logger.debug("Run: (" + object + ", " + start + ", " + count + ")");
+			
+			if (RLEPage.writeBlock(dbPage, object, start, count, info.getType())) {
+				logger.debug("Written to file!");
+			}
+			else
+			{
+				dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1);
+				RLEPage.initNewPage(dbPage);
+				RLEPage.writeBlock(dbPage, object, start, count, info.getType());
+			}
+			
+			analyzer.reset(index);
+			position++;
+			object = analyzer.getNextObject(index);
+		}
+	}
 }

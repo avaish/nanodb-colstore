@@ -17,14 +17,16 @@ public class FileAnalyzer {
 	private static Logger logger = Logger.getLogger(FileAnalyzer.class);
 	private String filename;
 	private BufferedReader fileReader;
-	private String[] encodings;
+	private FileEncoding[] encodings;
 	private BufferedReader[] readers;
+	private int seekBuffer;
 	
 	public FileAnalyzer(String name) throws FileNotFoundException
 	{
 		filename = name;
 		fileReader = new BufferedReader(
 			new FileReader("input_datafiles/" + filename));
+		seekBuffer = 0;
 	}
 	
 	@SuppressWarnings("unchecked")
@@ -46,7 +48,7 @@ public class FileAnalyzer {
 		int[] distincts = new int[columnCount];
 		String[] prev = new String[columnCount];
 		boolean[] onruns = new boolean[columnCount];
-		encodings = new String[columnCount];
+		encodings = new FileEncoding[columnCount];
 		readers = new BufferedReader[columnCount];
 		
 		names = row.split(",");
@@ -54,6 +56,8 @@ public class FileAnalyzer {
 		row = fileReader.readLine();
 		while (row != null)
 		{
+			if (row.length() > seekBuffer)
+				seekBuffer = row.length();
 			logger.debug(row);
 			String[] rowArray = row.split(",");
 			for (int i = 0; i < columnCount; i++)
@@ -181,22 +185,22 @@ public class FileAnalyzer {
 			{
 				if ((runs[i] / (float) counts[i]) > 0.75)
 				{
-					encodings[i] = "RLE";
+					encodings[i] = FileEncoding.RLE;
 				}
 				else
 				{
-					encodings[i] = "Bit-string";
+					encodings[i] = FileEncoding.BIT_STRING;
 				}
 			}
 			else
 			{
 				if ((runs[i] / (float) counts[i]) > 0.75)
 				{
-					encodings[i] = "Dictionary";
+					encodings[i] = FileEncoding.DICTIONARY;
 				}
 				else
 				{
-					encodings[i] = "Uncompressed";
+					encodings[i] = FileEncoding.NONE;
 				}
 			}
 			logger.debug(names[i] + ": Encoding: " + encodings[i]);
@@ -205,17 +209,33 @@ public class FileAnalyzer {
 		}
 	}
 	
-	public Object[] getNextBlock(int column, ColumnInfo colInfo)
-	{
-		return null;
+	public String getNextObject(int column) throws IOException {
+		if (readers[column] == null) {
+			readers[column] = new BufferedReader(new FileReader
+				("input_datafiles/" + filename));
+			readers[column].readLine();
+		}
+		
+		readers[column].mark(seekBuffer);
+		String line = readers[column].readLine();
+		if (line != null) {
+			return line.split(",")[column];
+		}
+		else {
+			return null;
+		}
+	}
+	
+	public void reset(int column) throws IOException {
+		readers[column].reset();
 	}
 
-	public String getEncoding(int i) {
+	public FileEncoding getEncoding(int i) {
 		return encodings[i];
 	}
 
-	public void generateTuples(TableFileInfo tblFileInfo) throws FileNotFoundException {
-		BufferedReader reader = new BufferedReader(
-			new FileReader("input_datafiles/" + filename));
+	public void generateTuples(TableFileInfo tblFileInfo) {
+		// TODO Auto-generated method stub
+		
 	}
 }

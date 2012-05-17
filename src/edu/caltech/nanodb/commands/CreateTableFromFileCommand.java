@@ -51,6 +51,85 @@ public class CreateTableFromFileCommand extends CreateTableCommand {
 
 	@Override
 	public void execute() throws ExecutionException {
-		super.execute();
-	}
+        StorageManager storageManager = StorageManager.getInstance();
+
+
+        // Set up the table-file info based on the command details.
+
+        logger.debug("Creating a TableFileInfo object describing the new table " +
+            getTableName() + ".");
+        TableFileInfo tblFileInfo = new TableFileInfo(getTableName());
+        tblFileInfo.setFileType(DBFileType.HEAP_DATA_FILE);
+        TableSchema schema = tblFileInfo.getSchema();
+        logger.debug(schema);
+        for (ColumnInfo colInfo : getColumnInfos()) {
+            try {
+                schema.addColumnInfo(colInfo);
+            }
+            catch (IllegalArgumentException iae) {
+                throw new ExecutionException("Duplicate or invalid column \"" +
+                    colInfo.getName() + "\".", iae);
+            }
+        }
+        
+        logger.debug(schema);
+
+        // Open all tables referenced by foreign-key constraints, so that we can
+        // verify the constraints.
+        HashMap<String, TableSchema> referencedTables =
+            new HashMap<String, TableSchema>();
+        for (ConstraintDecl cd: getConstraints()) {
+            if (cd.getType() == TableConstraintType.FOREIGN_KEY) {
+                String refTableName = cd.getRefTable();
+                try {
+                    TableFileInfo refTblFileInfo =
+                        storageManager.openTable(refTableName);
+                    referencedTables.put(refTableName, refTblFileInfo.getSchema());
+                }
+                catch (FileNotFoundException e) {
+                    throw new ExecutionException(String.format(
+                        "Referenced table %s doesn't exist.", refTableName), e);
+                }
+                catch (IOException e) {
+                    throw new ExecutionException(String.format(
+                        "Error while loading schema for referenced table %s.",
+                        refTableName), e);
+                }
+            }
+        }
+
+        try {
+            initTableConstraints(storageManager, tblFileInfo, referencedTables);
+        }
+        catch (IOException e) {
+            throw new ExecutionException(
+                "Couldn't initialize all constraints on table " + getTableName(), e);
+        }
+
+        // Get the table manager and create the table.
+
+        logger.debug("Creating the new table " + getTableName() + " on disk.");
+        try {
+            storageManager.createTable(tblFileInfo);
+        }
+        catch (IOException ioe) {
+            throw new ExecutionException("Could not create table \"" + getTableName() +
+                "\".  See nested exception for details.", ioe);
+        }
+        logger.debug("New table " + getTableName() + " is created!");
+
+        out.println("Created table:  " + getTableName());
+        
+        FileAnalyzer analyzer = null;
+        try {
+			analyzer = new FileAnalyzer(fileName);
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+        
+        analyzer.generateTuples(tblFileInfo);
+        
+        
+    }
 }
