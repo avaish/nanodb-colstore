@@ -18,6 +18,7 @@ public class FileAnalyzer {
 	private String filename;
 	private BufferedReader fileReader;
 	private FileEncoding[] encodings;
+	private int[] distincts;
 	private BufferedReader[] readers;
 	private int seekBuffer;
 	
@@ -45,7 +46,7 @@ public class FileAnalyzer {
 		int[] sort = new int[columnCount];
 		int[] runs = new int[columnCount];
 		int[] counts = new int[columnCount];
-		int[] distincts = new int[columnCount];
+		distincts = new int[columnCount];
 		String[] prev = new String[columnCount];
 		boolean[] onruns = new boolean[columnCount];
 		encodings = new FileEncoding[columnCount];
@@ -57,7 +58,7 @@ public class FileAnalyzer {
 		while (row != null)
 		{
 			if (row.length() > seekBuffer)
-				seekBuffer = row.length();
+				seekBuffer = row.length() * 4;
 			logger.debug(row);
 			String[] rowArray = row.split(",");
 			for (int i = 0; i < columnCount; i++)
@@ -189,12 +190,12 @@ public class FileAnalyzer {
 				}
 				else
 				{
-					encodings[i] = FileEncoding.BIT_STRING;
+					encodings[i] = FileEncoding.NONE;
 				}
 			}
 			else
 			{
-				if ((runs[i] / (float) counts[i]) > 0.75)
+				if ((distincts[i] / (float) counts[i]) < 0.75)
 				{
 					encodings[i] = FileEncoding.DICTIONARY;
 				}
@@ -217,8 +218,10 @@ public class FileAnalyzer {
 		}
 		
 		readers[column].mark(seekBuffer);
+		logger.debug("Marked with " + seekBuffer + " buffer length.");
 		String line = readers[column].readLine();
 		if (line != null) {
+			logger.debug("Reading " + line.split(",")[column]);
 			return line.split(",")[column];
 		}
 		else {
@@ -232,6 +235,10 @@ public class FileAnalyzer {
 
 	public FileEncoding getEncoding(int i) {
 		return encodings[i];
+	}
+	
+	public int getCounts(int i) {
+		return distincts[i];
 	}
 
 	public void generateTuples(TableFileInfo tblFileInfo) {

@@ -133,6 +133,9 @@ public class CreateColStoreCommand extends CreateTableCommand {
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
         
         out.println("Created table:  " + getTableName());

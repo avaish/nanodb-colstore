@@ -4,8 +4,7 @@ package edu.caltech.nanodb.storage.colstore;
 import java.io.EOFException;
 import java.io.IOException;
 
-import java.util.ArrayList;
-import java.util.Map;
+import java.util.*;
 
 import org.apache.log4j.Logger;
 
@@ -139,7 +138,8 @@ public class ColStoreTableManager implements TableManager {
 		return null;
 	}
 
-	public void writeTable(FileAnalyzer analyzer, TableFileInfo tblFileInfo) throws IOException {
+	public void writeTable(FileAnalyzer analyzer, TableFileInfo tblFileInfo) 
+			throws IOException, InterruptedException {
 		for (int i = 0; i < tblFileInfo.getSchema().numColumns(); i++)
 		{
 			// Get the column's DBFile and ColInfo
@@ -148,12 +148,131 @@ public class ColStoreTableManager implements TableManager {
 			switch (analyzer.getEncoding(i)) {
 			case RLE:
 				writeRLE(dbFile, analyzer, i, colInfo);
+				break;
+			case DICTIONARY:
+				writeDictionary(dbFile, analyzer, i, colInfo);
+				break;
+			case NONE:
+				writeUncompressed(dbFile, analyzer, i, colInfo);
+				break;
 			}
 		}
 	}
 	
+	private void writeDictionary(DBFile file, FileAnalyzer analyzer, int index,
+			ColumnInfo info) throws IOException {
+		
+		DBPage dbPage = storageManager.loadDBPage(file, 0);
+		DictionaryPage.initNewPage(dbPage);
+		
+		dbPage = storageManager.loadDBPage(file, 1, true);
+		DictionaryPage.initNewPage(dbPage);
+		
+		HashMap<String, Integer> dict = new HashMap<String, Integer>();
+		
+		int distincts = analyzer.getCounts(index);
+		int bitsize = (int) Math.ceil(Math.log(distincts)/Math.log(2));
+		
+		logger.debug("Bitsize " + bitsize);
+		
+		int blockNum = (int) Math.floor(16.0 / bitsize);
+		
+		int val = 0;
+		int currentBlock = 0;
+		int blockIndex = 0;
+		
+		String object = analyzer.getNextObject(index);
+		
+		while (object != null) {
+			if (!dict.containsKey(object)) {
+				dict.put(object, val);
+				val++;
+			}
+			
+			int bitrep = dict.get(object);
+			logger.debug(object + " bitrep: " + Integer.toBinaryString(bitrep));
+			
+			currentBlock = currentBlock | (bitrep << blockIndex);
+			logger.debug("Current block: " + Integer.toBinaryString(currentBlock));
+			
+			logger.debug("");
+			
+			blockIndex++;
+			if (blockIndex == blockNum) {
+				logger.debug("Writing block: " + Integer.toBinaryString(currentBlock));
+				logger.debug((short) currentBlock);
+
+				if (DictionaryPage.writeBlock(dbPage, currentBlock, blockIndex)) {
+					logger.debug("Written to file!");
+				}
+				else
+				{
+					dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1, true);
+					DictionaryPage.initNewPage(dbPage);
+					DictionaryPage.writeBlock(dbPage, currentBlock, blockIndex);
+					logger.debug("New page loaded!");
+				}
+				
+				blockIndex = 0;
+				currentBlock = 0;
+			}
+			
+			object = analyzer.getNextObject(index);
+		}
+		
+		logger.debug("Writing block: " + Integer.toBinaryString(currentBlock));
+		logger.debug((short) currentBlock);
+		if (DictionaryPage.writeBlock(dbPage, currentBlock, blockIndex)) {
+			logger.debug("Written to file!");
+		}
+		else
+		{
+			dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1, true);
+			DictionaryPage.initNewPage(dbPage);
+			DictionaryPage.writeBlock(dbPage, currentBlock, blockIndex);
+			logger.debug("New page loaded!");
+		}
+		blockIndex = 0;
+		currentBlock = 0;
+		
+		dbPage = storageManager.loadDBPage(file, 0);
+		
+		DictionaryPage.writeDictionary(dbPage, dict, bitsize, blockNum, info);
+	}
+
+	private void writeUncompressed(DBFile file, FileAnalyzer analyzer, int index,
+			ColumnInfo info) throws IOException, InterruptedException {
+		
+		DBPage dbPage = storageManager.loadDBPage(file, 0);
+		UncompressedPage.initNewPage(dbPage);
+		
+		int count = 0;
+		
+		String object = analyzer.getNextObject(index);
+		
+		while (object != null) {
+		
+			logger.debug("Entry: " + object);
+			
+			if (UncompressedPage.writeBlock(dbPage, object, count, info.getType())) {
+				logger.debug("Written to file!");
+			}
+			else
+			{
+				dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1, true);
+				UncompressedPage.initNewPage(dbPage);
+				UncompressedPage.writeBlock(dbPage, object, count, info.getType());
+				logger.debug("New page loaded!");
+			}
+			
+			count++;
+			object = analyzer.getNextObject(index);
+		}
+		
+	}
+
 	private void writeRLE(DBFile file, FileAnalyzer analyzer, int index, 
-		ColumnInfo info) throws IOException {
+			ColumnInfo info) throws IOException, InterruptedException {
 		
 		DBPage dbPage = storageManager.loadDBPage(file, 0);
 		RLEPage.initNewPage(dbPage);
@@ -182,9 +301,10 @@ public class ColStoreTableManager implements TableManager {
 			}
 			else
 			{
-				dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1);
+				dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1, true);
 				RLEPage.initNewPage(dbPage);
 				RLEPage.writeBlock(dbPage, object, start, count, info.getType());
+				logger.debug("New page loaded!");
 			}
 			
 			analyzer.reset(index);
