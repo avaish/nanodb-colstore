@@ -21,6 +21,7 @@ import edu.caltech.nanodb.expressions.ColumnName;
 import edu.caltech.nanodb.expressions.Expression;
 import edu.caltech.nanodb.expressions.OrderByExpression;
 
+import edu.caltech.nanodb.plans.CSProjectNode;
 import edu.caltech.nanodb.plans.FileScanNode;
 import edu.caltech.nanodb.plans.NestedLoopsJoinNode;
 import edu.caltech.nanodb.plans.PlanNode;
@@ -33,6 +34,7 @@ import edu.caltech.nanodb.plans.SortNode;
 import edu.caltech.nanodb.relations.JoinType;
 import edu.caltech.nanodb.relations.Schema;
 
+import edu.caltech.nanodb.storage.DBFileType;
 import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.storage.TableFileInfo;
 
@@ -148,6 +150,16 @@ public class DPJoinPlanner implements Planner {
             throw new UnsupportedOperationException(
                 "NanoDB doesn't yet support SQL queries without a FROM clause!");
         }
+        
+        if (fromClause.isBaseTable()) {
+        	TableFileInfo tableInfo = StorageManager.getInstance().
+        		openTable(fromClause.getTableName());
+        	
+        	if (tableInfo.getFileType() == DBFileType.COLUMNSTORE_DATA_FILE) {
+        		logger.debug("Jumping to ColumnStore planner.");
+        		return new CSProjectNode(selClause);
+        	}
+        }
 
         // Pull out the top-level conjuncts from the WHERE clause on the query,
         // since we will handle them in special ways if we have outer joins.
@@ -188,7 +200,7 @@ public class DPJoinPlanner implements Planner {
     }
 
 
-    private JoinComponent makeJoinPlan(FromClause fromClause,
+	private JoinComponent makeJoinPlan(FromClause fromClause,
         Collection<Expression> extraConjuncts) throws IOException {
 
         // These variables receive the leaf-clauses and join conjuncts found
