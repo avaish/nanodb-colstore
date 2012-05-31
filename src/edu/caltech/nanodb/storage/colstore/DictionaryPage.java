@@ -29,7 +29,6 @@ public class DictionaryPage {
      *
      * @param dbPage the data page to initialize
      */
-
 	public static void initNewPage(DBPage dbPage) {
 		PageWriter dictWriter = new PageWriter(dbPage);
         dictWriter.setPosition(ENCODING_OFFSET);
