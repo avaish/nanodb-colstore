@@ -222,7 +222,7 @@ public class FileAnalyzer {
 		String line = readers[column].readLine();
 		if (line != null) {
 			logger.debug("Reading " + line.split(",")[column]);
-			return line.split(",")[column];
+			return line.split(",")[column].trim();
 		}
 		else {
 			return null;

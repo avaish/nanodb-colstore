@@ -166,12 +166,12 @@ public class BlockColumnStoreReader {
     		int mask = (1 << bitsize) - 1;
     		int current;
     		for (int i = 0; i < blockNum; i++) {
-    			current = (sblock & mask) >> i;
+    			current = (sblock & mask) >> (i * bitsize);
     			if (current == 0) break;
     			
     			contents.add(dict.get(current));
     			
-    			mask = mask << 1;
+    			mask = mask << bitsize;
     		}
     		
     		return new ColStoreBlock(dbPage, DictionaryPage.FIRST_BLOCK_OFFSET, 
@@ -241,12 +241,12 @@ public class BlockColumnStoreReader {
     		int mask = (1 << bitsize) - 1;
     		int current;
     		for (int i = 0; i < blockNum; i++) {
-    			current = (sblock & mask) >> i;
+    			current = (sblock & mask) >> (i * bitsize);
     			if (current == 0) break;
     			
     			contents.add(dict.get(current));
     			
-    			mask = mask << 1;
+    			mask = mask << bitsize;
     		}
     		
     		return new ColStoreBlock(dbPage, offset, offset + 2, colInfo, 

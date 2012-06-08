@@ -549,7 +549,7 @@ public class ColStoreTableManager implements TableManager {
 			int bitrep = dict.get(object);
 			logger.debug(object + " bitrep: " + Integer.toBinaryString(bitrep));
 			
-			currentBlock = currentBlock | (bitrep << blockIndex);
+			currentBlock = currentBlock | (bitrep << (blockIndex * bitsize));
 			logger.debug("Current block: " + Integer.toBinaryString(currentBlock));
 			
 			logger.debug("");
