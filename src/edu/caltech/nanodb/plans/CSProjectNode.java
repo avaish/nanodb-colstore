@@ -38,6 +38,10 @@ public class CSProjectNode extends PlanNode {
     
     private ArrayList<CSFileScanNode> fileScanChildren;
     
+    private Expression predicate;
+    
+    private CSSimpleFilterNode predNode;
+    
     private boolean done;
 
     /**
@@ -49,6 +53,7 @@ public class CSProjectNode extends PlanNode {
 	public CSProjectNode(SelectClause selClause, TableFileInfo tblFileInfo) {
 		super(OperationType.PROJECT);
 		
+		predicate = selClause.getWhereExpr();
 		projectionSpec = selClause.getSelectValues();
 		this.tblFileInfo = tblFileInfo;
 		inputSchema = this.tblFileInfo.getSchema();
@@ -82,6 +87,8 @@ public class CSProjectNode extends PlanNode {
 
 	@Override
 	public void prepare() {
+		
+		predNode = new CSSimpleFilterNode(tblFileInfo, predicate);
 		
 		schema = new Schema();
         nonWildcardColumnInfos = new ArrayList<ColumnInfo>();
@@ -133,6 +140,8 @@ public class CSProjectNode extends PlanNode {
             }
         }
         
+        predNode.prepare();
+        
         for (CSFileScanNode node : fileScanChildren) {
         	try {
 				node.prepare();
@@ -165,6 +174,9 @@ public class CSProjectNode extends PlanNode {
 	@Override
 	public String toString() {
 		String plan = "CSProject[values:  " + projectionSpec.toString() + "]\n";
+		if (predicate != null) {
+			plan = plan + "\t" + predNode.toString();
+		}
 		for (CSFileScanNode node : fileScanChildren) {
 			plan = plan + "\t" + node.toString() + "\n";
 		}
@@ -193,8 +205,19 @@ public class CSProjectNode extends PlanNode {
 		if (done) return null;
 		
 		CSGeneratedTuple tuple = new CSGeneratedTuple(nonWildcardColumnInfos);
-		
+
 		Object temp;
+		while (!predNode.getNext()) {
+			for (int i = 0; i < fileScanChildren.size(); i++) {
+				CSFileScanNode node = fileScanChildren.get(i);
+				temp = node.getNextObject();
+				if (temp == null) {
+					done = true;
+					return null;
+				}
+			}
+		}
+		
 		for (int i = 0; i < fileScanChildren.size(); i++) {
 			CSFileScanNode node = fileScanChildren.get(i);
 			temp = node.getNextObject();

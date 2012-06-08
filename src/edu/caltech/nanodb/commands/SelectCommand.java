@@ -73,7 +73,6 @@ public class SelectCommand extends QueryCommand {
         // Create a plan for executing the SQL query.
         Planner planner = PlannerFactory.getPlanner();
         plan = planner.makePlan(selClause);
-        logger.debug(plan.toString());
     }
     
     
