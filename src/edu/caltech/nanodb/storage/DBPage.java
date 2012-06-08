@@ -1069,6 +1069,82 @@ public class DBPage {
 
         return dataSize;
     }
+    
+    
+    public static int getObjectDiskSize(Object value, ColumnType colType) {
+    	if (colType == null)
+            throw new NullPointerException("colType cannot be null");
+
+        if (value == null)
+            throw new NullPointerException("value cannot be null");
+
+        int dataSize;
+
+        // This code relies on Java autoboxing.  Go, syntactic sugar.
+        switch (colType.getBaseType()) {
+
+        case INTEGER:
+            {
+                dataSize = 4;
+                break;
+            }
+
+        case SMALLINT:
+            {
+                dataSize = 2;
+                break;
+            }
+
+        case BIGINT:
+            {
+                dataSize = 8;
+                break;
+            }
+
+        case TINYINT:
+            {
+                dataSize = 1;
+                break;
+            }
+
+        case FLOAT:
+            {
+                dataSize = 4;
+                break;
+            }
+
+        case DOUBLE:
+            {
+                dataSize = 8;
+                break;
+            }
+
+        case CHAR:
+            {
+                dataSize = colType.getLength();
+                break;
+            }
+
+        case VARCHAR:
+            {
+                String strVal = TypeConverter.getStringValue(value);
+                dataSize = 2 + strVal.length();
+                break;
+            }
+
+        case FILE_POINTER:
+            {
+                dataSize = 4;
+                break;
+            }
+
+        default:
+            throw new UnsupportedOperationException(
+                "Cannot currently store type " + colType.getBaseType());
+        }
+
+        return dataSize;
+    }
 
 
     public String toFormattedString() {

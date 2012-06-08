@@ -282,9 +282,9 @@ public class ColStoreTableManager implements TableManager {
 
             ColumnInfo colInfo = new ColumnInfo(colName, tableName, colType);
             
-            logger.debug("Adding file " + tableName + "/" + tableName + "." + colName + ".tbl");
-            tblFileInfo.addDBFile(storageManager.openDBFile(tableName + "/" + 
-            	tableName + "." + colName + ".tbl"));
+            //logger.debug("Adding file " + tableName + "/" + tableName + "." + colName + ".tbl");
+            //tblFileInfo.addDBFile(storageManager.openDBFile(tableName + "/" + 
+            //	tableName + "." + colName + ".tbl"));
 
             logger.debug(colInfo);
 
@@ -493,6 +493,29 @@ public class ColStoreTableManager implements TableManager {
 		}
 	}
 	
+	public void printTable(TableFileInfo tblFileInfo) throws IOException {
+		BlockColumnStoreReader reader = new BlockColumnStoreReader();
+		
+		for (int i = 0; i < tblFileInfo.getSchema().numColumns(); i++) {
+			logger.debug("Column " + i);
+			DBPage currentPage = reader.getFirstDataPage(tblFileInfo, i);
+			while (currentPage != null) {
+				ColStoreBlock currentBlock = reader.getFirstBlockInPage(
+					tblFileInfo, currentPage, i);
+				while (currentBlock != null) {
+					Object current = currentBlock.getNext();
+					while (current != null) {
+						logger.debug(current);
+						current = currentBlock.getNext();
+					}
+					currentBlock = reader.getNextBlockInPage(tblFileInfo, 
+						currentPage, i, currentBlock);
+				}
+				currentPage = reader.getNextDataPage(tblFileInfo, currentPage, i);
+			}
+		}
+	}
+	
 	private void writeDictionary(DBFile file, FileAnalyzer analyzer, int index,
 			ColumnInfo info) throws IOException {
 		
@@ -504,14 +527,14 @@ public class ColStoreTableManager implements TableManager {
 		
 		HashMap<String, Integer> dict = new HashMap<String, Integer>();
 		
-		int distincts = analyzer.getCounts(index);
+		int distincts = analyzer.getCounts(index) + 1;
 		int bitsize = (int) Math.ceil(Math.log(distincts)/Math.log(2));
 		
 		logger.debug("Bitsize " + bitsize);
 		
 		int blockNum = (int) Math.floor(16.0 / bitsize);
 		
-		int val = 0;
+		int val = 1;
 		int currentBlock = 0;
 		int blockIndex = 0;
 		
@@ -570,6 +593,8 @@ public class ColStoreTableManager implements TableManager {
 		currentBlock = 0;
 		
 		dbPage = storageManager.loadDBPage(file, 0);
+		
+		logger.debug(dict);
 		
 		DictionaryPage.writeDictionary(dbPage, dict, bitsize, blockNum, info);
 	}

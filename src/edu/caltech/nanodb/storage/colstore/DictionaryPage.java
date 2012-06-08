@@ -6,26 +6,29 @@ import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.storage.DBPage;
+import edu.caltech.nanodb.storage.FileEncoding;
 import edu.caltech.nanodb.storage.PageReader;
 import edu.caltech.nanodb.storage.PageWriter;
 import edu.caltech.nanodb.storage.heapfile.DataPage;
 
 public class DictionaryPage {
 	/** A logging object for reporting anything interesting that happens. */
-    private static Logger logger = Logger.getLogger(DataPage.class);
+    private static Logger logger = Logger.getLogger(DictionaryPage.class);
 
     public static final int ENCODING_OFFSET = 2;
     
-    public static final int ENCODING_MARKER = 1;
+    public static final int ENCODING_MARKER = FileEncoding.DICTIONARY.ordinal();
     
     public static final int COUNT_OFFSET = 6;
     
     public static final int NEXT_BLOCK_START_OFFSET = 10;
 
+    public static final int FIRST_BLOCK_OFFSET = 14;
+
 
     /**
-     * Initialize a newly allocated RLE page.  Currently this involves setting
-     * the number of values to 0 and marking the page as an RLE encoded page.
+     * Initialize a newly allocated dictionary page.  Currently this involves setting
+     * the number of values to 0 and marking the page as an dictionary encoded page.
      *
      * @param dbPage the data page to initialize
      */
@@ -89,6 +92,7 @@ public class DictionaryPage {
     	
     	dictWriter.writeInt(bitsize);
     	dictWriter.writeInt(blockNum);
+    	dictWriter.writeInt(dict.size());
     	
     	for (String key : dict.keySet()) {
     		dictWriter.setPosition(dictWriter.getPosition() + dbPage.writeObject
@@ -96,5 +100,89 @@ public class DictionaryPage {
     		dictWriter.writeInt(dict.get(key));
     	}
 	}
-
+	
+	public static int getBitSize(DBPage dbPage) {
+		PageReader dictReader = new PageReader(dbPage);
+    	
+    	dictReader.setPosition(ENCODING_OFFSET);
+    	
+    	if (dictReader.readInt() != ENCODING_MARKER) {
+    		throw new IllegalArgumentException("Wrong encoding type");
+    	}
+    	
+    	dictReader.setPosition(NEXT_BLOCK_START_OFFSET);
+    	dictReader.setPosition(dictReader.readInt());
+    	
+    	return dictReader.readInt();
+	}
+	
+	public static int getBlockNum(DBPage dbPage) {
+		PageReader dictReader = new PageReader(dbPage);
+    	
+    	dictReader.setPosition(ENCODING_OFFSET);
+    	
+    	if (dictReader.readInt() != ENCODING_MARKER) {
+    		throw new IllegalArgumentException("Wrong encoding type");
+    	}
+    	
+    	dictReader.setPosition(NEXT_BLOCK_START_OFFSET);
+    	dictReader.setPosition(dictReader.readInt() + 4);
+    	
+    	return dictReader.readInt();
+	}
+	
+	public static HashMap<Integer, Object> constructDictionary(DBPage dbPage, 
+		ColumnInfo info) {
+	
+		PageReader dictReader = new PageReader(dbPage);
+    	
+    	dictReader.setPosition(ENCODING_OFFSET);
+    	
+    	if (dictReader.readInt() != ENCODING_MARKER) {
+    		throw new IllegalArgumentException("Wrong encoding type");
+    	}
+    	
+    	dictReader.setPosition(NEXT_BLOCK_START_OFFSET);
+    	dictReader.setPosition(dictReader.readInt() + 8);
+    	
+    	int size = dictReader.readInt();
+    	
+    	HashMap<Integer, Object> dict = new HashMap<Integer, Object>();
+    	Object obj;
+    	int bits;
+    	
+    	for (int i = 0; i < size; i++) {
+    		obj = dbPage.readObject(dictReader.getPosition(), info.getType());
+    		dictReader.setPosition(dictReader.getPosition() + 
+    			DBPage.getObjectDiskSize(obj, info.getType()));
+    		bits = dictReader.readInt();
+    		dict.put(bits, obj);
+    	}
+		
+		return dict;
+	}
+	
+	public static int getBlockEncodedData(DBPage dbPage, int blockStart) {
+		PageReader dictReader = new PageReader(dbPage);
+    	
+    	dictReader.setPosition(ENCODING_OFFSET);
+    	
+    	if (dictReader.readInt() != ENCODING_MARKER) {
+    		throw new IllegalArgumentException("Wrong encoding type");
+    	}
+    	
+    	dictReader.setPosition(NEXT_BLOCK_START_OFFSET);
+    	
+    	if (dictReader.readInt() <= blockStart) {
+    		return Integer.MIN_VALUE;
+    	}
+    	
+    	dictReader.setPosition(blockStart);
+    	
+    	return dictReader.readShort();
+	}
+	
+	public static int getFirstBlockEncodedData(DBPage dbPage) {
+		return getBlockEncodedData(dbPage, FIRST_BLOCK_OFFSET);
+	}
 }

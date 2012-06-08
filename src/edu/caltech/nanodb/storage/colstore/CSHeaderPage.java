@@ -12,7 +12,7 @@ public class CSHeaderPage {
 
     public static final int ENCODING_OFFSET = 2;
     
-    public static final int ENCODING_MARKER = 4;
+    public static final int ENCODING_MARKER = -1;
     
     public static final int SCHEMA_SIZE_OFFSET = 6;
     

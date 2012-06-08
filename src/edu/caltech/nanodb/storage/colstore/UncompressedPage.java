@@ -4,6 +4,7 @@ import org.apache.log4j.Logger;
 
 import edu.caltech.nanodb.relations.ColumnType;
 import edu.caltech.nanodb.storage.DBPage;
+import edu.caltech.nanodb.storage.FileEncoding;
 import edu.caltech.nanodb.storage.PageReader;
 import edu.caltech.nanodb.storage.PageWriter;
 import edu.caltech.nanodb.storage.heapfile.DataPage;
@@ -14,11 +15,13 @@ public class UncompressedPage {
 
     public static final int ENCODING_OFFSET = 2;
     
-    public static final int ENCODING_MARKER = 2;
+    public static final int ENCODING_MARKER = FileEncoding.NONE.ordinal();
     
     public static final int COUNT_OFFSET = 6;
     
     public static final int NEXT_BLOCK_START_OFFSET = 10;
+
+    public static final int FIRST_BLOCK_OFFSET = 14;
 
 
     /**
@@ -32,7 +35,7 @@ public class UncompressedPage {
         uncWriter.setPosition(ENCODING_OFFSET);
         uncWriter.writeInt(ENCODING_MARKER);
         uncWriter.writeInt(0);
-        uncWriter.writeInt(14);
+        uncWriter.writeInt(FIRST_BLOCK_OFFSET);
     }
 
 
@@ -51,7 +54,8 @@ public class UncompressedPage {
     	uncReader.setPosition(NEXT_BLOCK_START_OFFSET);
     	int write_offset = uncReader.readInt();
     	
-    	if (write_offset + object.length() + 12 > dbPage.getPageSize()) {
+    	if (write_offset + DBPage.getObjectDiskSize(object, type) + 4 
+    			> dbPage.getPageSize()) {
     		return false;
     	}
     	
@@ -70,4 +74,55 @@ public class UncompressedPage {
     	
     	return true;
 	}
+	
+	public static Object getBlockData(DBPage dbPage, int blockStart, ColumnType 
+    		colType) {
+    	
+    	PageReader uncReader = new PageReader(dbPage);
+    	
+    	uncReader.setPosition(ENCODING_OFFSET);
+    	
+    	if (uncReader.readInt() != ENCODING_MARKER) {
+    		throw new IllegalArgumentException("Wrong encoding type");
+    	}
+    	
+    	uncReader.setPosition(NEXT_BLOCK_START_OFFSET);
+    	
+    	if (uncReader.readInt() <= blockStart) {
+    		return null;
+    	}
+    	
+    	return dbPage.readObject(blockStart, colType);
+    }
+    
+    public static Object getFirstBlockData(DBPage dbPage, ColumnType 
+    		colType) {
+    	return getBlockData(dbPage, FIRST_BLOCK_OFFSET, colType);
+    }
+    
+    public static int getBlockEndOffset(DBPage dbPage, int blockStart, ColumnType 
+    		colType) {
+    	
+    	PageReader uncReader = new PageReader(dbPage);
+    	
+    	uncReader.setPosition(ENCODING_OFFSET);
+    	
+    	if (uncReader.readInt() != ENCODING_MARKER) {
+    		throw new IllegalArgumentException("Wrong encoding type");
+    	}
+    	
+    	uncReader.setPosition(NEXT_BLOCK_START_OFFSET);
+    	
+    	if (uncReader.readInt() <= blockStart) {
+    		return -1;
+    	}
+    	
+    	return blockStart + DBPage.getObjectDiskSize(dbPage.readObject(
+    		blockStart, colType), colType) + 4;
+    }
+    
+    public static int getFirstBlockEndOffset(DBPage dbPage, ColumnType 
+    		colType) {
+    	return getBlockEndOffset(dbPage, FIRST_BLOCK_OFFSET, colType);
+    }
 }
