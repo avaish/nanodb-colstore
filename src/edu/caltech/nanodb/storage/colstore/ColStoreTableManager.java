@@ -282,9 +282,9 @@ public class ColStoreTableManager implements TableManager {
 
             ColumnInfo colInfo = new ColumnInfo(colName, tableName, colType);
             
-            //logger.debug("Adding file " + tableName + "/" + tableName + "." + colName + ".tbl");
-            //tblFileInfo.addDBFile(storageManager.openDBFile(tableName + "/" + 
-            //	tableName + "." + colName + ".tbl"));
+            logger.debug("Adding file " + tableName + "/" + tableName + "." + colName + ".tbl");
+            tblFileInfo.addDBFile(storageManager.openDBFile(tableName + "/" + 
+            	tableName + "." + colName + ".tbl"));
 
             logger.debug(colInfo);
 

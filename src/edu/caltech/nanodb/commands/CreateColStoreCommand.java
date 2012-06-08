@@ -139,5 +139,13 @@ public class CreateColStoreCommand extends CreateTableCommand {
 		}
         
         out.println("Created table:  " + getTableName());
+        
+
+		try {
+			((ColStoreTableManager) tblFileInfo.getTableManager()).printTable(tblFileInfo);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 }

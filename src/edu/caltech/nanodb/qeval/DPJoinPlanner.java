@@ -21,6 +21,7 @@ import edu.caltech.nanodb.expressions.ColumnName;
 import edu.caltech.nanodb.expressions.Expression;
 import edu.caltech.nanodb.expressions.OrderByExpression;
 
+import edu.caltech.nanodb.plans.CSFileScanNode;
 import edu.caltech.nanodb.plans.CSProjectNode;
 import edu.caltech.nanodb.plans.FileScanNode;
 import edu.caltech.nanodb.plans.NestedLoopsJoinNode;
@@ -37,6 +38,7 @@ import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.storage.DBFileType;
 import edu.caltech.nanodb.storage.StorageManager;
 import edu.caltech.nanodb.storage.TableFileInfo;
+import edu.caltech.nanodb.storage.colstore.ColStoreTableManager;
 
 import org.apache.log4j.Logger;
 
@@ -157,7 +159,10 @@ public class DPJoinPlanner implements Planner {
         	
         	if (tableInfo.getFileType() == DBFileType.COLUMNSTORE_DATA_FILE) {
         		logger.debug("Jumping to ColumnStore planner.");
-        		return new CSProjectNode(selClause);
+        		// ((ColStoreTableManager) tableInfo.getTableManager()).printTable(tableInfo);
+        		PlanNode plan = new CSProjectNode(selClause, tableInfo);
+        		plan.prepare();
+        		return plan;
         	}
         }
 
