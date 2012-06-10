@@ -282,11 +282,11 @@ public class ColStoreTableManager implements TableManager {
 
             ColumnInfo colInfo = new ColumnInfo(colName, tableName, colType);
             
-            logger.debug("Adding file " + tableName + "/" + tableName + "." + colName + ".tbl");
+            // logger.debug("Adding file " + tableName + "/" + tableName + "." + colName + ".tbl");
             tblFileInfo.addDBFile(storageManager.openDBFile(tableName + "/" + 
             	tableName + "." + colName + ".tbl"));
 
-            logger.debug(colInfo);
+            // logger.debug(colInfo);
 
             schema.addColumnInfo(colInfo);
         }
@@ -497,7 +497,7 @@ public class ColStoreTableManager implements TableManager {
 		BlockColumnStoreReader reader = new BlockColumnStoreReader();
 		
 		for (int i = 0; i < tblFileInfo.getSchema().numColumns(); i++) {
-			logger.debug("Column " + i);
+			// logger.debug("Column " + i);
 			DBPage currentPage = reader.getFirstDataPage(tblFileInfo, i);
 			while (currentPage != null) {
 				ColStoreBlock currentBlock = reader.getFirstBlockInPage(
@@ -505,7 +505,7 @@ public class ColStoreTableManager implements TableManager {
 				while (currentBlock != null) {
 					Object current = currentBlock.getNext();
 					while (current != null) {
-						logger.debug(current);
+						// logger.debug(current);
 						current = currentBlock.getNext();
 					}
 					currentBlock = reader.getNextBlockInPage(tblFileInfo, 
@@ -530,7 +530,7 @@ public class ColStoreTableManager implements TableManager {
 		int distincts = analyzer.getCounts(index) + 1;
 		int bitsize = (int) Math.ceil(Math.log(distincts)/Math.log(2));
 		
-		logger.debug("Bitsize " + bitsize);
+		// logger.debug("Bitsize " + bitsize);
 		
 		int blockNum = (int) Math.floor(16.0 / bitsize);
 		
@@ -547,27 +547,27 @@ public class ColStoreTableManager implements TableManager {
 			}
 			
 			int bitrep = dict.get(object);
-			logger.debug(object + " bitrep: " + Integer.toBinaryString(bitrep));
+			// logger.debug(object + " bitrep: " + Integer.toBinaryString(bitrep));
 			
 			currentBlock = currentBlock | (bitrep << (blockIndex * bitsize));
-			logger.debug("Current block: " + Integer.toBinaryString(currentBlock));
+			// logger.debug("Current block: " + Integer.toBinaryString(currentBlock));
 			
-			logger.debug("");
+			// logger.debug("");
 			
 			blockIndex++;
 			if (blockIndex == blockNum) {
-				logger.debug("Writing block: " + Integer.toBinaryString(currentBlock));
-				logger.debug((short) currentBlock);
+				// logger.debug("Writing block: " + Integer.toBinaryString(currentBlock));
+				// logger.debug((short) currentBlock);
 
 				if (DictionaryPage.writeBlock(dbPage, currentBlock, blockIndex)) {
-					logger.debug("Written to file!");
+					// logger.debug("Written to file!");
 				}
 				else
 				{
 					dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1, true);
 					DictionaryPage.initNewPage(dbPage);
 					DictionaryPage.writeBlock(dbPage, currentBlock, blockIndex);
-					logger.debug("New page loaded!");
+					// logger.debug("New page loaded!");
 				}
 				
 				blockIndex = 0;
@@ -577,24 +577,24 @@ public class ColStoreTableManager implements TableManager {
 			object = analyzer.getNextObject(index);
 		}
 		
-		logger.debug("Writing block: " + Integer.toBinaryString(currentBlock));
-		logger.debug((short) currentBlock);
+		// logger.debug("Writing block: " + Integer.toBinaryString(currentBlock));
+		// logger.debug((short) currentBlock);
 		if (DictionaryPage.writeBlock(dbPage, currentBlock, blockIndex)) {
-			logger.debug("Written to file!");
+			// logger.debug("Written to file!");
 		}
 		else
 		{
 			dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1, true);
 			DictionaryPage.initNewPage(dbPage);
 			DictionaryPage.writeBlock(dbPage, currentBlock, blockIndex);
-			logger.debug("New page loaded!");
+			// logger.debug("New page loaded!");
 		}
 		blockIndex = 0;
 		currentBlock = 0;
 		
 		dbPage = storageManager.loadDBPage(file, 0);
 		
-		logger.debug(dict);
+		// logger.debug(dict);
 		
 		DictionaryPage.writeDictionary(dbPage, dict, bitsize, blockNum, info);
 	}
@@ -611,17 +611,17 @@ public class ColStoreTableManager implements TableManager {
 		
 		while (object != null) {
 		
-			logger.debug("Entry: " + object);
+			// logger.debug("Entry: " + object);
 			
 			if (UncompressedPage.writeBlock(dbPage, object, count, info.getType())) {
-				logger.debug("Written to file!");
+				// logger.debug("Written to file!");
 			}
 			else
 			{
 				dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1, true);
 				UncompressedPage.initNewPage(dbPage);
 				UncompressedPage.writeBlock(dbPage, object, count, info.getType());
-				logger.debug("New page loaded!");
+				// logger.debug("New page loaded!");
 			}
 			
 			count++;
@@ -653,17 +653,17 @@ public class ColStoreTableManager implements TableManager {
 				compare = analyzer.getNextObject(index);
 			}
 			
-			logger.debug("Run: (" + object + ", " + start + ", " + count + ")");
+			// logger.debug("Run: (" + object + ", " + start + ", " + count + ")");
 			
 			if (RLEPage.writeBlock(dbPage, object, start, count, info.getType())) {
-				logger.debug("Written to file!");
+				// logger.debug("Written to file!");
 			}
 			else
 			{
 				dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1, true);
 				RLEPage.initNewPage(dbPage);
 				RLEPage.writeBlock(dbPage, object, start, count, info.getType());
-				logger.debug("New page loaded!");
+				// logger.debug("New page loaded!");
 			}
 			
 			analyzer.reset(index);

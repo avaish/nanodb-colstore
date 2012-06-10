@@ -59,7 +59,7 @@ public class FileAnalyzer {
 		{
 			if (row.length() > seekBuffer)
 				seekBuffer = row.length() * 4;
-			logger.debug(row);
+			//logger.debug(row);
 			String[] rowArray = row.split(",");
 			for (int i = 0; i < columnCount; i++)
 			{
@@ -218,10 +218,10 @@ public class FileAnalyzer {
 		}
 		
 		readers[column].mark(seekBuffer);
-		logger.debug("Marked with " + seekBuffer + " buffer length.");
+		// logger.debug("Marked with " + seekBuffer + " buffer length.");
 		String line = readers[column].readLine();
 		if (line != null) {
-			logger.debug("Reading " + line.split(",")[column]);
+			// logger.debug("Reading " + line.split(",")[column]);
 			return line.split(",")[column].trim();
 		}
 		else {
