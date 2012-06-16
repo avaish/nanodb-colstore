@@ -13,6 +13,10 @@ import edu.caltech.nanodb.relations.Schema;
 import edu.caltech.nanodb.storage.TableFileInfo;
 import edu.caltech.nanodb.storage.colstore.CSGeneratedTuple;
 
+/**
+ * This select plan node implements a simple filter of a subplan based on a
+ * predicate.
+ */
 public class CSSimpleFilterNode {
 	/** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(CSSimpleFilterNode.class);
@@ -23,18 +27,27 @@ public class CSSimpleFilterNode {
      */
     private Environment environment;
 	
+    /** The predicate being evaluated. */
 	private Expression predicate;
 	
+	/** The table information pertaining to the predicate. */
 	private TableFileInfo tblFileInfo;
 	
+	/** Children nodes that read data pertaining to the predicate. */
     private ArrayList<CSFileScanNode> fileScanChildren;
-    
+   
+    /** Schema used for predicate evaluation. */
     private Schema schema;
     
+    /** Column infos used for predicate evaluation. */
     private ArrayList<ColumnInfo> infos;
     
+    /** A flag to mark whether the node can produce any more values. */
     boolean done;
 
+    /**
+     * Constructs a SimpleFilterNode that evaluates a predicate over all rows.
+     */
 	public CSSimpleFilterNode(TableFileInfo tblFileInfo, Expression predicate) {
 		this.predicate = predicate;
 		this.tblFileInfo = tblFileInfo;

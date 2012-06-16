@@ -318,9 +318,9 @@ public class ProjectNode extends PlanNode {
                 Object result = expr.evaluate(environment);
                 ColumnInfo colInfo = iterNonWildcardCols.next();
 
-                //logger.debug(String.format(
-                //    "Expression:  %s \tColInfo:  %s\tAlias:  %s",
-                //    expr, colInfo, alias));
+                logger.debug(String.format(
+                    "Expression:  %s \tColInfo:  %s\tAlias:  %s",
+                    expr, colInfo, alias));
 
                 // Add the result to the tuple.
 

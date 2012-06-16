@@ -152,7 +152,6 @@ public class CreateTableCommand extends Command {
         TableFileInfo tblFileInfo = new TableFileInfo(getTableName());
         tblFileInfo.setFileType(DBFileType.HEAP_DATA_FILE);
         TableSchema schema = tblFileInfo.getSchema();
-        logger.debug(schema);
         for (ColumnInfo colInfo : getColumnInfos()) {
             try {
                 schema.addColumnInfo(colInfo);
@@ -163,7 +162,6 @@ public class CreateTableCommand extends Command {
             }
         }
         
-        logger.debug(schema);
 
         // Open all tables referenced by foreign-key constraints, so that we can
         // verify the constraints.
@@ -335,26 +333,32 @@ public class CreateTableCommand extends Command {
         return strBuf.toString();
     }
 
+    /** Gets the table name of the created table. Used for subclass access. **/
 	public String getTableName() {
 		return tableName;
 	}
 
+	/** Sets the table name. Used for subclass access. **/
 	public void setTableName(String tableName) {
 		this.tableName = tableName;
 	}
 
+	/** Gets the column infos of the created table. Used for subclass access. **/
 	public List<ColumnInfo> getColumnInfos() {
 		return columnInfos;
 	}
 
+	/** Sets the column infos. Used for subclass access. **/
 	public void setColumnInfos(List<ColumnInfo> columnInfos) {
 		this.columnInfos = columnInfos;
 	}
 
+	/** Gets the constraints of the created table. Used for subclass access. **/
 	public List<ConstraintDecl> getConstraints() {
 		return constraints;
 	}
 
+	/** Sets the constraints. Used for subclass access. **/
 	public void setConstraints(List<ConstraintDecl> constraints) {
 		this.constraints = constraints;
 	}

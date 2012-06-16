@@ -13,6 +13,10 @@ import edu.caltech.nanodb.commands.CreateTableCommand;
 import edu.caltech.nanodb.relations.ColumnInfo;
 import edu.caltech.nanodb.relations.SQLDataType;
 
+/** 
+ * The FileAnalyzer class is a multifaceted class that handles both file input
+ * and analysis to look for interesting properties in the data. *
+ */
 public class FileAnalyzer {
 	private static Logger logger = Logger.getLogger(FileAnalyzer.class);
 	private String filename;
@@ -22,6 +26,12 @@ public class FileAnalyzer {
 	private BufferedReader[] readers;
 	private int seekBuffer;
 	
+	/** 
+	 * Creates a FileAnalyzer object for a specific file.
+	 * 
+	 * @param name the filename
+	 * @throws FileNotFoundException
+	 */
 	public FileAnalyzer(String name) throws FileNotFoundException
 	{
 		filename = name;
@@ -30,7 +40,12 @@ public class FileAnalyzer {
 		seekBuffer = 0;
 	}
 	
-	@SuppressWarnings("unchecked")
+	/**
+	 * Scans through the file, analyzing cardinality and locality (for now)!
+	 * 
+	 * @param colInfos the column infos of the file
+	 * @throws IOException
+	 */
 	public void analyze(List<ColumnInfo> colInfos) throws IOException
 	{
 		int columnCount = 0;
@@ -79,6 +94,7 @@ public class FileAnalyzer {
 				{
 					if (SQLDataType.isNumber(colInfos.get(i).getType().getBaseType()))
 					{
+						// Check if on a run
 						if (Double.parseDouble(rowArray[i]) == Double.parseDouble(prev[i]))
 						{
 							if (onruns[i])
@@ -95,6 +111,7 @@ public class FileAnalyzer {
 						{
 							onruns[i] = false;
 						}
+						// Check if the data is still sorted
 						if (Double.parseDouble(rowArray[i]) > Double.parseDouble(prev[i]))
 						{
 							if ((sort[i] != -1) && (sort[i] != 2))
@@ -120,6 +137,7 @@ public class FileAnalyzer {
 					}
 					else
 					{
+						// Check if on a run
 						if (prev[i].equals(rowArray[i]))
 						{
 							if (onruns[i])
@@ -136,6 +154,7 @@ public class FileAnalyzer {
 						{
 							onruns[i] = false;
 						}
+						// Check if data is still sorted
 						if (rowArray[i].compareTo(prev[i]) > 0)
 						{
 							if ((sort[i] != -1) && (sort[i] != 2))
@@ -165,6 +184,8 @@ public class FileAnalyzer {
 			}
 			row = fileReader.readLine();
 		}
+		
+		// Log output
 		for (int i = 0; i < columnCount; i++)
 		{
 			logger.debug(names[i] + ": Count: " + counts[i] + ", with " + 
@@ -182,6 +203,14 @@ public class FileAnalyzer {
 			else
 				logger.debug(names[i] + ": Not sorted");
 			
+			/* Determine file encoding. This is easy for our encodings, but with
+			 * more types we'd need better ways of determining what's best. For
+			 * now, the logic is simply - a lot of runs means go for RLE, and a
+			 * few distincts leans it towards dictionary encode.
+			 * 
+			 * The uncompressed option is overweighted at the moment for purposes
+			 * of demo and test.
+			 */
 			if (sort[i] != 2)
 			{
 				if ((runs[i] / (float) counts[i]) > 0.75)
@@ -210,6 +239,12 @@ public class FileAnalyzer {
 		}
 	}
 	
+	/**
+	 * Gets the next object from file from a column.
+	 * @param column column to get object from
+	 * @return object
+	 * @throws IOException
+	 */
 	public String getNextObject(int column) throws IOException {
 		if (readers[column] == null) {
 			readers[column] = new BufferedReader(new FileReader
@@ -233,16 +268,16 @@ public class FileAnalyzer {
 		readers[column].reset();
 	}
 
+	/**
+	 * Returns the recommended encoding for a column
+	 * @param i column index
+	 * @return file encoding
+	 */
 	public FileEncoding getEncoding(int i) {
 		return encodings[i];
 	}
 	
 	public int getCounts(int i) {
 		return distincts[i];
-	}
-
-	public void generateTuples(TableFileInfo tblFileInfo) {
-		// TODO Auto-generated method stub
-		
 	}
 }

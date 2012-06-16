@@ -29,18 +29,17 @@ public class BlockColumnStoreReader {
     /** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(BlockColumnStoreReader.class);
     
+    /** Information for dictionary encoded pages. */
     private int bitsize;
     
+    /** Information for dictionary encoded pages. */
     private int blockNum;
-    
+
+    /** The dictionary for dictionary encoded pages. */
     private HashMap<Integer, Object> dict;
     
-    private int count;
-    
     /**
-     * Initializes the blocked heap-file table reader.  All the constructor
-     * currently does is to cache a reference to the singleton
-     * {@link StorageManager}, since it is used so extensively.
+     * Initializes the blocked heap-file table reader.
      */
     public BlockColumnStoreReader() {
         this.storageManager = StorageManager.getInstance();
@@ -49,6 +48,7 @@ public class BlockColumnStoreReader {
         dict = null;
     }
     
+    /** Get first data page. For dictionary encoding, that's the second page. */
     public DBPage getFirstDataPage(TableFileInfo tblFileInfo, int column) throws IOException {
         // Try to fetch the first data page.  If none exists, return null.
         DBPage dbPage = null;
@@ -70,7 +70,7 @@ public class BlockColumnStoreReader {
         return dbPage;
     }
 
-
+    /** Get last data page. */
     public DBPage getLastDataPage(TableFileInfo tblFileInfo, int column) throws IOException {
         // Try to fetch the last data page.  If none exists, return null.
         DBFile dbFile = tblFileInfo.getDBFile(column + 1);
@@ -84,7 +84,7 @@ public class BlockColumnStoreReader {
         return dbPage;
     }
 
-    
+    /** Get next data page, and return null if it doesn't exist. */
     public DBPage getNextDataPage(TableFileInfo tblFileInfo, DBPage dbPage, int column)
         throws IOException {
 
@@ -99,7 +99,7 @@ public class BlockColumnStoreReader {
         return nextPage;
     }
 
-    
+    /** Get previous data page, and return null if it doesn't exist. */
     public DBPage getPrevDataPage(TableFileInfo tblFileInfo, DBPage dbPage, int column)
         throws IOException {
 
@@ -113,7 +113,7 @@ public class BlockColumnStoreReader {
         return prevPage;
     }
 
-
+    /** Get the first block in the data page, using data page abstract classes. */
     public ColStoreBlock getFirstBlockInPage(TableFileInfo tblFileInfo, DBPage dbPage, int column) {
         
     	int enc = CSDataPage.getEncoding(dbPage);
@@ -163,6 +163,7 @@ public class BlockColumnStoreReader {
     		
     		ArrayList<Object> contents = new ArrayList<Object>();
     		
+    		// Decode the bitstring
     		int mask = (1 << bitsize) - 1;
     		int current;
     		for (int i = 0; i < blockNum; i++) {
@@ -181,7 +182,7 @@ public class BlockColumnStoreReader {
  		return null;
     }
 
-
+    /** Get the next block in the data page, using data page abstract classes. */
     public ColStoreBlock getNextBlockInPage(TableFileInfo tblFileInfo, DBPage dbPage, int column,
         ColStoreBlock block) {
     	
@@ -238,6 +239,7 @@ public class BlockColumnStoreReader {
     		
     		ArrayList<Object> contents = new ArrayList<Object>();
     		
+    		// Decode the bitstring.
     		int mask = (1 << bitsize) - 1;
     		int current;
     		for (int i = 0; i < blockNum; i++) {

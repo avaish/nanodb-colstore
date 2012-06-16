@@ -101,7 +101,20 @@ public class FileManager {
         return initDBFile(f, type, pageSize);
     }
     
-    
+    /**
+     * This method creates a new database file in the directory specified as an
+     * argument.  An exception is thrown if the file already exists.
+     *
+     * @param dir the directory where the file is to be created
+     * @param filename the name of the file to open to create the database file
+     * @param type the type of database file being created
+     * @param pageSize the page size to use when reading and writing the file
+     *
+     * @return a new database file object for the newly created file
+     *
+     * @throws IOException if the specified file already exists.
+     * @throws IllegalArgumentException if the page size is not valid
+     */
     public DBFile createDBFileinDir(String dir, String filename, DBFileType type, 
     	int pageSize) throws IOException {
     	

@@ -17,27 +17,42 @@ import edu.caltech.nanodb.storage.TableFileInfo;
 import edu.caltech.nanodb.storage.colstore.BlockColumnStoreReader;
 import edu.caltech.nanodb.storage.colstore.ColStoreBlock;
 
+/**
+ * A select plan-node that scans a column store file, checking the optional predicate
+ * against each tuple in the file.
+ */
 public class CSFileScanNode {
 
 	/** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(CSFileScanNode.class);
     
+    /** The table to select from. */
     private TableFileInfo tblFileInfo;
     
+    /** The column that the node is scanning over. */
     private ColumnInfo colInfo;
     
+    /** The index of the column that the node is scanning over. */
     private int columnIndex;
     
+    /** The block reader for column store files. */
     private BlockColumnStoreReader reader;
     
+    /** The current data page for the column. */
     private DBPage currentPage;
     
+    /** The current block of the column. */
     private ColStoreBlock currentBlock;
     
+    /** The predicate to filter out the column values. */
     private Expression predicate;
     
+    /** A flag to mark whether the node can produce any more values. */
     boolean done;
 
+    /**
+     * Constructs a FileScanNode that reads values from columns, blockwise.
+     */
 	public CSFileScanNode(TableFileInfo tblFileInfo, ColumnInfo colInfo, 
 			Expression pred) {
 		this.tblFileInfo = tblFileInfo;
@@ -58,6 +73,10 @@ public class CSFileScanNode {
 		}
 	}
 	
+	/**
+     * Advances the current object forward in the block. Gets the next block if 
+     * the current block is done. Otherwise gets the next object.
+     */
 	public Object getNextObject() throws IOException {
 		if (done) return null;
 		
@@ -73,8 +92,10 @@ public class CSFileScanNode {
 		return ret;
 	}
 	
-	
-
+	/**
+     * Advances the current block forward in the page. Gets the next page if 
+     * the current page is done. Otherwise gets the next block.
+     */
 	private void getNextBlock() throws IOException {
 		ColStoreBlock ret = reader.getNextBlockInPage(tblFileInfo, currentPage, 
 			columnIndex, currentBlock);
@@ -91,6 +112,10 @@ public class CSFileScanNode {
 		currentBlock = ret;
 	}
 	
+	/**
+     * Advances the current page forward in the page. Returns null if there are
+     * no more pages.
+     */
 	private void getNextPage() throws IOException {
 		currentPage = reader.getNextDataPage(tblFileInfo, currentPage, columnIndex);
 		
@@ -99,8 +124,6 @@ public class CSFileScanNode {
 		}
 	}
 
-	
-	
 	public String toString() {
         StringBuilder buf = new StringBuilder();
 

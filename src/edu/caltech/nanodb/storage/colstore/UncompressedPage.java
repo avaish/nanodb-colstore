@@ -38,7 +38,7 @@ public class UncompressedPage {
         uncWriter.writeInt(FIRST_BLOCK_OFFSET);
     }
 
-
+    /** Writes a block. */
 	public static boolean writeBlock(DBPage dbPage, String object, int position,
 			ColumnType type) {
 		
@@ -75,6 +75,7 @@ public class UncompressedPage {
     	return true;
 	}
 	
+	/** Reads a block from disk. */
 	public static Object getBlockData(DBPage dbPage, int blockStart, ColumnType 
     		colType) {
     	
@@ -95,11 +96,13 @@ public class UncompressedPage {
     	return dbPage.readObject(blockStart, colType);
     }
     
+	/** Reads first block from disk. */
     public static Object getFirstBlockData(DBPage dbPage, ColumnType 
     		colType) {
     	return getBlockData(dbPage, FIRST_BLOCK_OFFSET, colType);
     }
     
+    /** Computes a block's end offset from disk. */
     public static int getBlockEndOffset(DBPage dbPage, int blockStart, ColumnType 
     		colType) {
     	
@@ -121,6 +124,7 @@ public class UncompressedPage {
     		blockStart, colType), colType) + 4;
     }
     
+    /** Computes first block's end offset from disk. */
     public static int getFirstBlockEndOffset(DBPage dbPage, ColumnType 
     		colType) {
     	return getBlockEndOffset(dbPage, FIRST_BLOCK_OFFSET, colType);

@@ -38,6 +38,12 @@ public class CreateColStoreCommand extends CreateTableCommand {
     private String fileName;
 
     
+    /**
+     * Create a new object representing a <tt>CREATE COLSTORE</tt> statement.
+     *
+     * @param tableName the name of the table to be created
+     * @param fileName the name of the file that backs the table
+     */
     public CreateColStoreCommand(String tableName, String fileName) {
     	super();
 
@@ -131,21 +137,13 @@ public class CreateColStoreCommand extends CreateTableCommand {
         try {
 			((ColStoreTableManager) tblFileInfo.getTableManager()).writeTable(analyzer, tblFileInfo);
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			throw new ExecutionException("Could not write to table \"" + getTableName() +
+	                "\".  See nested exception for details.", e);
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			throw new ExecutionException("Could not write to table \"" + getTableName() +
+	                "\".  See nested exception for details.", e);
 		}
         
         out.println("Created table:  " + getTableName());
-        
-
-		try {
-			((ColStoreTableManager) tblFileInfo.getTableManager()).printTable(tblFileInfo);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
 	}
 }

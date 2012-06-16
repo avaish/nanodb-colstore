@@ -6,6 +6,12 @@ import edu.caltech.nanodb.storage.DBPage;
 import edu.caltech.nanodb.storage.PageWriter;
 import edu.caltech.nanodb.storage.heapfile.DataPage;
 
+/**
+ * This class provides the constants and operations necessary for manipulating
+ * a table header page within a column store.
+ * 
+ * Designs are similar to HeaderPage.
+ */
 public class CSHeaderPage {
 	/** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(DataPage.class);

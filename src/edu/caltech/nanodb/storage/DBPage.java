@@ -1070,7 +1070,7 @@ public class DBPage {
         return dataSize;
     }
     
-    
+    /** Returns an objects size on disk. */
     public static int getObjectDiskSize(Object value, ColumnType colType) {
     	if (colType == null)
             throw new NullPointerException("colType cannot be null");

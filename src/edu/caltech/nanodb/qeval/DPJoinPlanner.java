@@ -153,13 +153,13 @@ public class DPJoinPlanner implements Planner {
                 "NanoDB doesn't yet support SQL queries without a FROM clause!");
         }
         
+        // If we have a columnstore table, we can create a separate plan for that.
         if (fromClause.isBaseTable()) {
         	TableFileInfo tableInfo = StorageManager.getInstance().
         		openTable(fromClause.getTableName());
         	
         	if (tableInfo.getFileType() == DBFileType.COLUMNSTORE_DATA_FILE) {
         		logger.debug("Jumping to ColumnStore planner.");
-        		// ((ColStoreTableManager) tableInfo.getTableManager()).printTable(tableInfo);
         		PlanNode plan = new CSProjectNode(selClause, tableInfo);
         		plan.prepare();
         		return plan;

@@ -24,6 +24,7 @@ public class RLEPage {
 
     public static final int FIRST_BLOCK_OFFSET = 14;
 
+    
     /**
      * Initialize a newly allocated RLE page.  Currently this involves setting
      * the number of values to 0 and marking the page as an RLE encoded page.
@@ -38,7 +39,7 @@ public class RLEPage {
         rleWriter.writeInt(FIRST_BLOCK_OFFSET);
     }
 
-    
+    /** Writes a RLE block. */
     public static boolean writeBlock(DBPage dbPage, String object, int start, 
     	int length, ColumnType colType) throws IllegalArgumentException {
     	
@@ -76,6 +77,7 @@ public class RLEPage {
     	return true;
     }
     
+    /** Read block from disk. */
     public static Object getBlockData(DBPage dbPage, int blockStart, ColumnType 
     		colType) {
     	
@@ -96,11 +98,13 @@ public class RLEPage {
     	return dbPage.readObject(blockStart, colType);
     }
     
+    /** Read first block from disk. */
     public static Object getFirstBlockData(DBPage dbPage, ColumnType 
     		colType) {
     	return getBlockData(dbPage, FIRST_BLOCK_OFFSET, colType);
     }
     
+    /** Read block length from disk. */
     public static int getBlockLength(DBPage dbPage, int blockStart, ColumnType 
     		colType) {
     	
@@ -124,11 +128,13 @@ public class RLEPage {
     	return rleReader.readInt();
     }
     
+    /** Read first block length from disk. */
     public static int getFirstBlockLength(DBPage dbPage, ColumnType 
     		colType) {
     	return getBlockLength(dbPage, FIRST_BLOCK_OFFSET, colType);
     }
     
+    /** Compute block end offset from disk. */
     public static int getBlockEndOffset(DBPage dbPage, int blockStart, ColumnType 
     		colType) {
     	
@@ -150,6 +156,7 @@ public class RLEPage {
     		blockStart, colType), colType) + 8;
     }
     
+    /** Compute first block end offset from disk. */
     public static int getFirstBlockEndOffset(DBPage dbPage, ColumnType 
     		colType) {
     	return getBlockEndOffset(dbPage, FIRST_BLOCK_OFFSET, colType);

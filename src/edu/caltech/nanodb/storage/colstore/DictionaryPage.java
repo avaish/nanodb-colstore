@@ -40,6 +40,7 @@ public class DictionaryPage {
         dictWriter.writeInt(14);
 	}
 
+	/** Writes a dictionary block. */
 	public static boolean writeBlock(DBPage dbPage, int currentBlock, int blockNum) {
 		
 		PageReader dictReader = new PageReader(dbPage);
@@ -73,6 +74,7 @@ public class DictionaryPage {
     	return true;
 	}
 
+	/** Writes a dictionary. */
 	public static void writeDictionary(DBPage dbPage, HashMap<String, Integer> dict,
 			int bitsize, int blockNum, ColumnInfo info) {
 		
@@ -101,6 +103,7 @@ public class DictionaryPage {
     	}
 	}
 	
+	/** Reads dictionary bit size. */
 	public static int getBitSize(DBPage dbPage) {
 		PageReader dictReader = new PageReader(dbPage);
     	
@@ -116,6 +119,7 @@ public class DictionaryPage {
     	return dictReader.readInt();
 	}
 	
+	/** Reads dictionary block size. */
 	public static int getBlockNum(DBPage dbPage) {
 		PageReader dictReader = new PageReader(dbPage);
     	
@@ -131,6 +135,7 @@ public class DictionaryPage {
     	return dictReader.readInt();
 	}
 	
+	/** Reconstruct dictionary from disk. */
 	public static HashMap<Integer, Object> constructDictionary(DBPage dbPage, 
 		ColumnInfo info) {
 	
@@ -162,6 +167,7 @@ public class DictionaryPage {
 		return dict;
 	}
 	
+	/** Read block from disk. */
 	public static int getBlockEncodedData(DBPage dbPage, int blockStart) {
 		PageReader dictReader = new PageReader(dbPage);
     	
@@ -182,6 +188,7 @@ public class DictionaryPage {
     	return dictReader.readShort();
 	}
 	
+	/** Read first block from disk. */
 	public static int getFirstBlockEncodedData(DBPage dbPage) {
 		return getBlockEncodedData(dbPage, FIRST_BLOCK_OFFSET);
 	}

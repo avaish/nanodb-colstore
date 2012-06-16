@@ -22,6 +22,10 @@ import edu.caltech.nanodb.relations.Tuple;
 import edu.caltech.nanodb.storage.TableFileInfo;
 import edu.caltech.nanodb.storage.colstore.CSGeneratedTuple;
 
+/**
+ * PlanNode representing the <tt>SELECT</tt> clause in a <tt>SELECT</tt>
+ * operation.  This is the relational algebra Project operator.
+ */
 public class CSProjectNode extends PlanNode {
 	
 	/** A logging object for reporting anything interesting that happens. */
@@ -36,12 +40,16 @@ public class CSProjectNode extends PlanNode {
 	/** The schema of tuples in the underlying table. */
     private Schema inputSchema;
     
+    /** The children nodes of the CSProjectNode */
     private ArrayList<CSFileScanNode> fileScanChildren;
     
+    /** The predicate of the <tt>SELECT</tt> clause. */
     private Expression predicate;
     
+    /** A child node of the CSProjectNode dealing with the predicate. */
     private CSSimpleFilterNode predNode;
     
+    /** A flag to mark whether the node can produce any more values. */
     private boolean done;
 
     /**
@@ -50,6 +58,9 @@ public class CSProjectNode extends PlanNode {
      */
     private List<ColumnInfo> nonWildcardColumnInfos;
 	
+    /**
+     * Constructs a ProjectNode that assembles tuples from child nodes.
+     */
 	public CSProjectNode(SelectClause selClause, TableFileInfo tblFileInfo) {
 		super(OperationType.PROJECT);
 		

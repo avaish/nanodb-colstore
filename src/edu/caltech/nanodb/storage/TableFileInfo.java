@@ -86,7 +86,8 @@ public class TableFileInfo {
 
 
     /**
-     * Returns the actual database file that holds this table's data.
+     * Returns the actual database file that holds this table's data. Retained
+     * for compatibility.
      *
      * @return the actual database file that holds this table's data, or
      *         <tt>null</tt> if it hasn't yet been set.
@@ -99,7 +100,7 @@ public class TableFileInfo {
     /**
      * Method for storing the database-file object onto this table-file
      * information object, for example after successful completion of a
-     * <tt>CREATE TABLE</tt> command.
+     * <tt>CREATE TABLE</tt> command. Retained for compatibility.
      *
      * @param dbFile the database file that the table's data is stored in.
      */
@@ -116,6 +117,13 @@ public class TableFileInfo {
     }
     
     
+    /**
+     * Method for storing database-file objects onto this table-file
+     * information object, for example after successful completion of a
+     * <tt>CREATE TABLE</tt> command.
+     *
+     * @param dbFile the database file that the table's data is stored in.
+     */
     public void addDBFile(DBFile dbFile) {
     	if (dbFile == null)
             throw new IllegalArgumentException("dbFile must not be null!");
@@ -180,11 +188,23 @@ public class TableFileInfo {
 	}
 
 
+	/**
+     * Returns a file that holds this table's data. 
+     * 
+     * @param i the index of the data file.
+     *
+     * @return the actual database file that holds this table's data, or
+     *         <tt>null</tt> if it hasn't yet been set.
+     */
 	public DBFile getDBFile(int i) {
 		return dbFiles.get(i);
 	}
 
-
+	/**
+     * Returns all of the files that hold this table's data. 
+     *
+     * @return all of the actual database files that hold this table's data
+     */
 	public ArrayList<DBFile> dbFiles() {
 		// TODO Auto-generated method stub
 		return dbFiles;

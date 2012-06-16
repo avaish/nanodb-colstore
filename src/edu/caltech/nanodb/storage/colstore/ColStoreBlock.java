@@ -12,6 +12,11 @@ import edu.caltech.nanodb.storage.DBPage;
 import edu.caltech.nanodb.storage.FileEncoding;
 import edu.caltech.nanodb.storage.heapfile.DataPage;
 
+/** 
+ * The ColStoreBlock is a basic unit of data in a column store, very much in
+ * the same manner as a Tuple in a row architecture. Blocks provide a layer of
+ * abstraction over the encoding of an actual data file.
+ */
 public class ColStoreBlock {
 	/** A logging object for reporting anything interesting that happens. */
     private static Logger logger = Logger.getLogger(ColStoreBlock.class);
@@ -39,14 +44,32 @@ public class ColStoreBlock {
      */
     private ColumnInfo colInfo;
     
+    /** The encoding of the column in the block. */
     private FileEncoding encode;
     
+    /** 
+     * The contents of the block. Space efficient - if block contents are one
+     * values, the contents are not repeated.
+     */
     private ArrayList<Object> blockContents;
     
+    /** The size of the block. */
     private int blockSize;
     
+    /** The iterator over objects in the block. */
     private int iterator;
     
+    /** 
+     * Creates a column store block given the proper offsets and data from a 
+     * column store data file.
+     * @param page The page that the block is stored on
+     * @param offset The start offset of the block
+     * @param end The end offset of the block
+     * @param col The column information that the block represents
+     * @param enc The encoding of the column
+     * @param contents The contents of the block
+     * @param size The size of the block
+     */
     public ColStoreBlock(DBPage page, int offset, int end, ColumnInfo col,
     		FileEncoding enc, ArrayList<Object> contents, int size) {
     	dbPage = page;
@@ -59,16 +82,29 @@ public class ColStoreBlock {
     	iterator = 0;
     }
     
+    /**
+     * Returns the page that contains the block.
+     *
+     * @return the page that contains the block.
+     */
     public DBPage getDBPage() {
         return dbPage;
     }
 
-
+    /**
+     * Returns the start offset of the block.
+     *
+     * @return the start offset of the block.
+     */
     public int getOffset() {
         return pageOffset;
     }
 
-
+    /**
+     * Returns the end offset of the block.
+     *
+     * @return the end offset of the block.
+     */
     public int getEndOffset() {
         return endOffset;
     }
@@ -82,14 +118,29 @@ public class ColStoreBlock {
         return endOffset - pageOffset;
     }
     
+    /**
+     * Returns the block's column info.
+     *
+     * @return the block's column info.
+     */
     public ColumnInfo getColumnInfo() {
         return colInfo;
     }
     
+    /**
+     * Returns the block's column encoding.
+     *
+     * @return the block's column encoding.
+     */
     public FileEncoding getEncoding() {
 		return encode;
     }
     
+    /**
+     * Returns the next object in the block.
+     *
+     * @return the next object in the block.
+     */
     public Object getNext() {
     	if (iterator >= blockSize) {
     		return null;
@@ -107,14 +158,21 @@ public class ColStoreBlock {
     	}
     }
     
+    /**
+     * Returns the next object in the block.
+     *
+     * @return the next object in the block.
+     */
     public ArrayList<Object> asArray() {
     	return blockContents;
     }
     
+    /** True if the block contains only one value. Useful for grouping/aggregation. */
     public boolean isOneValue() {
     	return (encode == FileEncoding.RLE || encode == FileEncoding.NONE);
     }
     
+    /** True if the block contains sorted values. Useful for grouping/aggregation. */
     public boolean isValueSorted() {
     	return encode == FileEncoding.RLE;
     }

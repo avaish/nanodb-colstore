@@ -55,7 +55,15 @@ public class ColStoreTableManager implements TableManager {
      */
     private StorageManager storageManager;
     
-	
+    /**
+     * Initializes the column store table manager.  This class shouldn't be
+     * initialized directly, since the storage manager will initialize it when
+     * necessary.
+     *
+     * @param storageManager the storage manager that is using this table manager
+     *
+     * @throws IllegalArgumentException if <tt>storageManager</tt> is <tt>null</tt>
+     */
 	public ColStoreTableManager(StorageManager storageManager) {
 		if (storageManager == null)
             throw new IllegalArgumentException("storageManager cannot be null");
@@ -409,66 +417,58 @@ public class ColStoreTableManager implements TableManager {
 
 	@Override
 	public void beforeCloseTable(TableFileInfo tblFileInfo) throws IOException {
-		// TODO Auto-generated method stub
-		
+		// Do nothing
 	}
 
 	@Override
 	public void beforeDropTable(TableFileInfo tblFileInfo) throws IOException {
-		// TODO Auto-generated method stub
-		
+		// Do nothing
 	}
 
 	@Override
 	public Tuple getFirstTuple(TableFileInfo tblFileInfo) throws IOException {
-		// TODO Auto-generated method stub
+		// Would have liked to throw an exception, but the interface doesn't 
+		// support it...
 		return null;
 	}
 
 	@Override
 	public Tuple getNextTuple(TableFileInfo tblFileInfo, Tuple tup)
 			throws IOException {
-		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
 	public Tuple getTuple(TableFileInfo tblFileInfo, FilePointer fptr)
 			throws InvalidFilePointerException, IOException {
-		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
 	public Tuple addTuple(TableFileInfo tblFileInfo, Tuple tup)
 			throws IOException {
-		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
 	public void updateTuple(TableFileInfo tblFileInfo, Tuple tup,
 			Map<String, Object> newValues) throws IOException {
-		// TODO Auto-generated method stub
-		
+		return;
 	}
 
 	@Override
 	public void deleteTuple(TableFileInfo tblFileInfo, Tuple tup)
 			throws IOException {
-		// TODO Auto-generated method stub
 		
 	}
 
 	@Override
 	public void analyzeTable(TableFileInfo tblFileInfo) throws IOException {
-		// TODO Auto-generated method stub
-		
+		// TODO This would be interesting...
 	}
 
 	@Override
 	public BlockedTableReader getBlockedReader() {
-		// TODO Auto-generated method stub
 		return null;
 	}
 
@@ -516,6 +516,7 @@ public class ColStoreTableManager implements TableManager {
 		}
 	}
 	
+	/** Write the dictionary encoded data to disk. */
 	private void writeDictionary(DBFile file, FileAnalyzer analyzer, int index,
 			ColumnInfo info) throws IOException {
 		
@@ -529,8 +530,6 @@ public class ColStoreTableManager implements TableManager {
 		
 		int distincts = analyzer.getCounts(index) + 1;
 		int bitsize = (int) Math.ceil(Math.log(distincts)/Math.log(2));
-		
-		// logger.debug("Bitsize " + bitsize);
 		
 		int blockNum = (int) Math.floor(16.0 / bitsize);
 		
@@ -547,27 +546,21 @@ public class ColStoreTableManager implements TableManager {
 			}
 			
 			int bitrep = dict.get(object);
-			// logger.debug(object + " bitrep: " + Integer.toBinaryString(bitrep));
 			
 			currentBlock = currentBlock | (bitrep << (blockIndex * bitsize));
-			// logger.debug("Current block: " + Integer.toBinaryString(currentBlock));
-			
-			// logger.debug("");
 			
 			blockIndex++;
 			if (blockIndex == blockNum) {
-				// logger.debug("Writing block: " + Integer.toBinaryString(currentBlock));
-				// logger.debug((short) currentBlock);
 
 				if (DictionaryPage.writeBlock(dbPage, currentBlock, blockIndex)) {
-					// logger.debug("Written to file!");
+					logger.debug("Written to file!");
 				}
 				else
 				{
 					dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1, true);
 					DictionaryPage.initNewPage(dbPage);
 					DictionaryPage.writeBlock(dbPage, currentBlock, blockIndex);
-					// logger.debug("New page loaded!");
+					logger.debug("New page loaded!");
 				}
 				
 				blockIndex = 0;
@@ -577,28 +570,27 @@ public class ColStoreTableManager implements TableManager {
 			object = analyzer.getNextObject(index);
 		}
 		
-		// logger.debug("Writing block: " + Integer.toBinaryString(currentBlock));
-		// logger.debug((short) currentBlock);
 		if (DictionaryPage.writeBlock(dbPage, currentBlock, blockIndex)) {
-			// logger.debug("Written to file!");
+		    logger.debug("Written to file!");
 		}
 		else
 		{
 			dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1, true);
 			DictionaryPage.initNewPage(dbPage);
 			DictionaryPage.writeBlock(dbPage, currentBlock, blockIndex);
-			// logger.debug("New page loaded!");
+			logger.debug("New page loaded!");
 		}
 		blockIndex = 0;
 		currentBlock = 0;
 		
 		dbPage = storageManager.loadDBPage(file, 0);
 		
-		// logger.debug(dict);
+		logger.debug(dict);
 		
 		DictionaryPage.writeDictionary(dbPage, dict, bitsize, blockNum, info);
 	}
 
+	/** Write the non encoded data to disk. */
 	private void writeUncompressed(DBFile file, FileAnalyzer analyzer, int index,
 			ColumnInfo info) throws IOException, InterruptedException {
 		
@@ -611,17 +603,17 @@ public class ColStoreTableManager implements TableManager {
 		
 		while (object != null) {
 		
-			// logger.debug("Entry: " + object);
+			logger.debug("Entry: " + object);
 			
 			if (UncompressedPage.writeBlock(dbPage, object, count, info.getType())) {
-				// logger.debug("Written to file!");
+				logger.debug("Written to file!");
 			}
 			else
 			{
 				dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1, true);
 				UncompressedPage.initNewPage(dbPage);
 				UncompressedPage.writeBlock(dbPage, object, count, info.getType());
-				// logger.debug("New page loaded!");
+				logger.debug("New page loaded!");
 			}
 			
 			count++;
@@ -630,6 +622,7 @@ public class ColStoreTableManager implements TableManager {
 		
 	}
 
+	/** Write the RLE data to disk. */
 	private void writeRLE(DBFile file, FileAnalyzer analyzer, int index, 
 			ColumnInfo info) throws IOException, InterruptedException {
 		
@@ -653,17 +646,17 @@ public class ColStoreTableManager implements TableManager {
 				compare = analyzer.getNextObject(index);
 			}
 			
-			// logger.debug("Run: (" + object + ", " + start + ", " + count + ")");
+			logger.debug("Run: (" + object + ", " + start + ", " + count + ")");
 			
 			if (RLEPage.writeBlock(dbPage, object, start, count, info.getType())) {
-				// logger.debug("Written to file!");
+				logger.debug("Written to file!");
 			}
 			else
 			{
 				dbPage = storageManager.loadDBPage(file, dbPage.getPageNo() + 1, true);
 				RLEPage.initNewPage(dbPage);
 				RLEPage.writeBlock(dbPage, object, start, count, info.getType());
-				// logger.debug("New page loaded!");
+				logger.debug("New page loaded!");
 			}
 			
 			analyzer.reset(index);

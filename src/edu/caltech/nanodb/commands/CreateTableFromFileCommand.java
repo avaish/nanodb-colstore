@@ -27,7 +27,7 @@ import edu.caltech.nanodb.storage.colstore.ColStoreTableManager;
 
 
 /**
- * This command handles the <tt>CREATE COLSTORE</tt> DDL operation.
+ * This command handles the <tt>CREATE STORE</tt> DDL operation.
  */
 public class CreateTableFromFileCommand extends CreateTableCommand {
 	
@@ -37,7 +37,13 @@ public class CreateTableFromFileCommand extends CreateTableCommand {
     /** Name of the backing file from which table is being created. */
     private String fileName;
 
-    
+
+    /**
+     * Create a new object representing a <tt>CREATE STORE</tt> statement.
+     *
+     * @param tableName the name of the table to be created
+     * @param fileName the name of the file that backs the table
+     */
     public CreateTableFromFileCommand(String tableName, String fileName) {
     	super(tableName, false, false);
     	
@@ -128,7 +134,8 @@ public class CreateTableFromFileCommand extends CreateTableCommand {
 			e.printStackTrace();
 		}
         
-        analyzer.generateTuples(tblFileInfo);
+
+        // TODO: Write to table.
         
         
     }

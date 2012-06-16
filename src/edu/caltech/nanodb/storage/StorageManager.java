@@ -506,9 +506,11 @@ public class StorageManager {
         String tableName = tblFileInfo.getTableName();
         String tblFileName = getTableFileName(tableName);
 
-        // TODO:  the file-type should be specified in the TableFileInfo object
+        // Get the file type from the table file info object.
         DBFileType type = tblFileInfo.getFileType();
         
+        // Maximum page size for column store files. Working OLAP data has huge
+        // columns.
         if (type == DBFileType.COLUMNSTORE_DATA_FILE)
         	pageSize = DBFile.MAX_PAGESIZE;
         
@@ -520,6 +522,8 @@ public class StorageManager {
         	" at path " + dbFile.getDataFile());
 
         tblFileInfo.setDBFile(dbFile);
+        // If we have a column store, we need to create a lot more DBFiles for 
+        // the table.
         if (type == DBFileType.COLUMNSTORE_DATA_FILE)
         {
         	TableSchema schema = tblFileInfo.getSchema();
@@ -658,6 +662,7 @@ public class StorageManager {
         
         if (tblFileInfo.getFileType() == DBFileType.COLUMNSTORE_DATA_FILE)
         {
+        	// Have to delete the directory as well...
         	tblFileInfo.getDBFile(1).getDataFile().getParentFile().delete();
         }
     }
