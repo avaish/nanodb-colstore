@@ -46,6 +46,7 @@ public class FileAnalyzer {
 	 * @param colInfos the column infos of the file
 	 * @throws IOException
 	 */
+	@SuppressWarnings("unchecked")
 	public void analyze(List<ColumnInfo> colInfos) throws IOException
 	{
 		int columnCount = 0;
